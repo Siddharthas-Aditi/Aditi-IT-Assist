@@ -3,6 +3,7 @@
 from langchain_core.messages import AIMessage
 
 from app.core.logging import get_logger
+from app.services.llm_service import get_llm_service
 from app.workflows.state import WorkflowState
 
 logger = get_logger(__name__)
@@ -56,8 +57,9 @@ async def triage_node(state: WorkflowState) -> dict:
 
     This node:
     1. Extracts the latest user message
-    2. Calls LLM for classification
-    3. Updates state with classification results
+    2. Attempts LLM classification via LLMService
+    3. Falls back to keyword matching if LLM unavailable
+    4. Updates state with classification results
     """
     logger.info("triage_node_start", session_id=state.get("session_id"))
 
@@ -66,8 +68,18 @@ async def triage_node(state: WorkflowState) -> dict:
         return {
             "current_node": "triage",
             "needs_clarification": True,
-            "clarification_question": "Hi! I'm here to help with your IT issue. Could you describe what problem you're experiencing?",
-            "messages": [AIMessage(content="Hi! I'm here to help with your IT issue. Could you describe what problem you're experiencing?")],
+            "clarification_question": (
+                "Hi! I'm here to help with your IT issue. "
+                "Could you describe what problem you're experiencing?"
+            ),
+            "messages": [
+                AIMessage(
+                    content=(
+                        "Hi! I'm here to help with your IT issue. "
+                        "Could you describe what problem you're experiencing?"
+                    )
+                )
+            ],
         }
 
     # Get the latest user message
@@ -84,14 +96,14 @@ async def triage_node(state: WorkflowState) -> dict:
             "clarification_question": "Could you describe your IT issue?",
         }
 
-    # Perform classification
-    # TODO(team): Replace with actual LLM call via LiteLLM
+    # Attempt LLM classification, fall back to keyword matching
     classification = await _classify_issue(user_message)
 
     audit_entry = {
         "event": "triage.classified",
         "category": classification.get("category"),
         "confidence": classification.get("confidence", 0),
+        "method": classification.get("_method", "keyword"),
     }
 
     return {
@@ -109,12 +121,30 @@ async def triage_node(state: WorkflowState) -> dict:
 async def _classify_issue(message: str) -> dict:
     """Classify an IT issue from user message.
 
-    Uses keyword matching as fallback when LLM is unavailable.
-    Production: uses LiteLLM with structured output.
+    Strategy:
+    1. If LLMService is available, use structured JSON completion
+    2. Otherwise fall back to deterministic keyword matching
     """
-    message_lower = message.lower()
+    llm = get_llm_service()
+
+    if llm.is_available:
+        try:
+            prompt = CLASSIFICATION_PROMPT.format(user_message=message)
+            result = await llm.complete_json(prompt)
+            if result and "category" in result:
+                result["_method"] = "llm"
+                return result
+        except Exception as e:
+            logger.warning("triage_llm_fallback", error=str(e))
 
     # Deterministic keyword-based classification (fallback)
+    return _keyword_classify(message)
+
+
+def _keyword_classify(message: str) -> dict:
+    """Deterministic keyword-based classification fallback."""
+    message_lower = message.lower()
+
     if any(word in message_lower for word in ["outlook", "email", "mail", "inbox"]):
         return {
             "category": "email/outlook",
@@ -123,6 +153,7 @@ async def _classify_issue(message: str) -> dict:
             "urgency": "medium",
             "needs_clarification": False,
             "confidence": 0.85,
+            "_method": "keyword",
         }
     elif any(word in message_lower for word in ["zoom", "video call", "meeting"]):
         return {
@@ -132,6 +163,7 @@ async def _classify_issue(message: str) -> dict:
             "urgency": "medium",
             "needs_clarification": False,
             "confidence": 0.85,
+            "_method": "keyword",
         }
     elif any(word in message_lower for word in ["intune", "compliance", "non-compliant"]):
         return {
@@ -141,6 +173,7 @@ async def _classify_issue(message: str) -> dict:
             "urgency": "high",
             "needs_clarification": False,
             "confidence": 0.90,
+            "_method": "keyword",
         }
     elif any(word in message_lower for word in ["camera", "webcam", "video device"]):
         return {
@@ -150,6 +183,7 @@ async def _classify_issue(message: str) -> dict:
             "urgency": "medium",
             "needs_clarification": False,
             "confidence": 0.85,
+            "_method": "keyword",
         }
     else:
         return {
@@ -158,6 +192,10 @@ async def _classify_issue(message: str) -> dict:
             "severity": "medium",
             "urgency": "medium",
             "needs_clarification": True,
-            "clarification_question": "Could you provide more details about your issue? For example, what application or device is affected?",
+            "clarification_question": (
+                "Could you provide more details about your issue? "
+                "For example, what application or device is affected?"
+            ),
             "confidence": 0.3,
+            "_method": "keyword",
         }

@@ -2,52 +2,24 @@
 
 from uuid import uuid4
 
-from fastapi import APIRouter
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends
+
+from app.schemas.chat import (
+    ChatMessageRequest,
+    ChatMessageResponse,
+    SessionDetail,
+    SessionSummary,
+)
+from app.services.agents.chat_service import ChatService, get_chat_service
 
 router = APIRouter()
 
 
-class ChatMessageRequest(BaseModel):
-    """Request to send a message in a support session."""
-
-    session_id: str | None = None
-    message: str = Field(..., min_length=1, max_length=5000)
-
-
-class ResolutionStep(BaseModel):
-    """A single troubleshooting step."""
-
-    step_number: int
-    instruction: str
-    details: str | None = None
-
-
-class ChatMessageResponse(BaseModel):
-    """Response from the AI support system."""
-
-    session_id: str
-    message_id: str
-    content: str
-    role: str = "assistant"
-    confidence_score: float = 0.0
-    issue_category: str | None = None
-    resolution_steps: list[ResolutionStep] = []
-    requires_escalation: bool = False
-    follow_up_question: str | None = None
-
-
-class SessionResponse(BaseModel):
-    """Support session details."""
-
-    session_id: str
-    status: str
-    issue_category: str | None = None
-    created_at: str
-
-
 @router.post("/message", response_model=ChatMessageResponse)
-async def send_message(data: ChatMessageRequest) -> ChatMessageResponse:
+async def send_message(
+    data: ChatMessageRequest,
+    service: ChatService = Depends(get_chat_service),
+) -> ChatMessageResponse:
     """Send a message to the AI support system.
 
     This endpoint:
@@ -55,30 +27,27 @@ async def send_message(data: ChatMessageRequest) -> ChatMessageResponse:
     2. Invokes the LangGraph agent workflow
     3. Returns the AI response with metadata
     """
-    # Create new session if not provided
     session_id = data.session_id or str(uuid4())
 
-    # TODO(team): Invoke LangGraph workflow via AgentService
-    # For now, return a demonstration response
-    from app.services.agents.chat_service import ChatService
-
-    service = ChatService()
-    response = await service.process_message(
+    return await service.process_message(
         session_id=session_id,
         user_message=data.message,
     )
-    return response
 
 
-@router.get("/sessions", response_model=list[SessionResponse])
-async def list_sessions() -> list[SessionResponse]:
+@router.get("/sessions", response_model=list[SessionSummary])
+async def list_sessions() -> list[SessionSummary]:
     """List all support sessions for the current user."""
     # TODO(team): Implement with database query filtered by user
     return []
 
 
-@router.get("/sessions/{session_id}")
-async def get_session(session_id: str) -> dict:
+@router.get("/sessions/{session_id}", response_model=SessionDetail)
+async def get_session(session_id: str) -> SessionDetail:
     """Get full session details including message history."""
     # TODO(team): Implement with database query
-    return {"session_id": session_id, "messages": [], "status": "active"}
+    return SessionDetail(
+        session_id=session_id,
+        status="active",
+        messages=[],
+    )

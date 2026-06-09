@@ -3,6 +3,7 @@
 from langchain_core.messages import AIMessage
 
 from app.core.logging import get_logger
+from app.services.llm_service import get_llm_service
 from app.workflows.state import WorkflowState
 
 logger = get_logger(__name__)
@@ -33,9 +34,9 @@ async def resolution_node(state: WorkflowState) -> dict:
 
     This node:
     1. Takes knowledge articles from retrieval
-    2. Synthesizes step-by-step guidance via LLM
-    3. Assigns confidence score
-    4. Returns formatted resolution
+    2. If LLM available — synthesizes user-friendly guidance via RAG
+    3. Otherwise extracts steps directly from knowledge articles
+    4. Returns formatted resolution with confidence
     """
     logger.info(
         "resolution_node_start",
@@ -44,7 +45,6 @@ async def resolution_node(state: WorkflowState) -> dict:
     )
 
     knowledge_results = state.get("knowledge_results", [])
-    knowledge_confidence = state.get("knowledge_confidence", 0)
 
     # Generate resolution from knowledge
     resolution = await _generate_resolution(knowledge_results, state)
@@ -56,6 +56,7 @@ async def resolution_node(state: WorkflowState) -> dict:
         "event": "resolution.generated",
         "confidence": resolution["confidence"],
         "steps_count": len(resolution["steps"]),
+        "method": resolution.get("method", "direct"),
     }
 
     return {
@@ -67,20 +68,69 @@ async def resolution_node(state: WorkflowState) -> dict:
     }
 
 
-async def _generate_resolution(knowledge_results: list[dict], state: dict) -> dict:
+async def _generate_resolution(knowledge_results: list[dict], state: WorkflowState) -> dict:
     """Generate resolution steps from knowledge articles.
 
-    Production: uses LLM with RAG pattern.
-    Fallback: returns steps directly from knowledge articles.
+    Strategy:
+    1. If LLMService is available — use RAG prompt for natural language generation
+    2. Otherwise — extract steps directly from the best matching article
     """
     if not knowledge_results:
-        return {"steps": [], "confidence": 0.0}
+        return {"steps": [], "confidence": 0.0, "method": "none"}
 
-    # Use steps directly from the best matching article
+    # Attempt LLM-powered resolution synthesis
+    llm = get_llm_service()
+    if llm.is_available:
+        try:
+            return await _llm_resolution(knowledge_results, state, llm)
+        except Exception as e:
+            logger.warning("resolution_llm_fallback", error=str(e))
+
+    # Fallback: extract steps directly from best article
+    return _direct_resolution(knowledge_results, state)
+
+
+async def _llm_resolution(
+    knowledge_results: list[dict],
+    state: WorkflowState,
+    llm: object,
+) -> dict:
+    """Use LLM to synthesize a natural language resolution."""
+    from app.services.llm_service import LLMService
+
+    assert isinstance(llm, LLMService)
+
+    # Format knowledge articles for the prompt
+    articles_text = "\n\n".join(
+        f"Article: {a.get('title', 'Untitled')}\nSteps: {a.get('steps', [])}"
+        for a in knowledge_results[:3]
+    )
+
+    user_issue = ""
+    for msg in reversed(state.get("messages", [])):
+        if hasattr(msg, "type") and msg.type == "human":
+            user_issue = msg.content
+            break
+
+    prompt = RESOLUTION_PROMPT.format(
+        knowledge_articles=articles_text,
+        user_issue=user_issue,
+        category=state.get("issue_category", "other"),
+    )
+
+    content = await llm.complete(prompt)
+
+    # LLM returns prose — wrap as a single "step" for consistent format
+    steps = [{"step_number": 1, "instruction": content, "details": None}]
+    confidence = min(0.95, state.get("knowledge_confidence", 0.5) + 0.15)
+
+    return {"steps": steps, "confidence": confidence, "method": "llm"}
+
+
+def _direct_resolution(knowledge_results: list[dict], state: WorkflowState) -> dict:
+    """Extract steps directly from the best matching article (fallback)."""
     best_article = knowledge_results[0]
     steps = best_article.get("steps", [])
-
-    # Calculate confidence
     confidence = min(0.9, state.get("knowledge_confidence", 0.5) + 0.1)
 
     formatted_steps = []
@@ -89,7 +139,7 @@ async def _generate_resolution(knowledge_results: list[dict], state: dict) -> di
             formatted_steps.append({
                 "step_number": i,
                 "instruction": step.get("instruction", step.get("step", "")),
-                "details": step.get("details", None),
+                "details": step.get("details"),
             })
         elif isinstance(step, str):
             formatted_steps.append({
@@ -98,7 +148,7 @@ async def _generate_resolution(knowledge_results: list[dict], state: dict) -> di
                 "details": None,
             })
 
-    return {"steps": formatted_steps, "confidence": confidence}
+    return {"steps": formatted_steps, "confidence": confidence, "method": "direct"}
 
 
 def _format_resolution_message(resolution: dict) -> str:

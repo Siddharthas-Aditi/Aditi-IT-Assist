@@ -4,8 +4,8 @@ from uuid import uuid4
 
 from langchain_core.messages import HumanMessage
 
-from app.api.v1.chat import ChatMessageResponse, ResolutionStep
 from app.core.logging import get_logger
+from app.schemas.chat import ChatMessageResponse, ResolutionStepSchema
 
 logger = get_logger(__name__)
 
@@ -40,12 +40,11 @@ class ChatService:
         )
 
         try:
-            # Invoke LangGraph workflow
             result = await self._invoke_workflow(session_id, user_message, user_id)
             return self._format_response(session_id, result)
         except Exception as e:
             logger.error("process_message_error", error=str(e), session_id=session_id)
-            return self._error_response(session_id, str(e))
+            return self._error_response(session_id)
 
     async def _invoke_workflow(
         self,
@@ -54,7 +53,8 @@ class ChatService:
         user_id: str,
     ) -> dict:
         """Invoke the LangGraph workflow with the user's message."""
-        # Build initial state
+        from app.workflows.graph import build_support_workflow
+
         initial_state = {
             "messages": [HumanMessage(content=user_message)],
             "session_id": session_id,
@@ -81,15 +81,11 @@ class ChatService:
             "audit_trail": [],
         }
 
-        # Import and invoke the compiled graph
-        from app.workflows.graph import support_graph
-
-        result = await support_graph.ainvoke(initial_state)
-        return result
+        graph = build_support_workflow()
+        return await graph.ainvoke(initial_state)
 
     def _format_response(self, session_id: str, result: dict) -> ChatMessageResponse:
         """Format workflow result into API response."""
-        # Extract the last AI message
         messages = result.get("messages", [])
         content = "I'm processing your request..."
         for msg in reversed(messages):
@@ -97,14 +93,14 @@ class ChatService:
                 content = msg.content
                 break
 
-        # Format resolution steps
-        steps = []
-        for step in result.get("resolution_steps", []):
-            steps.append(ResolutionStep(
+        steps = [
+            ResolutionStepSchema(
                 step_number=step.get("step_number", 0),
                 instruction=step.get("instruction", ""),
                 details=step.get("details"),
-            ))
+            )
+            for step in result.get("resolution_steps", [])
+        ]
 
         return ChatMessageResponse(
             session_id=session_id,
@@ -117,7 +113,7 @@ class ChatService:
             follow_up_question=result.get("clarification_question"),
         )
 
-    def _error_response(self, session_id: str, error: str) -> ChatMessageResponse:
+    def _error_response(self, session_id: str) -> ChatMessageResponse:
         """Generate error response when workflow fails."""
         return ChatMessageResponse(
             session_id=session_id,
@@ -130,3 +126,9 @@ class ChatService:
             confidence_score=0.0,
             requires_escalation=True,
         )
+
+
+# Factory for dependency injection
+def get_chat_service() -> ChatService:
+    """Create a ChatService instance."""
+    return ChatService()
