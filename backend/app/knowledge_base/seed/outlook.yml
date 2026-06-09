@@ -1,0 +1,45 @@
+category: "email/outlook"
+description: "Troubleshooting playbooks for Microsoft Outlook email issues"
+
+articles:
+  - id: "outlook-001"
+    title: "Outlook Emails Not Receiving / Running Slow"
+    category: "email/outlook"
+    subcategory: "email-delivery"
+    tags: ["outlook", "email", "slow", "not receiving", "sync"]
+    content: |
+      This playbook addresses common Outlook issues including emails not being
+      received, slow performance, and synchronization problems.
+    steps:
+      - step_number: 1
+        instruction: "Check if Work Offline mode is enabled"
+        details: "Go to Send/Receive tab and ensure 'Work Offline' is NOT highlighted/active"
+      - step_number: 2
+        instruction: "Check internet connectivity"
+        details: "Verify you can access other websites. Try opening a browser."
+      - step_number: 3
+        instruction: "Ensure VPN is connected (if required)"
+        details: "Some email features require VPN connection to the corporate network"
+      - step_number: 4
+        instruction: "Check if mail rules are filtering messages"
+        details: "Go to File > Manage Rules & Alerts. Look for rules that move or delete mail"
+      - step_number: 5
+        instruction: "Check mailbox storage"
+        details: "Go to File > Account Settings > Data Files. Check if mailbox is near capacity"
+      - step_number: 6
+        instruction: "Clear Junk and Deleted Items folders"
+        details: "Right-click Junk Email and Deleted Items > Empty Folder to free space"
+      - step_number: 7
+        instruction: "Disable unnecessary add-ins"
+        details: "Go to File > Options > Add-ins > Manage COM Add-ins > Disable non-essential ones"
+      - step_number: 8
+        instruction: "Restart Outlook application"
+        details: "Close Outlook completely and reopen. Check if issue persists."
+      - step_number: 9
+        instruction: "Restart your computer"
+        details: "A full restart can resolve many background process issues"
+      - step_number: 10
+        instruction: "Check for Outlook updates"
+        details: "Go to File > Office Account > Update Options > Update Now"
+    escalation_trigger: "If none of the above steps resolve the issue after attempting all"
+    resolution_rate: 0.75

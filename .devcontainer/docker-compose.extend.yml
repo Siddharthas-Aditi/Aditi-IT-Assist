@@ -1,0 +1,5 @@
+services:
+  backend:
+    volumes:
+      - ..:/workspace:cached
+    command: sleep infinity

@@ -1,0 +1,43 @@
+category: "hardware/camera"
+description: "Troubleshooting playbooks for laptop camera issues"
+
+articles:
+  - id: "camera-001"
+    title: "Laptop Camera Not Working"
+    category: "hardware/camera"
+    subcategory: "camera-access"
+    tags: ["camera", "webcam", "video", "not working", "permissions"]
+    content: |
+      This playbook addresses laptop camera issues including camera not detected,
+      black screen in video calls, and permission problems.
+    steps:
+      - step_number: 1
+        instruction: "Restart your laptop"
+        details: "A simple restart resolves many camera driver issues"
+      - step_number: 2
+        instruction: "Check if camera is physically blocked"
+        details: "Many laptops have a physical privacy shutter. Ensure it's open/slid to reveal the camera lens."
+      - step_number: 3
+        instruction: "Enable Camera Access in Privacy & Security settings"
+        details: "Go to Settings > Privacy & Security > Camera > Ensure 'Camera access' is turned ON"
+      - step_number: 4
+        instruction: "Enable camera permissions for specific apps"
+        details: "In the same Camera settings, ensure the apps you need (Zoom, Teams) have camera permission enabled"
+      - step_number: 5
+        instruction: "Close other applications using the camera"
+        details: "Only one app can use the camera at a time. Close Teams if using Zoom, and vice versa."
+      - step_number: 6
+        instruction: "Test camera in the application's settings"
+        details: "Open Zoom/Teams Settings > Video/Camera and check if you see your preview"
+      - step_number: 7
+        instruction: "Check Device Manager for camera driver"
+        details: "Right-click Start > Device Manager > Cameras > Check for warning icons. Right-click > Update driver if needed."
+      - step_number: 8
+        instruction: "Restart the application"
+        details: "Fully close and reopen the video application"
+    escalation_trigger: "If camera doesn't appear in Device Manager or driver update fails"
+    resolution_rate: 0.70
+    notes: |
+      - Physical privacy shutters are the #1 most common cause
+      - Windows updates sometimes reset camera permissions
+      - If camera works in one app but not another, it's a permissions issue

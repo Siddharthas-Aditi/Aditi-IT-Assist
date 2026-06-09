@@ -1,0 +1,63 @@
+category: "video-conferencing/zoom"
+description: "Troubleshooting playbooks for Zoom application issues"
+
+articles:
+  - id: "zoom-001"
+    title: "Zoom Sign-In Issues"
+    category: "video-conferencing/zoom"
+    subcategory: "zoom-signin"
+    tags: ["zoom", "sign-in", "login", "SSO", "authentication"]
+    content: |
+      This playbook addresses Zoom sign-in issues for Aditi Consulting employees.
+      All employees should use SSO sign-in with the company domain.
+    steps:
+      - step_number: 1
+        instruction: "Open Zoom and click 'Sign In with SSO'"
+        details: "Do NOT use regular email/password login"
+      - step_number: 2
+        instruction: "Enter the company SSO domain: aditiconsulting"
+        details: "Type 'aditiconsulting' when prompted for the company domain"
+      - step_number: 3
+        instruction: "Complete authentication via company login page"
+        details: "Use your Aditi corporate credentials to authenticate"
+      - step_number: 4
+        instruction: "For India-based users: Complete KYC if prompted"
+        details: "Indian regulatory requirements may require KYC completion for Zoom access"
+      - step_number: 5
+        instruction: "If SSO fails, try clearing Zoom cache"
+        details: "Close Zoom > Delete %AppData%/Zoom folder > Restart Zoom"
+    escalation_trigger: "If SSO authentication fails after clearing cache"
+    resolution_rate: 0.80
+
+  - id: "zoom-002"
+    title: "Zoom Audio Issues"
+    category: "video-conferencing/zoom"
+    subcategory: "zoom-audio"
+    tags: ["zoom", "audio", "microphone", "speaker", "no sound"]
+    content: |
+      This playbook addresses audio issues in Zoom including microphone
+      not working, no sound from speakers, and echo problems.
+    steps:
+      - step_number: 1
+        instruction: "Open Zoom and go to Settings"
+        details: "Click your profile icon (top right) > Settings"
+      - step_number: 2
+        instruction: "Navigate to Audio settings"
+        details: "Click 'Audio' in the left sidebar"
+      - step_number: 3
+        instruction: "Verify correct speaker device is selected"
+        details: "Click 'Test Speaker' to confirm you can hear the test tone"
+      - step_number: 4
+        instruction: "Verify correct microphone device is selected"
+        details: "Click 'Test Mic' and speak - verify the input level bar moves"
+      - step_number: 5
+        instruction: "Check system audio settings"
+        details: "Open system Sound Settings and ensure correct default devices are set"
+      - step_number: 6
+        instruction: "Close other applications that may use audio"
+        details: "Close Teams, Discord, or other apps that might lock audio devices"
+      - step_number: 7
+        instruction: "Restart Zoom application"
+        details: "Fully close and reopen Zoom, then test audio again"
+    escalation_trigger: "If audio issues persist after checking all device settings"
+    resolution_rate: 0.70

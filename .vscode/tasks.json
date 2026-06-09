@@ -1,0 +1,38 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Backend: Dev Server",
+      "type": "shell",
+      "command": "cd backend && uv run uvicorn app.main:app --reload --port 8000",
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "Frontend: Dev Server",
+      "type": "shell",
+      "command": "cd frontend && npm run dev",
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "Docker: Up",
+      "type": "shell",
+      "command": "docker compose up --build",
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "Backend: Test",
+      "type": "shell",
+      "command": "cd backend && uv run pytest -v",
+      "problemMatcher": []
+    },
+    {
+      "label": "Lint All",
+      "type": "shell",
+      "command": "make lint",
+      "problemMatcher": []
+    }
+  ]
+}

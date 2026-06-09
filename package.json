@@ -1,0 +1,15 @@
+{
+  "name": "aditi-it-assist",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Aditi IT Assist - Agentic AI IT Support Platform",
+  "scripts": {
+    "dev": "cd frontend && npm run dev",
+    "build": "cd frontend && npm run build",
+    "lint": "cd frontend && npm run lint",
+    "format": "cd frontend && npm run format",
+    "test": "cd frontend && npm run test"
+  },
+  "author": "Aditi Consulting Engineering",
+  "license": "MIT"
+}

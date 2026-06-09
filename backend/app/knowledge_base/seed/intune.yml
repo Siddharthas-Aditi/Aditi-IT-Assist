@@ -1,0 +1,50 @@
+category: "device-management/intune"
+description: "Troubleshooting playbooks for Microsoft Intune compliance issues"
+
+articles:
+  - id: "intune-001"
+    title: "Microsoft Intune Non-Compliance Issue"
+    category: "device-management/intune"
+    subcategory: "compliance"
+    tags: ["intune", "compliance", "non-compliant", "device management", "sync"]
+    content: |
+      This playbook addresses Intune non-compliance issues. Common cause: laptop
+      has not signed in or synced for more than 3 days, which triggers a
+      non-compliance status in the device management system.
+    steps:
+      - step_number: 1
+        instruction: "Open Windows Settings"
+        details: "Press Windows key + I, or click Start > Settings"
+      - step_number: 2
+        instruction: "Navigate to Accounts"
+        details: "Click on 'Accounts' in the Settings menu"
+      - step_number: 3
+        instruction: "Select 'Access work or school'"
+        details: "Click on 'Access work or school' in the left panel"
+      - step_number: 4
+        instruction: "Open the dropdown next to your company email ID"
+        details: "Click the dropdown arrow (▼) next to your @aditiconsulting.com email"
+      - step_number: 5
+        instruction: "Click 'Info'"
+        details: "Select the 'Info' button that appears in the expanded section"
+      - step_number: 6
+        instruction: "Scroll down to 'Device sync status'"
+        details: "Scroll down the info page until you find 'Device sync status' section"
+      - step_number: 7
+        instruction: "Click 'Sync'"
+        details: "Click the 'Sync' button to force a device compliance check"
+      - step_number: 8
+        instruction: "Wait for sync to complete"
+        details: "The sync process may take 1-5 minutes. Wait for confirmation."
+      - step_number: 9
+        instruction: "Restart your laptop"
+        details: "After sync completes, restart your laptop for changes to take effect"
+      - step_number: 10
+        instruction: "Repeat sync 2-3 times if needed"
+        details: "If still showing non-compliant after restart, repeat steps 4-9 up to 3 times"
+    escalation_trigger: "If device remains non-compliant after 3 sync attempts with restarts"
+    resolution_rate: 0.85
+    notes: |
+      - Most common cause is the device being offline for 3+ days
+      - This frequently happens after extended leave or travel
+      - The sync process re-establishes the device's compliance status
