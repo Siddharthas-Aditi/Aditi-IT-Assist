@@ -20,7 +20,7 @@ environment:
   - VITE_API_TARGET=http://aditi-backend:8000
 ```
 
-**Why it matters**: 
+**Why it matters**:
 - In Docker, `localhost` inside a container refers to the container itself, not the host
 - Use Docker service name `aditi-backend` to reach the backend service
 - Must include `/api/v1` prefix for API URLs
@@ -254,7 +254,7 @@ docker compose logs -f backend
 
 ---
 
-**Status**: ✅ **READY FOR FRONTEND TESTING**  
-**Commit**: c9d78e4  
-**Date**: June 10, 2026  
+**Status**: ✅ **READY FOR FRONTEND TESTING**
+**Commit**: c9d78e4
+**Date**: June 10, 2026
 **Environment**: Docker Compose (Local Development)

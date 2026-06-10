@@ -100,9 +100,10 @@ services:
     ports:
       - "${FRONTEND_PORT:-5173}:5173"
     environment:
-      # In Docker container network: use service name 'backend'
-      # NOT localhost, which would refer to the frontend container itself
-      - VITE_API_URL=http://aditi-backend:8000/api/v1
+      # IMPORTANT: Browser runs on HOST (localhost), not in Docker network
+      # VITE_API_URL is used by React app in browser → must use localhost
+      # VITE_API_TARGET is used by Vite server inside container → uses service name
+      - VITE_API_URL=http://localhost:8000/api/v1
       - VITE_API_TARGET=http://aditi-backend:8000
     depends_on:
       backend:

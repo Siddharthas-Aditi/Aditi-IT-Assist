@@ -1,115 +1,71 @@
-# Frontend URL Configuration Fix
+# Frontend URL Configuration Fix — CORRECTED
 
-## Problem
-Frontend was not correctly configured to connect to the backend API in Docker environment.
+## The Critical Issue
+
+Browser was trying to connect to `http://aditi-backend:8000/api/v1`
+
+**Problem**: `aditi-backend` hostname **does NOT exist on the host machine**. It only exists inside Docker network!
+
+```
+❌ WRONG: Browser → http://aditi-backend:8000/api/v1
+   Browser is on HOST MACHINE, can't resolve Docker service names
+
+✅ CORRECT: Browser → http://localhost:8000/api/v1
+   localhost on host machine → proxies to backend container port 8000
+```
 
 ## Root Causes
-1. **docker-compose.yml**: Set `VITE_API_URL=http://localhost:8000` (wrong)
-   - Should be `http://aditi-backend:8000/api/v1` (service name in Docker network)
-   - Was missing `/api/v1` prefix
 
-2. **.env.example**: Showed localhost only, no guidance for Docker
+1. **docker-compose.yml**: Had `VITE_API_URL=http://aditi-backend:8000/api/v1`
+   - This gets used by React app IN BROWSER
+   - Browser runs on HOST, not in Docker network
+   - `aditi-backend` is only resolvable INSIDE Docker network
 
-3. **vite.config.ts**: Hardcoded proxy target to `http://localhost:8000`
-   - Needed to use environment variable
+2. **Misunderstanding network topology**:
+   - ✓ Vite proxy (INSIDE container) CAN use service name `aditi-backend`
+   - ✗ Browser (ON HOST) CANNOT use service name `aditi-backend`
 
-## Solutions Implemented
+## Solutions Implemented (CORRECTED)
 
-### 1. Updated docker-compose.yml
+### 1. FIXED: docker-compose.yml
 ```yaml
 environment:
-  # In Docker container network: use service name 'aditi-backend' 
-  # NOT localhost, which would refer to the frontend container itself
-  - VITE_API_URL=http://aditi-backend:8000/api/v1
+  # Browser runs on HOST MACHINE, not in Docker network!
+  - VITE_API_URL=http://localhost:8000/api/v1
   - VITE_API_TARGET=http://aditi-backend:8000
 ```
 
-### 2. Updated vite.config.ts
-```typescript
-server: {
-  port: 5173,
-  proxy: {
-    '/api': {
-      target: process.env.VITE_API_TARGET || 'http://localhost:8000',
-      changeOrigin: true,
-    },
-  },
-},
+### 2. How It Works
+
+**When accessing http://localhost:5173 from browser:**
+```
+Browser (Host) → http://localhost:5173
+  ↓ (Click Login)
+React App fetch()
+  ↓
+POST http://localhost:8000/api/v1/auth/login
+  ↓
+Host port 8000 → Docker backend:8000
+  ↓
+Backend responds ✓
 ```
 
-### 3. Updated .env.example
-```bash
-# Local dev (npm run dev):  http://localhost:8000/api/v1
-# Docker dev:               http://aditi-backend:8000/api/v1
-VITE_API_URL=http://localhost:8000/api/v1
+## Configuration Reference
 
-# Backend target for Vite proxy (dev server only)
-# Local dev:  http://localhost:8000
-# Docker dev: http://aditi-backend:8000
-VITE_API_TARGET=http://localhost:8000
-```
-
-### 4. Updated auth-store.ts and api.ts
-Added documentation comments explaining the URL configuration.
-
-## How It Works
-
-### In Docker (Docker Compose)
-1. Frontend container receives environment variables:
-   - `VITE_API_URL=http://aditi-backend:8000/api/v1`
-   - `VITE_API_TARGET=http://aditi-backend:8000`
-
-2. Frontend (React) app makes API calls to `http://aditi-backend:8000/api/v1/auth/login`
-   - Uses Docker internal network to reach backend service
-
-3. Vite proxy (dev server) redirects `/api/*` to `http://aditi-backend:8000`
-   - Enables hot-reload and development workflow
-
-### In Local Dev (npm run dev)
-1. Frontend receives environment variables from .env:
-   - `VITE_API_URL=http://localhost:8000/api/v1`
-   - `VITE_API_TARGET=http://localhost:8000`
-
-2. Frontend makes API calls to `http://localhost:8000/api/v1/auth/login`
-   - Uses localhost since backend is running on host
-
-3. Vite proxy redirects `/api/*` to `http://localhost:8000`
+| Variable | Value | Used By | Why |
+|----------|-------|---------|-----|
+| `VITE_API_URL` | `http://localhost:8000/api/v1` | React (browser) | Must be host-resolvable |
+| `VITE_API_TARGET` | `http://aditi-backend:8000` | Vite proxy (container) | Can use Docker service name |
 
 ## Testing
 
-### Test Frontend Login (from host)
-```bash
-# Access frontend
-http://localhost:5173
+1. Open: `http://localhost:5173`
+2. Login: `alice.johnson@aditi.com` / `employee123`
+3. Should work ✓
 
-# Login with:
-# Email: alice.johnson@aditi.com
-# Password: employee123
-```
+## Key Takeaway
 
-### Test Backend API (direct)
-```bash
-curl -X POST http://localhost:8000/api/v1/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"alice.johnson@aditi.com","password":"employee123"}'
-```
+**Browser cannot use Docker service names!**
 
-## Environment Variables Summary
-
-| Variable | Docker Value | Dev Value | Purpose |
-|----------|--------------|-----------|---------|
-| `VITE_API_URL` | `http://aditi-backend:8000/api/v1` | `http://localhost:8000/api/v1` | API base URL (with /api/v1 prefix) for fetch calls |
-| `VITE_API_TARGET` | `http://aditi-backend:8000` | `http://localhost:8000` | Vite proxy target (dev server only, no prefix) |
-
-## Files Modified
-- `docker-compose.yml` — Frontend environment variables
-- `frontend/vite.config.ts` — Use environment variable for proxy target
-- `frontend/.env.example` — Document both Docker and dev configurations
-- `frontend/src/stores/auth-store.ts` — Add documentation comments
-- `frontend/src/lib/api.ts` — Add documentation comments (already correct)
-
-## Next Steps
-1. Frontend now correctly routes to backend in Docker
-2. Tests confirm connectivity from Docker network
-3. Login endpoint accessible at http://localhost:5173 (frontend)
-4. All API calls properly proxied to backend
+Use `localhost` for VITE_API_URL (browser access)
+Use `aditi-backend` for VITE_API_TARGET (container proxy only)
