@@ -1,94 +1,274 @@
-# Prompts Guide — Aditi IT Assist
+# Prompts Guide — AI-Assisted Development
 
-## Overview
+> How to work effectively with AI coding assistants (GitHub Copilot, Claude, etc.)
+> when developing Aditi IT Assist.
 
-This guide explains how to use AI coding assistants (GitHub Copilot, Claude, etc.)
-effectively when developing Aditi IT Assist. The project is structured to be
-"agent-friendly" — with documentation, prompts, and conventions that enable
-productive AI-assisted development.
+---
 
-## Repository Structure for AI Agents
+## 1. Repository Structure for AI Agents
+
+The project is structured to be **"agent-friendly"** — with documentation,
+prompts, and conventions that enable productive AI-assisted development.
 
 ```
-prompts/          → Task-specific generation prompts
-agents/           → Agent role definitions and behaviors
-skills/           → Reusable implementation standards
-commands/         → Shell commands and expected outcomes
-CLAUDE.md         → Master context file for Claude
-AGENTS.md         → Multi-agent system specification
+CLAUDE.md             → Master rules (read first)
+AGENTS.md             → Multi-agent system spec
+agents/               → Individual agent role definitions
+  ├── 01-orchestrator.md
+  ├── 02-triage.md
+  ├── 03-retrieval.md
+  ├── 04-resolution.md
+  ├── 05-escalation.md
+  ├── 06-ticketing.md
+  ├── 07-learning.md
+  └── 08-copilot.md
+skills/               → Implementation patterns (HOW to code)
+  ├── backend/
+  ├── frontend/
+  ├── devops/
+  └── product/
+prompts/              → Task-specific prompts (copy-paste)
+  ├── 01-master-build.md
+  ├── 02-backend.md
+  ├── 03-frontend.md
+  ├── 04-workflow.md
+  ├── 05-testing.md
+  ├── 06-infrastructure.md
+  └── 07-iterative-build.md
 .github/copilot-instructions.md → GitHub Copilot context
 ```
 
-## Using Prompts Effectively
+---
 
-### 1. Start with Context
-Always reference the relevant prompt file when starting a new task:
-- "Read `prompts/backend-agent-prompt.md` and implement the ticket service"
-- "Following `skills/frontend/react-ui-system.md`, create the chat component"
+## 2. How to Start a Task
 
-### 2. Be Specific About Scope
-- ✅ "Implement the `triage_node` function in `backend/app/workflows/nodes/triage.py`"
-- ❌ "Build the backend"
+### Step 1: Identify the Right Prompt
 
-### 3. Reference Architecture
-- "According to `docs/architecture/agent-architecture.md`, the triage agent should..."
-- "Following the data model in `docs/architecture/data-model.md`, create the migration"
+| Task Type | Start With |
+|-----------|-----------|
+| New backend feature | `prompts/02-backend.md` |
+| New frontend feature | `prompts/03-frontend.md` |
+| Workflow changes | `prompts/04-workflow.md` |
+| Writing tests | `prompts/05-testing.md` |
+| Docker/infra changes | `prompts/06-infrastructure.md` |
+| Full feature (multi-layer) | `prompts/01-master-build.md` |
+| Iterative building | `prompts/07-iterative-build.md` |
 
-### 4. Chain Prompts
-For complex features, use a sequence:
-1. "Generate the Pydantic schemas for the ticket model"
-2. "Now create the SQLAlchemy model based on those schemas"
-3. "Create the repository with CRUD operations"
-4. "Create the service layer"
-5. "Create the API route that uses the service"
-6. "Write tests for the service layer"
+### Step 2: Provide Context
 
-## Prompt Files
+Always reference the relevant documentation:
 
-| File | Use When |
-|------|----------|
-| `prompts/master-build-prompt.md` | Full project context |
-| `prompts/backend-agent-prompt.md` | Backend implementation |
-| `prompts/frontend-agent-prompt.md` | Frontend implementation |
-| `prompts/architecture-agent-prompt.md` | Design decisions |
-| `prompts/qa-agent-prompt.md` | Testing and quality |
-| `prompts/docker-agent-prompt.md` | Infrastructure |
-| `prompts/docs-agent-prompt.md` | Documentation |
+```
+"Read CLAUDE.md and agents/02-triage.md, then implement the triage_node
+function in backend/app/workflows/nodes/triage.py following the spec."
+```
 
-## Skill Files
+### Step 3: Be Specific About Scope
 
-Skill files define HOW to implement things correctly in this project:
+```
+✅ "Implement the keyword_fallback_classify function that maps keywords
+   to categories per the table in agents/02-triage.md"
 
-| File | Teaches |
-|------|---------|
-| `skills/backend/fastapi-standards.md` | FastAPI patterns |
-| `skills/backend/langgraph-patterns.md` | LangGraph workflow patterns |
-| `skills/frontend/react-ui-system.md` | Component architecture |
-| `skills/frontend/aditi-theme.md` | Design system |
-| `skills/devops/docker-standards.md` | Container best practices |
+❌ "Build the triage system"  (too vague)
+```
 
-## Example Workflow
+---
 
-### Adding a New Knowledge Category
+## 3. Prompting Patterns
 
-1. Create knowledge YAML:
-   "Following the format in `backend/app/knowledge_base/seed/outlook.yml`,
-   create a new playbook for VPN connectivity issues"
+### Pattern: Incremental Implementation
 
-2. Update models if needed:
-   "Add 'vpn/connectivity' to the issue category enum in schemas"
+Break large features into small, testable steps:
 
-3. Seed the data:
-   "Update `scripts/seed_data.py` to load the new VPN knowledge"
+```
+Step 1: "Create the Pydantic schemas for ChatMessage (request + response)"
+Step 2: "Create the SQLAlchemy model for chat_messages table"
+Step 3: "Create the MessageRepository with create/list methods"
+Step 4: "Create the ChatService that uses the repository"
+Step 5: "Create the POST /chat/message route using the service"
+Step 6: "Write unit tests for ChatService"
+```
 
-4. Test retrieval:
-   "Write a test that searches for VPN issues and verifies the new
-   articles are returned"
+Each step produces working, testable code before moving to the next.
 
-## Tips for AI Agents
+### Pattern: Reference-Based Implementation
 
-1. **Read CLAUDE.md first** — it has the master context
-2. **Check existing patterns** — look at similar files before creating new ones
+Point AI to an existing pattern to replicate:
+
+```
+"Following the same pattern as backend/app/services/chat_service.py,
+create a KnowledgeService in backend/app/services/knowledge_service.py
+with methods: search(query, category) and get_by_id(article_id)"
+```
+
+### Pattern: Spec-Driven Implementation
+
+Let the agent spec drive the implementation:
+
+```
+"Read agents/04-resolution.md completely. Implement the resolution_node
+function exactly as described in the Algorithm section. Use the confidence
+calibration formula from the Confidence Calibration section. Handle all
+failure modes listed in the Failure Modes table."
+```
+
+### Pattern: Fix and Validate
+
+```
+"Run 'make test-backend' and fix any failures. Show me what you changed."
+```
+
+### Pattern: Explain Before Implementing
+
+```
+"Before writing code, explain how you would implement the vector search
+in the retrieval node. What SQL query would you use? How do you handle
+the case where pgvector returns no results?"
+```
+
+---
+
+## 4. Writing Good Agent Prompts
+
+### For the Triage Agent (LLM System Prompt)
+
+The system prompt must:
+- Define the exact output format (JSON schema)
+- List all valid categories
+- Provide classification examples
+- Explicitly state boundaries ("Do NOT attempt resolution")
+- Handle edge cases ("If too vague, ask one clarifying question")
+
+### For the Resolution Agent (LLM System Prompt)
+
+The system prompt must:
+- Emphasize grounding in knowledge base
+- Forbid hallucination ("Only use information from the articles below")
+- Specify tone ("Helpful but not overpromising")
+- Define step format
+- Include confidence context
+
+### For the Ticketing Agent (LLM System Prompt)
+
+The system prompt must:
+- Request concise summarization
+- Specify professional tone
+- Define output structure
+- Limit response length
+
+---
+
+## 5. Common Mistakes to Avoid
+
+| Mistake | Why It Fails | Better Approach |
+|---------|-------------|-----------------|
+| "Build the entire backend" | Too much scope, inconsistent output | Break into 5-6 focused tasks |
+| No reference to docs | AI invents its own patterns | Always cite CLAUDE.md or skills/ |
+| Asking for "best practice" | Generic advice, not project-specific | Reference specific skill file |
+| Skipping validation | Broken code accumulates | "Run tests after each change" |
+| Ignoring agent boundaries | Agents do things they shouldn't | "Follow the Boundaries section in agents/X.md" |
+
+---
+
+## 6. Iterative Development Workflow
+
+```
+┌─────────────────────────┐
+│ 1. Pick a prompt file   │
+│    (prompts/0X-*.md)    │
+└────────┬────────────────┘
+         │
+         ▼
+┌─────────────────────────┐
+│ 2. Give AI the context  │
+│    + specific task       │
+└────────┬────────────────┘
+         │
+         ▼
+┌─────────────────────────┐
+│ 3. Review generated code│
+│    Check against skills/ │
+└────────┬────────────────┘
+         │
+         ▼
+┌─────────────────────────┐
+│ 4. Run tests & lint     │
+│    make test && make lint│
+└────────┬────────────────┘
+         │
+         ▼
+┌─────────────────────────┐
+│ 5. Fix any issues       │
+│    "Fix the test failure"│
+└────────┬────────────────┘
+         │
+         ▼
+┌─────────────────────────┐
+│ 6. Commit & move to     │
+│    next task             │
+└─────────────────────────┘
+```
+
+---
+
+## 7. Tips for AI Agents Working on This Repo
+
+1. **Read CLAUDE.md first** — It has the master context and rules
+2. **Check existing patterns** — Look at similar files before creating new ones
 3. **Run tests after changes** — `make test-backend` or `make test-frontend`
-4. **Keep consistency** — match the style of existing code
-5. **Update docs** — if you change architecture, update the relevant .md file
+4. **Keep consistency** — Match the style of existing code
+5. **Update docs** — If you change architecture, update the relevant `.md` file
+6. **Small commits** — One logical change per commit
+7. **Don't skip error handling** — Every I/O operation needs try/except
+8. **Use the type system** — TypedDict for state, Pydantic for API, TypeScript for frontend
+9. **Log decisions** — structlog with context, audit_trail in workflow
+10. **When in doubt, escalate** — Ask the human developer rather than guessing
+
+---
+
+## 8. Example Sessions
+
+### Example: Adding a New Knowledge Category
+
+```
+Human: "Add VPN troubleshooting to the knowledge base"
+
+AI reads: skills/product/knowledge-base.md for format
+
+Steps:
+1. Create backend/app/knowledge_base/seed/vpn.yml with 3-5 articles
+2. Add "network/vpn" to category enum in schemas
+3. Update triage keyword map to detect VPN issues
+4. Write a test that verifies VPN articles are found via search
+5. Update agents/02-triage.md categories table
+```
+
+### Example: Fixing Low Confidence Scores
+
+```
+Human: "The resolution agent is giving low confidence for email issues"
+
+AI reads: agents/04-resolution.md (confidence formula section)
+
+Investigation:
+1. Check if knowledge articles exist for email category
+2. Verify vector embeddings are populated
+3. Check if retrieval is returning relevant articles
+4. Review confidence formula weights
+5. Run tests with known-good inputs to isolate the problem
+```
+
+---
+
+## 9. Maintaining Documentation
+
+When you add or change features:
+
+| Change | Update |
+|--------|--------|
+| New agent/node | `agents/0X-{name}.md` + `AGENTS.md` registry table |
+| New API endpoint | Auto-generated from Pydantic (just keep schemas clean) |
+| New skill/pattern | `skills/{domain}/{pattern}.md` |
+| New prompt template | `prompts/0X-{name}.md` |
+| Architecture change | `docs/architecture/` |
+| New config option | `.env.example` + `docs/development/setup.md` |

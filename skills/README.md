@@ -1,10 +1,42 @@
-# Skills Directory
+# skills/ — Implementation Standards
 
-Skills define HOW to implement things correctly in this project. They are
-reusable implementation standards that coding agents should follow.
+This directory defines HOW to implement things correctly in Aditi IT Assist.
+Each skill file is a reference for AI coding agents and human developers.
 
-## Structure
-- `backend/` — Python/FastAPI implementation patterns
-- `frontend/` — React/TypeScript UI patterns
-- `devops/` — Docker and CI/CD patterns
-- `product/` — Domain knowledge and rules
+## Directory Structure
+
+```
+skills/
+├── README.md                      ← This file
+├── backend/
+│   ├── fastapi-patterns.md        ← API route, service, DI patterns
+│   ├── langgraph-workflows.md     ← LangGraph node and state patterns
+│   ├── database-patterns.md       ← SQLAlchemy, migrations, queries
+│   └── llm-integration.md         ← LiteLLM abstraction patterns
+├── frontend/
+│   ├── component-architecture.md  ← React component patterns
+│   ├── state-management.md        ← Zustand + React Query patterns
+│   └── design-system.md           ← Aditi theme, Tailwind, shadcn
+├── devops/
+│   ├── docker-patterns.md         ← Container best practices
+│   └── testing-patterns.md        ← Testing strategies & tools
+└── product/
+    ├── knowledge-base.md          ← KB authoring & structure
+    └── support-workflows.md       ← IT support domain knowledge
+```
+
+## How to Use Skills
+
+1. **Before implementing**: Read the relevant skill file
+2. **During code review**: Check implementation matches skill patterns
+3. **When adding patterns**: Update the relevant skill file
+4. **When onboarding**: Use skills as a learning reference
+
+## Skill File Structure
+
+Each skill file follows this format:
+- **Pattern name** with brief description
+- **When to use** — triggers for this pattern
+- **Code example** — copy-paste-ready implementation
+- **Anti-patterns** — what NOT to do
+- **Related files** — where this pattern is used in the codebase

@@ -1,48 +1,157 @@
-# AGENTS.md - Multi-Agent System Design for Aditi IT Assist
+# AGENTS.md — Multi-Agent System Design
 
-## System Agents
+> **Aditi IT Assist** uses a LangGraph-based multi-agent workflow to resolve
+> employee IT issues. This document is the authoritative reference for the
+> agent system architecture.
 
-This document defines the logical agents in the Aditi IT Assist platform.
-Each agent is a discrete node in the LangGraph workflow with defined inputs,
-outputs, tools, and decision boundaries.
+---
+
+## System Overview
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│                        LANGGRAPH STATE MACHINE                         │
+│                                                                        │
+│  ┌──────────┐    ┌────────┐    ┌───────────┐    ┌────────────┐       │
+│  │Orchestrator│──→│ Triage │──→│ Knowledge │──→│ Resolution │       │
+│  └──────────┘    └────────┘    │ Retrieval │    └──────┬─────┘       │
+│       ↑              ↑         └───────────┘           │              │
+│       │              │                                  │              │
+│       │         clarification                  confidence < 0.8       │
+│       │              │                                  │              │
+│       │              ▼                                  ▼              │
+│       │          [END:user]                    ┌────────────┐         │
+│       │                                        │ Escalation │         │
+│       │                                        └──────┬─────┘         │
+│       │                                               │               │
+│       │                                               ▼               │
+│       │                                        ┌────────────┐         │
+│       └────────────────────────────────────────│  Ticketing │         │
+│                                                └────────────┘         │
+│                                                                        │
+│  ┌───────────────────────────────────────────────────────────────┐    │
+│  │  ASYNC AGENTS (not in real-time flow)                          │    │
+│  │  • Knowledge Learning Agent — analyzes gaps                    │    │
+│  │  • Human Support Copilot — assists live agents (future)        │    │
+│  └───────────────────────────────────────────────────────────────┘    │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Agent Registry
+
+| # | Agent | Node File | Real-Time | LLM Required |
+|---|-------|-----------|-----------|--------------|
+| 1 | Orchestrator | `graph.py` (conditional edges) | ✅ | ❌ |
+| 2 | Intake & Triage | `nodes/triage.py` | ✅ | ✅ |
+| 3 | Knowledge Retrieval | `nodes/retrieval.py` | ✅ | ❌ |
+| 4 | Resolution | `nodes/resolution.py` | ✅ | ✅ |
+| 5 | Escalation | `nodes/escalation.py` | ✅ | ❌ |
+| 6 | Ticketing | `nodes/ticketing.py` | ✅ | ✅ |
+| 7 | Knowledge Learning | (async task) | ❌ | ✅ |
+| 8 | Human Support Copilot | (future) | ❌ | ✅ |
 
 ---
 
 ## 1. Orchestrator Agent
 
-**Purpose**: Routes the conversation flow between agents based on state.
+**Purpose**: Routes conversation flow between agents using deterministic logic.
 
-**Inputs**: Current workflow state, user message history, classification results
-**Outputs**: Next agent to invoke, updated state
-**Decision Logic**:
-- New conversation → Triage Agent
-- Needs more info → Triage Agent (clarification mode)
-- Classified issue → Knowledge Retrieval Agent
-- Has resolution steps → Resolution Agent
-- Low confidence / user requests help → Escalation Agent
-- Escalation approved → Ticket/Email Agent
+### Interface
+
+| Field | Type | Description |
+|-------|------|-------------|
+| **Inputs** | `WorkflowState` | Full current state |
+| **Outputs** | `str` | Next node name to invoke |
+| **Dependencies** | None | Pure function on state |
+
+### Decision Table
+
+| Condition | Routes To | Rationale |
+|-----------|-----------|-----------|
+| `turn_count == 0` | `triage` | First message always triaged |
+| `needs_clarification == True` | `END` | Return question to user |
+| `issue_category is None` | `triage` | Not yet classified |
+| `knowledge_results is empty` | `retrieval` | Need knowledge |
+| `resolution_confidence >= 0.8` | `END` | High-confidence answer |
+| `resolution_confidence > 0 && < 0.8` | `escalation` | Low confidence |
+| `should_escalate == True` | `ticketing` | Escalation approved |
+| `turn_count >= 10` | `escalation` | Safety: max turns |
+| *(fallback)* | `escalation` | Unknown state → escalate |
+
+### Failure Modes
+
+| Failure | Detection | Recovery |
+|---------|-----------|----------|
+| Infinite loop | `turn_count >= 10` | Force escalation |
+| Invalid state | Missing required fields | Log + escalate |
+| Node exception | Unhandled error in any node | Catch → escalation with error context |
+
+### Implementation Notes
+- Implemented as **conditional edges** in LangGraph, NOT as a separate node
+- Uses pure functions — no LLM calls, no I/O
+- Every routing decision is logged to `audit_trail`
+- Must be 100% deterministic for reproducibility
 
 ---
 
 ## 2. Intake & Triage Agent
 
-**Purpose**: Understands the user's issue, asks clarifying questions, classifies the problem.
+**Purpose**: Understands the user's IT issue, asks clarifying questions, classifies the problem.
 
-**Inputs**: User message, conversation history
-**Outputs**: Issue classification, severity, urgency, impact, category
-**Tools**: Classification prompt, entity extraction
-**Boundaries**: Must not attempt resolution. Only classifies and clarifies.
+### Interface
 
-**Categories**:
-- `email/outlook`
-- `video-conferencing/zoom`
-- `device-management/intune`
-- `hardware/camera`
-- `hardware/other`
-- `software/other`
-- `network/connectivity`
-- `access/permissions`
-- `other`
+| Field | Type | Description |
+|-------|------|-------------|
+| **Inputs** | `messages`, `conversation history` | User's description |
+| **Outputs** | `issue_category`, `severity`, `urgency`, `needs_clarification` | Classification |
+| **Dependencies** | LiteLLM (classification), keyword fallback | |
+
+### Output Schema
+
+```python
+{
+    "issue_category": "email/outlook",       # Primary category
+    "issue_subcategory": "email-delivery",   # Specific problem
+    "severity": "medium",                     # low | medium | high | critical
+    "urgency": "high",                        # low | medium | high
+    "impact": "individual",                   # individual | team | department | org
+    "needs_clarification": False,             # Whether to ask follow-up
+    "clarification_question": None,           # Question text (if needed)
+}
+```
+
+### Categories
+
+| Category | Subcategories | Example Issues |
+|----------|--------------|----------------|
+| `email/outlook` | delivery, sync, crash, config | "Not receiving emails" |
+| `video-conferencing/zoom` | audio, video, signin, connection | "Can't join meetings" |
+| `device-management/intune` | compliance, sync, enrollment | "Device not compliant" |
+| `hardware/camera` | permissions, driver, quality | "Camera black screen" |
+| `hardware/other` | keyboard, monitor, docking | "Second monitor not detected" |
+| `software/other` | install, crash, license, update | "App keeps crashing" |
+| `network/connectivity` | vpn, wifi, ethernet, dns | "VPN won't connect" |
+| `access/permissions` | login, mfa, password, rbac | "Access denied" |
+| `other` | — | Uncategorizable issues |
+
+### Failure Modes
+
+| Failure | Detection | Recovery |
+|---------|-----------|----------|
+| LLM timeout | 10s timeout on classification call | Use keyword fallback classifier |
+| LLM returns invalid JSON | JSON parse error | Retry once, then keyword fallback |
+| User message too vague | Confidence < 0.3 on classification | Set `needs_clarification = True` |
+| Max clarifications exceeded | `clarification_count >= 3` | Classify as "other", proceed |
+| LLM unavailable | ConnectionError | Keyword classifier + log alert |
+
+### Boundaries
+- ❌ Must NOT attempt resolution
+- ❌ Must NOT search knowledge base
+- ❌ Must NOT access external systems
+- ✅ Maximum 3 clarification rounds
+- ✅ Must always produce a classification (even if low confidence)
 
 ---
 
@@ -50,74 +159,249 @@ outputs, tools, and decision boundaries.
 
 **Purpose**: Searches the knowledge base for relevant troubleshooting playbooks.
 
-**Inputs**: Issue classification, user description, category
-**Outputs**: Relevant knowledge articles, ranked by relevance
-**Tools**: Vector similarity search (pgvector), keyword search fallback
-**Boundaries**: Returns information only. Does not synthesize or advise.
+### Interface
+
+| Field | Type | Description |
+|-------|------|-------------|
+| **Inputs** | `issue_category`, `issue_subcategory`, user description | Search context |
+| **Outputs** | `knowledge_results[]`, `knowledge_confidence` | Ranked articles |
+| **Dependencies** | pgvector (similarity search), PostgreSQL (keyword fallback) | |
+
+### Search Strategy
+
+```
+1. Vector similarity search (pgvector)
+   - Embed user description + category
+   - Top-5 results with cosine similarity > 0.7
+
+2. Keyword fallback (if vector results < 3)
+   - Full-text search on title + content
+   - Category filter match
+
+3. Score combination
+   - Weighted: 0.7 * vector_score + 0.3 * keyword_score
+   - Filter out results below 0.5 combined score
+```
+
+### Output Schema
+
+```python
+{
+    "knowledge_results": [
+        {
+            "article_id": "uuid",
+            "title": "Outlook not receiving emails",
+            "content": "Step-by-step troubleshooting...",
+            "category": "email/outlook",
+            "relevance_score": 0.92,
+            "source": "vector_search",
+        }
+    ],
+    "knowledge_confidence": 0.87,  # Best match score
+}
+```
+
+### Failure Modes
+
+| Failure | Detection | Recovery |
+|---------|-----------|----------|
+| No results found | `len(results) == 0` | Set confidence to 0.0, route to escalation |
+| pgvector unavailable | ConnectionError to DB | Keyword-only search |
+| All results low relevance | Best score < 0.5 | Set confidence to score, let Resolution decide |
+| Embedding model failure | Exception in embed call | Use category-only filter search |
+
+### Boundaries
+- ❌ Must NOT synthesize or advise
+- ❌ Must NOT modify knowledge base
+- ✅ Returns information only
+- ✅ Must return confidence score with results
+- ✅ Results must be ordered by relevance
 
 ---
 
 ## 4. Resolution Agent
 
-**Purpose**: Generates step-by-step troubleshooting guidance using retrieved knowledge.
+**Purpose**: Generates step-by-step troubleshooting guidance from retrieved knowledge.
 
-**Inputs**: Knowledge articles, issue context, user conversation
-**Outputs**: Resolution steps, confidence score, follow-up questions
-**Tools**: LLM generation with retrieved context (RAG pattern)
-**Boundaries**:
-- Must cite knowledge source
-- Must include confidence score (0.0 to 1.0)
-- Must offer escalation option if confidence < 0.8
-- Must not make up steps not found in knowledge base
+### Interface
+
+| Field | Type | Description |
+|-------|------|-------------|
+| **Inputs** | `knowledge_results`, `issue_*`, `messages` | Full context |
+| **Outputs** | `resolution_steps[]`, `resolution_confidence`, AI message | Guidance |
+| **Dependencies** | LiteLLM (generation), knowledge articles | |
+
+### Output Schema
+
+```python
+{
+    "resolution_steps": [
+        {"step_number": 1, "instruction": "Open Outlook settings", "details": "Click File > Options"},
+        {"step_number": 2, "instruction": "Check account sync", "details": "..."},
+    ],
+    "resolution_confidence": 0.85,
+    # Also appends a formatted message to `messages` for the user
+}
+```
+
+### Confidence Calibration
+
+| Score Range | Meaning | Behavior |
+|-------------|---------|----------|
+| 0.8 – 1.0 | High — strong KB match, clear steps | Present resolution directly |
+| 0.5 – 0.8 | Medium — partial match or generic | Present with disclaimer + escalation offer |
+| 0.0 – 0.5 | Low — weak/no KB match | Skip resolution, route to escalation |
+
+**Confidence is derived from**:
+- `knowledge_confidence` (retrieval quality): 50% weight
+- Number of relevant articles: 20% weight
+- Category specificity match: 30% weight
+
+### Failure Modes
+
+| Failure | Detection | Recovery |
+|---------|-----------|----------|
+| LLM timeout | 15s timeout | Return "unable to generate" + escalate |
+| LLM hallucination risk | Steps not found in KB text | Compare generated steps against KB content |
+| Empty knowledge | `knowledge_results == []` | Skip generation, confidence = 0.0 |
+| LLM refusal | "I cannot help" response | Set confidence to 0.0, escalate |
+
+### Boundaries
+- ❌ Must NEVER invent steps not found in knowledge base
+- ❌ Must NEVER make promises ("this will fix it")
+- ✅ Must ALWAYS cite which knowledge article steps come from
+- ✅ Must ALWAYS include confidence score
+- ✅ Must offer escalation if confidence < 0.8
+- ✅ Use language like "try this" not "do this"
 
 ---
 
 ## 5. Escalation Agent
 
-**Purpose**: Determines escalation path and prepares handoff.
+**Purpose**: Determines escalation path and prepares structured handoff summary.
 
-**Inputs**: Conversation history, classification, attempted resolution, confidence
-**Outputs**: Escalation decision, handoff summary, priority level
-**Decision Logic**:
-- Check if human agents are available (future: queue check)
-- Prepare structured summary for human agent
-- If no human available → route to Ticket/Email Agent
+### Interface
 
-**Handoff Summary Includes**:
-- Employee name and ID
-- Issue category and description
-- Steps already attempted
-- AI confidence assessment
-- Recommended next actions for human agent
-- Severity/urgency/impact ratings
+| Field | Type | Description |
+|-------|------|-------------|
+| **Inputs** | Full state (history, classification, attempts) | Everything |
+| **Outputs** | `should_escalate`, `handoff_summary`, `escalation_reason` | Decision |
+| **Dependencies** | None (deterministic) | |
+
+### Escalation Triggers
+
+| Trigger | Priority |
+|---------|----------|
+| User explicitly requests human help | P1 — Immediate |
+| Resolution confidence < 0.5 | P2 — High |
+| Resolution confidence < 0.8 after 2+ attempts | P2 — High |
+| Max turns (10) exceeded | P3 — Normal |
+| Agent error / exception | P1 — Immediate |
+| Critical severity + low confidence | P1 — Immediate |
+
+### Handoff Summary Schema
+
+```python
+HandoffSummary = {
+    "employee_name": str,
+    "issue_category": str,
+    "issue_description": str,         # Natural language summary
+    "steps_attempted": list[str],     # What was already tried
+    "ai_confidence": float,           # How confident the AI was
+    "recommended_actions": list[str], # Suggestions for human agent
+    "severity": str,
+    "urgency": str,
+    "conversation_turns": int,
+    "escalation_reason": str,
+}
+```
+
+### Failure Modes
+
+| Failure | Detection | Recovery |
+|---------|-----------|----------|
+| Incomplete state | Missing classification | Generate partial summary with available info |
+| No conversation context | Empty messages | Create minimal summary from metadata |
+
+### Boundaries
+- ❌ Must NEVER dismiss user's request for human help
+- ❌ Must NEVER downgrade severity
+- ✅ Must ALWAYS provide complete handoff summary
+- ✅ Must preserve ALL conversation context
+- ✅ Must log escalation reason to audit trail
 
 ---
 
-## 6. Ticket / Email Drafting Agent
+## 6. Ticketing Agent
 
-**Purpose**: Creates structured support tickets or email drafts.
+**Purpose**: Creates structured support tickets or email drafts from escalation context.
 
-**Inputs**: Escalation summary, conversation history, user info
-**Outputs**: Formatted ticket or email draft
-**Tools**: Template engine, email formatter
-**Boundaries**:
-- Must preserve all conversation context
-- Must include categorization metadata
-- Must follow company ticket format
-- Draft only — does not send without approval
+### Interface
+
+| Field | Type | Description |
+|-------|------|-------------|
+| **Inputs** | `handoff_summary`, `messages`, user info | Context |
+| **Outputs** | `ticket_draft` (TicketDraft) | Formatted draft |
+| **Dependencies** | LiteLLM (summarization), templates | |
+
+### Ticket Format
+
+```python
+TicketDraft = {
+    "title": str,                    # "[Category] Brief description"
+    "description": str,              # Full context with formatting
+    "category": str,                 # Mapped to ticketing system categories
+    "priority": str,                 # P1/P2/P3/P4
+    "steps_attempted": list[str],    # What was tried
+    "conversation_summary": str,     # AI-generated summary
+}
+```
+
+### Failure Modes
+
+| Failure | Detection | Recovery |
+|---------|-----------|----------|
+| LLM unavailable | Timeout/connection error | Template-based ticket (no AI summary) |
+| Missing context | Handoff summary incomplete | Generate with available fields + [INCOMPLETE] flag |
+
+### Boundaries
+- ❌ Must NOT send tickets without user approval (draft only)
+- ❌ Must NOT modify priority without context
+- ✅ Must preserve all conversation context
+- ✅ Must follow company ticket format template
+- ✅ Must include AI confidence assessment in ticket
 
 ---
 
-## 7. Knowledge Learning Agent
+## 7. Knowledge Learning Agent (Async)
 
-**Purpose**: Identifies gaps in knowledge base and suggests new articles.
+**Purpose**: Identifies gaps in the knowledge base and suggests new articles.
 
-**Inputs**: Resolved sessions, unresolved sessions, user feedback
-**Outputs**: Knowledge gap reports, suggested new articles
-**Boundaries**:
-- Runs asynchronously (not in real-time conversation flow)
-- Suggestions require human review before publishing
-- Tracks resolution success rates by category
+### Interface
+
+| Field | Type | Description |
+|-------|------|-------------|
+| **Inputs** | Resolved sessions, unresolved sessions, feedback | Historical data |
+| **Outputs** | Gap reports, suggested articles | Improvements |
+| **Dependencies** | Database (session history), LiteLLM | |
+| **Trigger** | Scheduled (daily) or on low-confidence threshold | |
+
+### Process
+
+```
+1. Analyze sessions with confidence < 0.5 in last 24h
+2. Cluster unresolved issues by category
+3. Identify categories with high escalation rates
+4. Generate suggested KB article outlines
+5. Submit to admin review queue
+```
+
+### Boundaries
+- ❌ NOT in real-time conversation flow
+- ❌ Must NOT auto-publish articles
+- ✅ Runs asynchronously (background worker)
+- ✅ All suggestions require human review
+- ✅ Tracks resolution success rates by category
 
 ---
 
@@ -125,49 +409,114 @@ outputs, tools, and decision boundaries.
 
 **Purpose**: Assists human IT agents with context and suggestions during live support.
 
-**Inputs**: Live conversation between human agent and employee
-**Outputs**: Contextual suggestions, relevant KB articles, draft responses
-**Boundaries**:
-- Advisory only — human agent makes all decisions
-- Must not send messages directly to employee
-- Surfaces relevant information proactively
+### Interface
+
+| Field | Type | Description |
+|-------|------|-------------|
+| **Inputs** | Live conversation, employee history | Real-time |
+| **Outputs** | Suggestions, relevant KB articles, draft responses | Advisory |
+| **Dependencies** | Knowledge base, conversation context | |
+
+### Boundaries
+- ❌ Advisory ONLY — human makes all decisions
+- ❌ Must NOT send messages directly to employee
+- ✅ Surfaces relevant information proactively
+- ✅ Provides draft responses for human to edit/approve
 
 ---
 
-## Agent Communication Protocol
+## Shared State (WorkflowState)
 
-Agents communicate through the shared **WorkflowState** object:
+All agents communicate through a shared `WorkflowState` TypedDict:
 
 ```python
 class WorkflowState(TypedDict):
-    messages: list[Message]
-    classification: IssueClassification | None
-    knowledge_results: list[KnowledgeArticle]
-    resolution_steps: list[ResolutionStep]
-    confidence_score: float
-    escalation_decision: EscalationDecision | None
-    ticket_draft: TicketDraft | None
-    current_agent: str
-    next_agent: str
+    # Messages (LangGraph accumulator)
+    messages: Annotated[list[BaseMessage], add_messages]
+
+    # Identity
     session_id: str
     user_id: str
-    metadata: dict
+
+    # Classification (Triage Agent)
+    issue_category: str | None
+    issue_subcategory: str | None
+    severity: Literal["low", "medium", "high", "critical"] | None
+    urgency: Literal["low", "medium", "high"] | None
+    impact: Literal["individual", "team", "department", "organization"] | None
+
+    # Knowledge (Retrieval Agent)
+    knowledge_results: list[dict]
+    knowledge_confidence: float
+
+    # Resolution (Resolution Agent)
+    resolution_steps: list[ResolutionStep]
+    resolution_confidence: float
+    steps_attempted: list[str]
+
+    # Escalation (Escalation Agent)
+    should_escalate: bool
+    escalation_reason: str | None
+    handoff_summary: HandoffSummary | None
+
+    # Ticket (Ticketing Agent)
+    ticket_draft: TicketDraft | None
+    ticket_created: bool
+
+    # Control
+    current_node: str
+    turn_count: int
+    needs_clarification: bool
+    clarification_question: str | None
+    audit_trail: list[dict]
 ```
 
-## Agent Boundaries (Safety Rails)
+### State Update Rules
 
-1. No agent may access systems outside its defined tools
-2. No agent may bypass the orchestrator's routing
-3. Resolution Agent must never fabricate steps not in knowledge base
-4. Escalation Agent must never dismiss user requests for human help
-5. All agents must log their decisions for audit trail
-6. Confidence scores must be calibrated honestly (not inflated)
+1. Each node returns ONLY the fields it modifies
+2. Messages use `add_messages` annotation (append-only)
+3. `audit_trail` uses list annotation (append-only)
+4. Nodes must NEVER mutate state directly
+5. State is immutable between nodes
 
-## Adding New Agents
+---
 
-1. Define the agent in `agents/new-agent.md`
-2. Implement the node in `backend/app/workflows/nodes/`
-3. Register the node in `backend/app/workflows/graph.py`
-4. Add state fields if needed in `backend/app/workflows/state.py`
-5. Write unit tests in `backend/tests/unit/test_workflows/`
-6. Update `docs/architecture/agent-architecture.md`
+## Safety Rails
+
+| # | Rule | Enforcement |
+|---|------|-------------|
+| 1 | No agent may access systems outside its defined tools | Code review + DI |
+| 2 | No agent may bypass orchestrator routing | Graph structure enforces |
+| 3 | Resolution must never fabricate steps | KB citation required |
+| 4 | Escalation must never dismiss human requests | Explicit trigger check |
+| 5 | All decisions logged to audit trail | Enforced in each node |
+| 6 | Confidence scores calibrated honestly | Formula-based, not arbitrary |
+| 7 | Maximum 10 turns per session | Orchestrator enforces |
+| 8 | 30-second timeout per node | LangGraph config |
+| 9 | Fallback to escalation on any error | Global error handler |
+
+---
+
+## Adding a New Agent
+
+1. **Spec**: Create `agents/new-agent.md` (follow existing format)
+2. **State**: Add fields to `backend/app/workflows/state.py` if needed
+3. **Node**: Implement in `backend/app/workflows/nodes/new_agent.py`
+4. **Graph**: Register in `backend/app/workflows/graph.py`
+5. **Tests**: Write in `backend/tests/unit/test_workflows/test_new_agent.py`
+6. **Skills**: Add implementation patterns to `skills/backend/` if novel
+7. **Docs**: Update this file + `docs/architecture/agent-architecture.md`
+
+---
+
+## Metrics & Observability
+
+| Metric | Source | Alert Threshold |
+|--------|--------|-----------------|
+| Avg resolution confidence | Resolution Agent | < 0.5 sustained |
+| Escalation rate | Escalation Agent | > 40% of sessions |
+| Avg turns to resolution | Orchestrator | > 5 turns |
+| Triage accuracy | Manual review | < 80% correct |
+| Knowledge gap rate | Learning Agent | > 20% no-result searches |
+| Node execution time | LangGraph metrics | > 10s any node |
+| LLM error rate | LiteLLM | > 5% failures |
