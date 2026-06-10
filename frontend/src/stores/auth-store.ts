@@ -4,6 +4,10 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { AuthUser, LoginRequest, LoginResponse, UserRole } from '@/types/auth';
 
+// API_BASE is the base URL for API calls, should include /api/v1 prefix
+// In dev (npm run dev):    http://localhost:8000/api/v1
+// In Docker (dev server):  http://aditi-backend:8000/api/v1
+// Fallback to relative path for SPA deployments
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
 
 interface AuthStore {

@@ -11,9 +11,12 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    // Proxy /api requests to backend
+    // In Docker: http://aditi-backend:8000
+    // In local dev (npm run dev): http://localhost:8000
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
+        target: process.env.VITE_API_TARGET || 'http://localhost:8000',
         changeOrigin: true,
       },
     },

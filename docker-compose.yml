@@ -100,7 +100,10 @@ services:
     ports:
       - "${FRONTEND_PORT:-5173}:5173"
     environment:
-      - VITE_API_URL=http://localhost:${BACKEND_PORT:-8000}
+      # In Docker container network: use service name 'backend'
+      # NOT localhost, which would refer to the frontend container itself
+      - VITE_API_URL=http://aditi-backend:8000/api/v1
+      - VITE_API_TARGET=http://aditi-backend:8000
     depends_on:
       backend:
         condition: service_healthy
