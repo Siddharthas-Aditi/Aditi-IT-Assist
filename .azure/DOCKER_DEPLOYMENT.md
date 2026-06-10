@@ -65,6 +65,8 @@ postgresql+asyncpg://aditi:aditi_dev_password@postgres:5432/aditi_assist
 
 ## API Endpoints — Quick Test
 
+**⚠️ Important: All endpoints require the `/api/v1` prefix. See LOGIN_FIX.md if you get 404 errors.**
+
 ### 1. Health Check
 ```bash
 curl http://localhost:8000/api/v1/health
@@ -73,7 +75,7 @@ curl http://localhost:8000/api/v1/health
 
 ### 2. Authentication
 ```bash
-# Login
+# Login — MUST use /api/v1/ prefix
 TOKEN=$(curl -s -X POST http://localhost:8000/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"alice.johnson@aditi.com","password":"employee123"}' \
