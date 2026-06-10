@@ -9,6 +9,10 @@ interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp: Date;
+  requiresEscalation?: boolean;
+  resolutionSteps?: Array<{ step_number: number; instruction: string; details?: string }>;
+  followUpQuestion?: string;
+  category?: string;
 }
 
 export function SupportChatPage() {
@@ -55,8 +59,12 @@ export function SupportChatPage() {
           {
             id: (Date.now() + 1).toString(),
             role: 'assistant',
-            content: data.response || data.message || 'I received your message.',
+            content: data.content || data.response || data.message || 'I received your message.',
             timestamp: new Date(),
+            requiresEscalation: data.requires_escalation,
+            resolutionSteps: data.resolution_steps,
+            followUpQuestion: data.follow_up_question,
+            category: data.issue_category,
           },
         ]);
       }
@@ -103,6 +111,40 @@ export function SupportChatPage() {
               }`}
             >
               <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+
+              {/* Resolution Steps */}
+              {msg.resolutionSteps && msg.resolutionSteps.length > 0 && (
+                <div className="mt-3 pt-3 border-t border-gray-200">
+                  <p className="text-xs font-semibold text-gray-700 mb-2">Troubleshooting Steps:</p>
+                  <ol className="text-xs space-y-1">
+                    {msg.resolutionSteps.map((step) => (
+                      <li key={step.step_number} className="text-gray-600">
+                        <span className="font-semibold">{step.step_number}.</span> {step.instruction}
+                        {step.details && <div className="text-xs text-gray-500 ml-4 mt-1">{step.details}</div>}
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              )}
+
+              {/* Follow-up Question */}
+              {msg.followUpQuestion && (
+                <div className="mt-3 pt-3 border-t border-gray-200">
+                  <p className="text-xs italic text-gray-600">{msg.followUpQuestion}</p>
+                </div>
+              )}
+
+              {/* Escalation Banner */}
+              {msg.requiresEscalation && (
+                <div className="mt-3 pt-3 border-t border-gray-200">
+                  <p className="text-xs font-semibold text-amber-600 mb-2">
+                    ⚠️ This may require human assistance
+                  </p>
+                  <button className="text-xs px-3 py-1 bg-amber-50 text-amber-700 border border-amber-200 rounded hover:bg-amber-100 transition-colors">
+                    Request Live Agent
+                  </button>
+                </div>
+              )}
             </div>
             {msg.role === 'user' && (
               <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
