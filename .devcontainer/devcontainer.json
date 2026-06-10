@@ -3,6 +3,7 @@
   "dockerComposeFile": ["../docker-compose.yml", "docker-compose.extend.yml"],
   "service": "backend",
   "workspaceFolder": "/workspace",
+
   "customizations": {
     "vscode": {
       "extensions": [
@@ -13,13 +14,39 @@
         "esbenp.prettier-vscode",
         "bradlc.vscode-tailwindcss",
         "GitHub.copilot",
-        "GitHub.copilot-chat"
+        "GitHub.copilot-chat",
+        "ms-azuretools.vscode-docker",
+        "mtxr.sqltools",
+        "mtxr.sqltools-driver-pg"
       ],
       "settings": {
-        "python.defaultInterpreterPath": "/usr/local/bin/python"
+        "python.defaultInterpreterPath": "/app/.venv/bin/python",
+        "python.analysis.typeCheckingMode": "basic",
+        "[python]": {
+          "editor.defaultFormatter": "charliermarsh.ruff",
+          "editor.formatOnSave": true
+        },
+        "[typescript][typescriptreact]": {
+          "editor.defaultFormatter": "esbenp.prettier-vscode",
+          "editor.formatOnSave": true
+        },
+        "editor.rulers": [100]
       }
     }
   },
+
   "forwardPorts": [8000, 5173, 5432, 6379],
-  "postCreateCommand": "make install"
+  "portsAttributes": {
+    "8000": { "label": "Backend API", "onAutoForward": "notify" },
+    "5173": { "label": "Frontend (Vite)", "onAutoForward": "openBrowser" },
+    "5432": { "label": "PostgreSQL" },
+    "6379": { "label": "Redis" }
+  },
+
+  "postCreateCommand": "make install",
+  "postStartCommand": "echo '✅ Dev container ready — run: make dev-backend'",
+
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": { "version": "20" }
+  }
 }

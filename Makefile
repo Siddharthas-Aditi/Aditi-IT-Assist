@@ -1,20 +1,26 @@
 # ==================================================
-# Aditi IT Assist - Makefile
+# Aditi IT Assist — Makefile
 # ==================================================
 # Unified commands for development, testing, and deployment
+#
+# Quick start:
+#   make bootstrap   → First-time setup
+#   make dev         → Full stack (Docker, hot-reload)
+#   make dev-local   → Backend + frontend without Docker
+#   make test        → Run all tests
 
 .PHONY: help install dev test lint format docker-up docker-down clean seed
 
 SHELL := /bin/zsh
-PYTHON := python3
 UV := uv
 
-help: ## Show this help
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
+# ─── Default ────────────────────────────────────
 
-# ==================================================
-# Installation
-# ==================================================
+help: ## Show this help
+	@echo "\033[1mAditi IT Assist\033[0m — available targets:\n"
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
+
+# ─── Installation ───────────────────────────────
 
 install: install-backend install-frontend ## Install all dependencies
 
@@ -24,22 +30,26 @@ install-backend: ## Install backend dependencies
 install-frontend: ## Install frontend dependencies
 	cd frontend && npm install
 
-# ==================================================
-# Development
-# ==================================================
+# ─── Development ────────────────────────────────
 
-dev: ## Start full development stack via docker-compose
+dev: ## Start full stack via Docker Compose (hot-reload)
 	docker compose up --build
 
-dev-backend: ## Start backend in development mode
+dev-infra: ## Start only Postgres + Redis (for local backend/frontend)
+	docker compose up postgres redis -d
+	@echo "\n✅ Infrastructure ready — Postgres:5432 Redis:6379"
+
+dev-local: dev-infra ## Run backend + frontend locally (requires dev-infra)
+	@echo "Starting backend and frontend..."
+	$(MAKE) -j2 dev-backend dev-frontend
+
+dev-backend: ## Start backend in dev mode (hot-reload)
 	cd backend && $(UV) run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
-dev-frontend: ## Start frontend in development mode
+dev-frontend: ## Start frontend in dev mode (Vite HMR)
 	cd frontend && npm run dev
 
-# ==================================================
-# Database
-# ==================================================
+# ─── Database ───────────────────────────────────
 
 db-migrate: ## Run database migrations
 	cd backend && $(UV) run alembic upgrade head
@@ -50,27 +60,31 @@ db-revision: ## Create new migration (usage: make db-revision MSG="description")
 db-downgrade: ## Rollback last migration
 	cd backend && $(UV) run alembic downgrade -1
 
-seed: ## Seed database with sample data
+db-reset: ## Drop and recreate database (destructive!)
+	docker compose exec postgres psql -U aditi -c "DROP DATABASE IF EXISTS aditi_assist;"
+	docker compose exec postgres psql -U aditi -c "CREATE DATABASE aditi_assist;"
+	@echo "✅ Database reset. Run: make db-migrate"
+
+seed: ## Seed knowledge base into database
 	cd backend && $(UV) run python -m scripts.seed_data
 
-# ==================================================
-# Testing
-# ==================================================
+# ─── Testing ────────────────────────────────────
 
 test: test-backend test-frontend ## Run all tests
 
 test-backend: ## Run backend tests
-	cd backend && $(UV) run pytest
+	cd backend && $(UV) run pytest -v
 
 test-frontend: ## Run frontend tests
 	cd frontend && npm run test
 
-test-coverage: ## Run tests with coverage report
-	cd backend && $(UV) run pytest --cov --cov-report=html
+test-coverage: ## Run backend tests with coverage
+	cd backend && $(UV) run pytest --cov=app --cov-report=term --cov-report=html
 
-# ==================================================
-# Code Quality
-# ==================================================
+test-watch: ## Run backend tests in watch mode
+	cd backend && $(UV) run pytest --watch
+
+# ─── Code Quality ───────────────────────────────
 
 lint: lint-backend lint-frontend ## Lint all code
 
@@ -92,35 +106,42 @@ typecheck: ## Run type checking
 	cd backend && $(UV) run mypy app/
 	cd frontend && npm run typecheck
 
-# ==================================================
-# Docker
-# ==================================================
+# ─── Docker ─────────────────────────────────────
 
-docker-up: ## Start all services with Docker Compose
-	docker compose up --build -d
+docker-up: ## Start all services (detached, production-like)
+	docker compose --profile prod up --build -d
 
-docker-down: ## Stop all Docker services
+docker-down: ## Stop all services
 	docker compose down
 
-docker-logs: ## Tail Docker logs
-	docker compose logs -f
+docker-logs: ## Tail all container logs
+	docker compose logs -f --tail=50
 
-docker-clean: ## Remove all containers and volumes
-	docker compose down -v --remove-orphans
+docker-ps: ## Show running containers and health
+	docker compose ps
 
-# ==================================================
-# Utilities
-# ==================================================
+docker-shell-backend: ## Open shell in backend container
+	docker compose exec backend bash
+
+docker-shell-db: ## Open psql in postgres container
+	docker compose exec postgres psql -U aditi -d aditi_assist
+
+docker-clean: ## Remove all containers, volumes, images
+	docker compose down -v --remove-orphans --rmi local
+
+# ─── Utilities ──────────────────────────────────
 
 clean: ## Clean build artifacts and caches
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name .pytest_cache -exec rm -rf {} + 2>/dev/null || true
-	find . -type d -name node_modules -exec rm -rf {} + 2>/dev/null || true
-	rm -rf frontend/dist backend/.coverage htmlcov output/*
+	find . -type d -name .ruff_cache -exec rm -rf {} + 2>/dev/null || true
+	rm -rf frontend/dist backend/.coverage htmlcov
 
-bootstrap: ## First-time project setup
+bootstrap: ## First-time project setup (installs everything)
 	chmod +x scripts/*.sh
 	./scripts/bootstrap.sh
 
-smoke-test: ## Run smoke tests against running services
+smoke-test: ## Verify running services respond correctly
 	./scripts/smoke_test.sh
+
+logs: docker-logs ## Alias for docker-logs

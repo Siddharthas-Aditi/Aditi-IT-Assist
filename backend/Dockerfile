@@ -1,31 +1,58 @@
+# ==================================================
+# Aditi IT Assist — Backend Dockerfile
+# ==================================================
+# Targets:
+#   development → hot-reload with uvicorn --reload
+#   production  → optimized, non-root, no dev deps
+
+# ── Base stage ──────────────────────────────────
 FROM python:3.12-slim AS base
 
 WORKDIR /app
 
-# Install system dependencies
+# System deps for psycopg2, healthchecks
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
+    libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Install uv
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh
-ENV PATH="/root/.local/bin:$PATH"
+# Install uv (fast Python package manager)
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-# Copy dependency files
-COPY pyproject.toml ./
+# Copy dependency manifest
+COPY pyproject.toml uv.lock* ./
 
-# Install Python dependencies
+# ── Development stage ───────────────────────────
+FROM base AS development
+
+# Install ALL deps (including dev)
+RUN uv sync
+
+# Copy application code
+COPY . .
+
+EXPOSE 8000
+
+# Uvicorn with hot-reload (source mounted as volume)
+CMD ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "app"]
+
+# ── Production stage ────────────────────────────
+FROM base AS production
+
+# Install production deps only
 RUN uv sync --no-dev
 
 # Copy application code
 COPY . .
 
-# Expose port
+# Create non-root user
+RUN groupadd -r appuser && useradd -r -g appuser appuser \
+    && chown -R appuser:appuser /app
+USER appuser
+
 EXPOSE 8000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
-    CMD curl -f http://localhost:8000/api/v1/health || exit 1
+HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"
 
-# Run the application
-CMD ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]

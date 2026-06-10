@@ -1,5 +1,14 @@
 services:
   backend:
+    build:
+      target: development
     volumes:
       - ..:/workspace:cached
+      - backend-venv:/workspace/backend/.venv
     command: sleep infinity
+    environment:
+      - POSTGRES_HOST=postgres
+      - REDIS_HOST=redis
+
+volumes:
+  backend-venv:

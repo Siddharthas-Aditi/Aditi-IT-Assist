@@ -1,56 +1,70 @@
+# ==================================================
+# Aditi IT Assist — Docker Compose (Development)
+# ==================================================
+# Usage:
+#   make dev          → Full stack with hot-reload
+#   make dev-infra    → Postgres + Redis only (run backend/frontend locally)
+#   make docker-up    → Production-like build
+
 services:
-  # PostgreSQL with pgvector extension
+  # ──────────────────────────────────────────────
+  # Infrastructure
+  # ──────────────────────────────────────────────
+
   postgres:
     image: pgvector/pgvector:pg16
     container_name: aditi-postgres
     environment:
-      POSTGRES_USER: aditi
-      POSTGRES_PASSWORD: aditi_dev_password
-      POSTGRES_DB: aditi_assist
+      POSTGRES_USER: ${POSTGRES_USER:-aditi}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aditi_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-aditi_assist}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U aditi -d aditi_assist"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-aditi} -d ${POSTGRES_DB:-aditi_assist}"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
 
-  # Redis for caching and queues
   redis:
     image: redis:7-alpine
     container_name: aditi-redis
+    command: redis-server --appendonly yes --maxmemory 128mb --maxmemory-policy allkeys-lru
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+      interval: 3s
+      timeout: 3s
+      retries: 10
+      start_period: 3s
+    restart: unless-stopped
 
-  # Backend API
+  # ──────────────────────────────────────────────
+  # Backend API (FastAPI + LangGraph)
+  # ──────────────────────────────────────────────
+
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      target: development
     container_name: aditi-backend
     ports:
-      - "8000:8000"
+      - "${BACKEND_PORT:-8000}:8000"
+    env_file:
+      - .env
     environment:
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
-      - POSTGRES_DB=aditi_assist
-      - POSTGRES_USER=aditi
-      - POSTGRES_PASSWORD=aditi_dev_password
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - SECRET_KEY=dev-docker-secret-key
-      - LLM_PROVIDER=openai
-      - LLM_MODEL=gpt-4o
-      - LLM_API_KEY=${LLM_API_KEY:-placeholder}
       - DEBUG=true
     depends_on:
       postgres:
@@ -58,27 +72,44 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./backend:/app
+      - ./backend/app:/app/app:cached
+      - ./backend/tests:/app/tests:cached
+      - backend_cache:/app/.venv
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
-      interval: 10s
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
+      interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
 
-  # Frontend
+  # ──────────────────────────────────────────────
+  # Frontend (Vite dev server with HMR)
+  # ──────────────────────────────────────────────
+
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      target: development
     container_name: aditi-frontend
     ports:
-      - "5173:80"
+      - "${FRONTEND_PORT:-5173}:5173"
+    environment:
+      - VITE_API_URL=http://localhost:${BACKEND_PORT:-8000}
     depends_on:
       backend:
         condition: service_healthy
-    environment:
-      - VITE_API_URL=http://localhost:8000
+    volumes:
+      - ./frontend/src:/app/src:cached
+      - ./frontend/public:/app/public:cached
+      - ./frontend/index.html:/app/index.html:cached
+      - ./frontend/vite.config.ts:/app/vite.config.ts:cached
+      - ./frontend/tailwind.config.js:/app/tailwind.config.js:cached
+      - ./frontend/postcss.config.js:/app/postcss.config.js:cached
+    restart: unless-stopped
 
 volumes:
   postgres_data:
   redis_data:
+  backend_cache:
