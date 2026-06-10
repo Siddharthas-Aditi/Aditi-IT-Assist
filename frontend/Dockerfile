@@ -4,14 +4,25 @@
 # Targets:
 #   development → Vite dev server with HMR
 #   production  → Optimized nginx serving static assets
+#
+# Build args:
+#   NODE_TLS_REJECT_UNAUTHORIZED — set to "0" for corporate proxy environments
 
 # ── Base stage ──────────────────────────────────
-FROM node:20-alpine AS base
+FROM node:20-slim AS base
 
 WORKDIR /app
 
+# Handle corporate proxy SSL interception (set via build arg)
+ARG NODE_TLS_REJECT_UNAUTHORIZED=1
+ENV NODE_TLS_REJECT_UNAUTHORIZED=${NODE_TLS_REJECT_UNAUTHORIZED}
+
 COPY package.json package-lock.json* ./
-RUN npm ci
+
+# Install deps — uses npm install for platform-specific optional deps
+RUN npm config set strict-ssl false \
+    && npm install --no-audit \
+    && npm config set strict-ssl true
 
 # ── Development stage ───────────────────────────
 FROM base AS development

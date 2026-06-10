@@ -55,6 +55,8 @@ services:
       context: ./backend
       dockerfile: Dockerfile
       target: development
+      args:
+        UV_INSECURE_HOST: ${UV_INSECURE_HOST:-}
     container_name: aditi-backend
     ports:
       - "${BACKEND_PORT:-8000}:8000"
@@ -92,6 +94,8 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       target: development
+      args:
+        NODE_TLS_REJECT_UNAUTHORIZED: ${NODE_TLS_REJECT_UNAUTHORIZED:-1}
     container_name: aditi-frontend
     ports:
       - "${FRONTEND_PORT:-5173}:5173"

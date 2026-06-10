@@ -4,6 +4,11 @@
 # Targets:
 #   development → hot-reload with uvicorn --reload
 #   production  → optimized, non-root, no dev deps
+#
+# Build args:
+#   UV_INSECURE_HOST — space-separated hosts to skip TLS verification
+#                      (for corporate proxies that intercept SSL)
+#                      Example: "pypi.org files.pythonhosted.org"
 
 # ── Base stage ──────────────────────────────────
 FROM python:3.12-slim AS base
@@ -18,6 +23,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Install uv (fast Python package manager)
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+# Allow corporate proxy TLS bypass (empty = strict TLS)
+ARG UV_INSECURE_HOST=""
+ENV UV_INSECURE_HOST=${UV_INSECURE_HOST}
 
 # Copy dependency manifest
 COPY pyproject.toml uv.lock* ./
