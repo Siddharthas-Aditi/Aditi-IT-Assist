@@ -7,9 +7,18 @@
 
 ## Project Overview
 
-**Aditi IT Assist** is an agentic AI-powered internal IT support platform for Aditi Consulting.
+**Aditi IT Assist** is an enterprise-grade internal IT service platform for Aditi Consulting.
 It uses a multi-agent workflow (LangGraph) to intake employee IT issues, classify them,
 retrieve relevant knowledge, guide troubleshooting, and escalate when needed.
+
+**Enterprise capabilities include:**
+- Role-based access control (employee, it_agent, it_lead, it_admin, security_auditor)
+- Future-ready SAML SSO integration (pluggable auth providers)
+- Enterprise ticket lifecycle with SLA tracking
+- Remote assistance orchestration (Microsoft Remote Help integration ready)
+- Analytics dashboards for IT leadership
+- Audit logging and compliance controls
+- Live agent support workflow
 
 ## Architecture Quick Reference
 
@@ -17,11 +26,30 @@ retrieve relevant knowledge, guide troubleshooting, and escalate when needed.
 |-------|-----------|----------|
 | Backend API | Python 3.12+ / FastAPI / SQLAlchemy | `backend/` |
 | AI Orchestration | LangGraph / LiteLLM | `backend/app/workflows/` |
+| Auth & RBAC | JWT / Pluggable Providers / SAML stub | `backend/app/services/auth/` |
 | Database | PostgreSQL 16 / pgvector | Docker (port 5432) |
 | Cache | Redis 7 | Docker (port 6379) |
 | Frontend | React 18 / TypeScript / Vite | `frontend/` |
 | UI System | Tailwind CSS / shadcn/ui / Radix | `frontend/src/components/` |
 | Package Mgmt | uv (backend) / npm (frontend) | `pyproject.toml` / `package.json` |
+
+## Key Enterprise Patterns
+
+### Authentication
+- Pluggable provider: `app/services/auth/providers/base.py`
+- Local auth: `app/services/auth/providers/local.py`
+- SAML stub: `app/services/auth/providers/saml.py`
+- Dependencies: `app/services/auth/dependencies.py`
+
+### Authorization
+- Role guards: `require_roles("it_agent", "it_lead", "it_admin")`
+- Permission guards: `require_permissions("ticket:assign")`
+- Type aliases: `CurrentUser`, `ITAgentUser`, `ITLeadUser`, `AdminUser`
+
+### Data Isolation
+- Employees see ONLY their own data (tickets, chats)
+- Internal notes hidden from employees
+- Audit logs restricted to admin/auditor roles
 
 ## Build Order (When Implementing Features)
 
@@ -164,12 +192,50 @@ make lint               # Linting (both)
 
 ---
 
-## Key File Locations
+## Implementation Status
 
-| Concern | Location |
-|---------|----------|
-| API routes | `backend/app/api/v1/` |
-| Database models | `backend/app/models/` |
+> Last validated: 2026-06-10 — see `docs/development/validation-report.md`
+
+### ✅ Fully Implemented
+| Area | Status | Notes |
+|------|--------|-------|
+| FastAPI backend | ✅ | All routes, CORS, lifespan |
+| JWT Auth (local) | ✅ | Login, register, /me, logout |
+| RBAC (5 roles) | ✅ | `require_roles`, `require_permissions` |
+| Ticket lifecycle | ✅ | SLA, assignment, events, isolation |
+| LangGraph workflow | ✅ | 6 nodes, state machine, routing |
+| Knowledge retrieval | ✅ | YAML seed, keyword search |
+| LLM integration | ✅ | LiteLLM abstraction, keyword fallback |
+| Remote support | ✅ | Session, consent, audit trail |
+| Analytics API | ✅ | Dashboard metrics, SLA, workload |
+| Audit logging | ✅ | AuditEvent model, service |
+| Frontend routing | ✅ | Role-aware routes, guards |
+| Frontend auth store | ✅ | Zustand persist, token refresh |
+| Docker compose | ✅ | Dev + prod targets, health checks |
+| Alembic migrations | ✅ | 002_enterprise_upgrade |
+
+### 🚧 Stubbed / Scaffolded (Not Yet Functional)
+| Area | Status | Notes |
+|------|--------|-------|
+| SAML SSO | 🚧 Stub | Endpoints exist; IdP call is `pass` |
+| pgvector search | 🚧 Stub | YAML keyword fallback in use |
+| WebSocket chat | ❌ Not started | HTTP polling only |
+| Knowledge learning agent | ❌ Not started | Async worker not implemented |
+| Human Support Copilot | ❌ Not started | Spec in agents/08-copilot.md |
+| LLM in production | 🚧 Config | Set `LLM_API_KEY` to activate |
+| Token blacklisting | 🚧 TODO | Redis key storage needed |
+| Rate limiting | 🚧 Config | `RATE_LIMIT_ENABLED=true` (middleware stub) |
+
+### 🔑 Seeded Dev Users (see `scripts/seed_enterprise.py`)
+| Email | Password | Role |
+|-------|----------|------|
+| `employee@aditi.com` | `employee123` | employee |
+| `agent@aditi.com` | `agent123` | it_agent |
+| `lead@aditi.com` | `lead123` | it_lead |
+| `admin@aditi.com` | `admin123` | it_admin |
+| `auditor@aditi.com` | `auditor123` | security_auditor |
+
+---
 | Pydantic schemas | `backend/app/schemas/` |
 | Service layer | `backend/app/services/` |
 | Repository layer | `backend/app/repositories/` |

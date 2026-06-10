@@ -2,15 +2,19 @@
 
 from fastapi import APIRouter
 
+from app.services.auth.dependencies import AdminUser, AuditorUser
+
 router = APIRouter()
 
 
 @router.get("/stats")
-async def get_system_stats() -> dict:
+async def get_system_stats(admin_user: AdminUser) -> dict:
     """Get system statistics for admin dashboard.
 
     Returns metrics like total sessions, resolution rate,
     escalation rate, and active knowledge articles.
+
+    Requires: it_admin role.
     """
     # TODO(team): Implement with real database aggregation
     return {
@@ -26,11 +30,15 @@ async def get_system_stats() -> dict:
 
 @router.get("/audit-log")
 async def get_audit_log(
+    auditor_user: AuditorUser,
     limit: int = 50,
     offset: int = 0,
     event_type: str | None = None,
 ) -> dict:
-    """Retrieve audit log entries."""
+    """Retrieve audit log entries.
+
+    Requires: security_auditor or it_admin role.
+    """
     # TODO(team): Implement with database query
     return {
         "events": [],

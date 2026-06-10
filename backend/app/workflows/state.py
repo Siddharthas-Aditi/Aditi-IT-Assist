@@ -2,8 +2,8 @@
 
 from typing import Annotated, Literal, TypedDict
 
-from langgraph.graph import add_messages
 from langchain_core.messages import BaseMessage
+from langgraph.graph import add_messages
 
 
 class ResolutionStep(TypedDict):
@@ -83,3 +83,25 @@ class WorkflowState(TypedDict):
     needs_clarification: bool
     clarification_question: str | None
     audit_trail: list[dict]
+
+    # ── Enterprise Extensions ────────────────────────────────────
+
+    # Auth context (set at workflow start)
+    user_role: str | None  # Primary role of the user
+    user_roles: list[str]  # All assigned roles
+    user_permissions: list[str]  # Resolved permission codes
+    is_employee_facing: bool  # True if user is employee (not IT staff)
+
+    # Policy enforcement
+    policy_violations: list[str]  # Actions blocked by policy
+    requires_consent: bool  # Whether action needs user consent
+    consent_granted: bool  # Whether user has granted consent
+
+    # Remote support context
+    remote_session_requested: bool
+    remote_session_id: str | None
+    remote_session_type: str | None  # screen_view | screen_control
+
+    # AI copilot mode (for IT agents)
+    copilot_mode: bool  # True when assisting an IT agent
+    copilot_suggestions: list[str]  # Suggestions for the agent

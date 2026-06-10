@@ -134,34 +134,38 @@ This repo is optimized for AI coding agents (GitHub Copilot, Claude):
 - `agents/` — Individual agent specs
 - `skills/` — Implementation standards
 
-## 🗺️ Roadmap
+## 🗺️ Implementation Status
 
-### Phase 1 ✅ Foundation
-- [x] Multi-agent workflow (LangGraph)
-- [x] Chat interface
-- [x] Knowledge base (Outlook, Zoom, Intune, Camera)
+### Phase 1 ✅ Foundation (Implemented)
+- [x] Multi-agent workflow (LangGraph) — 6 agents fully wired
+- [x] Chat interface (HTTP, keyword + LLM fallback)
+- [x] Knowledge base (Outlook, Zoom, Intune, Camera — YAML-backed)
 - [x] Escalation and ticket drafting
 - [x] Docker development environment
 
-### Phase 2 🔜 Integration
-- [ ] Real database with Alembic migrations
-- [ ] pgvector semantic search
-- [ ] LiteLLM integration with real models
-- [ ] Authentication (JWT → Azure AD)
-- [ ] WebSocket for real-time chat
+### Phase 2 ✅ Enterprise Core (Implemented)
+- [x] PostgreSQL with Alembic migrations
+- [x] JWT authentication (local provider)
+- [x] RBAC (employee / it_agent / it_lead / it_admin / security_auditor)
+- [x] Enterprise ticket lifecycle with SLA tracking
+- [x] Remote support session orchestration (consent flow, audit trail)
+- [x] Analytics API for IT dashboard
+- [x] Audit event logging
+- [x] SAML SSO stub (endpoints exist; IdP integration is stubbed)
 
-### Phase 3 📋 Intelligence
-- [ ] Knowledge learning agent
+### Phase 3 📋 Intelligence (Planned)
+- [ ] pgvector semantic search (infrastructure ready; embedding calls stubbed)
+- [ ] LiteLLM integration with real model keys
+- [ ] WebSocket for real-time chat updates
+- [ ] Knowledge learning agent (async)
 - [ ] Resolution success tracking
-- [ ] Proactive issue detection
-- [ ] Multi-language support
 
-### Phase 4 🌐 Platform
-- [ ] Microsoft 365 integration
-- [ ] Intune API integration
-- [ ] ServiceNow/Jira ticketing
-- [ ] Human agent copilot
-- [ ] Analytics dashboard
+### Phase 4 🌐 Platform Integrations (Future)
+- [ ] Microsoft 365 / Entra ID SAML SSO
+- [ ] Intune API for device management
+- [ ] ServiceNow/Jira ticket sync
+- [ ] Human agent copilot (AI-assisted live support)
+- [ ] Multi-language support
 
 ## 🛠️ Tech Stack
 

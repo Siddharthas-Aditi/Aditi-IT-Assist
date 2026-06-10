@@ -7,7 +7,7 @@ All agent nodes should call this service rather than making direct LLM API calls
 import json
 from typing import Any
 
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from app.core.config import settings
 from app.core.logging import get_logger
@@ -37,31 +37,20 @@ class LLMService:
         """Check if the LLM service is configured and available."""
         return self._available
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=10))
-    async def complete(
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=10),
+        retry=retry_if_exception_type(Exception),
+        reraise=True,
+    )
+    async def _complete_internal(
         self,
         prompt: str,
         system_prompt: str | None = None,
         temperature: float | None = None,
         max_tokens: int | None = None,
     ) -> str:
-        """Generate a completion from the LLM.
-
-        Args:
-            prompt: The user/task prompt
-            system_prompt: Optional system message for context
-            temperature: Override default temperature
-            max_tokens: Override default max tokens
-
-        Returns:
-            The LLM's response text
-
-        Raises:
-            RuntimeError: If the LLM service is not configured
-        """
-        if not self.is_available:
-            raise RuntimeError("LLM service not configured — set LLM_API_KEY in environment")
-
+        """Internal retry-wrapped LLM call (assumes is_available is True)."""
         import litellm
 
         messages: list[dict[str, str]] = []
@@ -91,6 +80,34 @@ class LLMService:
             usage=getattr(response, "usage", None),
         )
         return content
+
+    async def complete(
+        self,
+        prompt: str,
+        system_prompt: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+    ) -> str:
+        """Generate a completion from the LLM.
+
+        Args:
+            prompt: The user/task prompt
+            system_prompt: Optional system message for context
+            temperature: Override default temperature
+            max_tokens: Override default max tokens
+
+        Returns:
+            The LLM's response text
+
+        Raises:
+            RuntimeError: If the LLM service is not configured
+        """
+        if not self.is_available:
+            raise RuntimeError("LLM service not configured — set LLM_API_KEY in environment")
+
+        return await self._complete_internal(
+            prompt, system_prompt=system_prompt, temperature=temperature, max_tokens=max_tokens
+        )
 
     async def complete_json(
         self,

@@ -52,6 +52,26 @@ class Settings(BaseSettings):
         """Construct Redis URL."""
         return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
 
+    # Authentication
+    AUTH_PROVIDER: str = "local"  # "local" | "saml" | "oidc"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    JWT_ALGORITHM: str = "HS256"
+
+    # SAML Configuration (future SSO integration)
+    SAML_ENABLED: bool = False
+    SAML_IDP_ENTITY_ID: str = ""
+    SAML_IDP_SSO_URL: str = ""
+    SAML_IDP_SLO_URL: str = ""
+    SAML_IDP_CERTIFICATE: str = ""
+    SAML_SP_ENTITY_ID: str = "aditi-it-assist"
+    SAML_SP_ACS_URL: str = "http://localhost:8000/api/v1/auth/saml/acs"
+    SAML_SP_SLS_URL: str = "http://localhost:8000/api/v1/auth/saml/sls"
+    SAML_ATTRIBUTE_MAP_EMAIL: str = "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress"
+    SAML_ATTRIBUTE_MAP_NAME: str = "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name"
+    SAML_ATTRIBUTE_MAP_GROUPS: str = "http://schemas.microsoft.com/ws/2008/06/identity/claims/groups"
+    SAML_DEFAULT_ROLE: str = "employee"
+
     # LLM Configuration
     LLM_PROVIDER: str = "openai"
     LLM_MODEL: str = "gpt-4o"
@@ -61,6 +81,11 @@ class Settings(BaseSettings):
 
     # Vector Store
     VECTOR_STORE_TYPE: str = "pgvector"
+
+    # Remote Support
+    REMOTE_SUPPORT_PROVIDER: str = "microsoft_remote_help"
+    REMOTE_SESSION_TIMEOUT_MINUTES: int = 30
+    REMOTE_SESSION_MAX_DURATION_MINUTES: int = 120
 
     # Observability
     OTEL_EXPORTER_ENDPOINT: str = "http://localhost:4317"
@@ -72,6 +97,11 @@ class Settings(BaseSettings):
     SMTP_USER: str = ""
     SMTP_PASSWORD: str = ""
     ESCALATION_EMAIL: str = "it-support@aditiconsulting.com"
+
+    # Rate Limiting
+    RATE_LIMIT_ENABLED: bool = True
+    RATE_LIMIT_REQUESTS_PER_MINUTE: int = 60
+    RATE_LIMIT_BURST: int = 10
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 

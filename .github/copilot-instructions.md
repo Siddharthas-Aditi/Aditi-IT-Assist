@@ -2,16 +2,41 @@
 
 ## Project Context
 
-This is **Aditi IT Assist** — an agentic AI-powered IT support platform for
+This is **Aditi IT Assist** — an enterprise-grade internal IT service platform for
 Aditi Consulting. It uses a multi-agent LangGraph workflow to resolve employee
-IT issues through a conversational interface.
+IT issues through a conversational interface, with full RBAC, ticketing lifecycle,
+remote assistance orchestration, analytics, and future SAML SSO integration.
 
 ## Architecture
 
 - **Backend**: Python 3.12 / FastAPI / SQLAlchemy / PostgreSQL / LangGraph
 - **Frontend**: React / TypeScript / Vite / Tailwind CSS / shadcn/ui
 - **AI**: LangGraph orchestration with LiteLLM provider abstraction
+- **Auth**: Pluggable provider (local + SAML stub) with JWT sessions
+- **RBAC**: Role-based (employee, it_agent, it_lead, it_admin, security_auditor)
 - **Vector Search**: pgvector for knowledge retrieval
+
+## Enterprise Patterns
+
+### Auth & RBAC
+- Auth providers in `backend/app/services/auth/providers/`
+- Use `CurrentUser`, `ITAgentUser`, `ITLeadUser`, `AdminUser` type aliases
+- `require_roles()` and `require_permissions()` for endpoint guards
+- Employees can ONLY see their own data (tickets, chats)
+- Internal notes are hidden from employees
+
+### Services
+- `AuthService` — login, registration, token validation
+- `TicketService` — full ticket lifecycle with SLA
+- `RemoteSupportService` — remote assist orchestration
+- `AnalyticsService` — dashboard metrics
+- `AuditService` — immutable event logging
+
+### Frontend Structure
+- `/support/*` — Employee workspace (chat, tickets, profile)
+- `/operations/*` — IT agent workspace (queue, tickets, remote assist)
+- `/dashboard/*` — Admin/lead workspace (analytics, management)
+- `/audit` — Audit log viewer (admin + auditor)
 
 ## Coding Conventions
 

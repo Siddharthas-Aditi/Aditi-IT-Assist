@@ -1,0 +1,311 @@
+"""Unit tests for ticket service — lifecycle, employee isolation, SLA tracking.
+
+Tests:
+- Ticket creation with SLA target calculation
+- Employee can only view their own tickets
+- Internal notes hidden from employees
+- Status transitions with event logging
+- Agent assignment workflow
+"""
+
+import uuid
+from datetime import datetime, timedelta, timezone
+from unittest.mock import AsyncMock, MagicMock, call, patch
+
+import pytest
+
+from app.services.ticket_service import SLA_RESOLUTION_HOURS, SLA_RESPONSE_HOURS, TicketService
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Helpers
+# ─────────────────────────────────────────────────────────────────────
+
+
+def _make_user(role: str = "employee") -> MagicMock:
+    user = MagicMock()
+    user.id = uuid.uuid4()
+    user.email = f"{role}@test.com"
+    user.full_name = f"Test {role.title()}"
+    user.role_names = [role]
+    return user
+
+
+def _make_mock_db() -> MagicMock:
+    db = AsyncMock()
+    db.add = MagicMock()
+    db.flush = AsyncMock()
+    db.execute = AsyncMock()
+    return db
+
+
+# ─────────────────────────────────────────────────────────────────────
+# SLA constant validation
+# ─────────────────────────────────────────────────────────────────────
+
+
+class TestSLAConstants:
+    """Verify SLA constants match enterprise requirements."""
+
+    def test_critical_response_sla_is_1_hour(self):
+        assert SLA_RESPONSE_HOURS["critical"] == 1
+
+    def test_critical_resolution_sla_is_4_hours(self):
+        assert SLA_RESOLUTION_HOURS["critical"] == 4
+
+    def test_high_response_sla_is_4_hours(self):
+        assert SLA_RESPONSE_HOURS["high"] == 4
+
+    def test_low_resolution_sla_is_5_days(self):
+        assert SLA_RESOLUTION_HOURS["low"] == 120
+
+    def test_all_priorities_covered(self):
+        for priority in ["low", "medium", "high", "critical"]:
+            assert priority in SLA_RESPONSE_HOURS
+            assert priority in SLA_RESOLUTION_HOURS
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Ticket lifecycle
+# ─────────────────────────────────────────────────────────────────────
+
+
+class TestTicketCreation:
+    """Tests for TicketService.create_ticket."""
+
+    async def test_creates_ticket_with_correct_sla_targets(self):
+        """SLA targets should be set based on priority."""
+        db = _make_mock_db()
+        service = TicketService(db)
+
+        with patch("app.services.ticket_service.Ticket") as mock_ticket_cls:
+            mock_ticket = MagicMock()
+            mock_ticket.ticket_number = "TKT-2026-0001"
+            mock_ticket.id = uuid.uuid4()
+            mock_ticket.status = "new"
+            mock_ticket.priority = "high"
+            mock_ticket_cls.return_value = mock_ticket
+
+            with patch.object(service, "_generate_ticket_number", return_value="TKT-2026-0001"):
+                with patch.object(service, "_add_event", new_callable=AsyncMock):
+                    requester = _make_user("employee")
+                    ticket = await service.create_ticket(
+                        requester=requester,
+                        title="VPN not connecting",
+                        description="Can't connect to VPN after system update",
+                        priority="high",
+                        category="network/connectivity",
+                    )
+
+        # Ticket was created with correct params
+        assert ticket.status == "new"
+        assert ticket.priority == "high"
+        # Ticket constructor was called with SLA targets
+        call_kwargs = mock_ticket_cls.call_args.kwargs
+        assert call_kwargs["priority"] == "high"
+        assert "sla_response_target" in call_kwargs
+        assert "sla_resolution_target" in call_kwargs
+        assert call_kwargs["sla_response_target"] > datetime.now(timezone.utc)
+
+    async def test_creates_ticket_with_critical_priority_sla(self):
+        """Critical tickets get tightest SLA (1h response, 4h resolution)."""
+        db = _make_mock_db()
+        service = TicketService(db)
+
+        with patch("app.services.ticket_service.Ticket") as mock_ticket_cls:
+            mock_ticket = MagicMock()
+            mock_ticket.ticket_number = "TKT-2026-0002"
+            mock_ticket.id = uuid.uuid4()
+            mock_ticket.status = "new"
+            mock_ticket.priority = "critical"
+            mock_ticket_cls.return_value = mock_ticket
+
+            with patch.object(service, "_generate_ticket_number", return_value="TKT-2026-0002"):
+                with patch.object(service, "_add_event", new_callable=AsyncMock):
+                    requester = _make_user()
+                    ticket = await service.create_ticket(
+                        requester=requester,
+                        title="Production system down",
+                        description="All employees cannot log in",
+                        priority="critical",
+                    )
+
+        call_kwargs = mock_ticket_cls.call_args.kwargs
+        now = datetime.now(timezone.utc)
+        # critical: 1h response, 4h resolution
+        assert call_kwargs["sla_response_target"] <= now + timedelta(hours=1, minutes=1)
+        assert call_kwargs["sla_resolution_target"] <= now + timedelta(hours=4, minutes=1)
+
+
+class TestEmployeeDataIsolation:
+    """Tests for employee data isolation in ticket service."""
+
+    async def test_employee_cannot_see_other_employees_ticket(self):
+        """get_ticket_for_employee returns None for tickets owned by someone else."""
+        db = _make_mock_db()
+        service = TicketService(db)
+
+        owner = _make_user("employee")
+        other_employee = _make_user("employee")
+
+        # Ticket belongs to `owner`, not `other_employee`
+        mock_ticket = MagicMock()
+        mock_ticket.requester_id = owner.id
+
+        with patch.object(service, "_get_ticket", return_value=mock_ticket):
+            result = await service.get_ticket_for_employee(uuid.uuid4(), other_employee)
+
+        assert result is None
+
+    async def test_employee_can_see_own_ticket(self):
+        """get_ticket_for_employee returns ticket when requester_id matches."""
+        db = _make_mock_db()
+
+        mock_comments_result = MagicMock()
+        mock_comments_result.scalars.return_value.all.return_value = []
+        mock_events_result = MagicMock()
+        mock_events_result.scalars.return_value.all.return_value = []
+        db.execute.side_effect = [mock_comments_result, mock_events_result]
+
+        service = TicketService(db)
+        employee = _make_user("employee")
+
+        mock_ticket = MagicMock()
+        mock_ticket.requester_id = employee.id
+        mock_ticket.id = uuid.uuid4()
+
+        with patch.object(service, "_get_ticket", return_value=mock_ticket):
+            result = await service.get_ticket_for_employee(mock_ticket.id, employee)
+
+        assert result is not None
+        assert result["ticket"] is mock_ticket
+
+    async def test_list_tickets_filters_by_employee(self):
+        """list_tickets_for_employee includes requester_id filter."""
+        db = _make_mock_db()
+
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.all.return_value = []
+        db.execute.return_value = mock_result
+
+        service = TicketService(db)
+        employee = _make_user("employee")
+
+        tickets = await service.list_tickets_for_employee(employee)
+
+        # Verify the SQL was called (execute was invoked)
+        db.execute.assert_called_once()
+        assert tickets == []
+
+
+class TestTicketStatusTransitions:
+    """Tests for ticket status transitions."""
+
+    async def test_update_status_sets_resolved_at(self):
+        """Resolving a ticket sets resolved_at timestamp."""
+        db = _make_mock_db()
+        service = TicketService(db)
+        actor = _make_user("it_agent")
+
+        mock_ticket = MagicMock()
+        mock_ticket.status = "in_progress"
+        mock_ticket.resolved_at = None
+        mock_ticket.closed_at = None
+
+        with patch.object(service, "_get_ticket", return_value=mock_ticket):
+            with patch.object(service, "_add_event", new_callable=AsyncMock):
+                result = await service.update_status(uuid.uuid4(), "resolved", actor)
+
+        assert result.status == "resolved"
+        assert result.resolved_at is not None
+
+    async def test_update_status_sets_closed_at(self):
+        """Closing a ticket sets closed_at timestamp."""
+        db = _make_mock_db()
+        service = TicketService(db)
+        actor = _make_user("it_agent")
+
+        mock_ticket = MagicMock()
+        mock_ticket.status = "resolved"
+        mock_ticket.resolved_at = datetime.now(timezone.utc)
+        mock_ticket.closed_at = None
+
+        with patch.object(service, "_get_ticket", return_value=mock_ticket):
+            with patch.object(service, "_add_event", new_callable=AsyncMock):
+                result = await service.update_status(uuid.uuid4(), "closed", actor)
+
+        assert result.closed_at is not None
+
+    async def test_assign_ticket_records_event(self):
+        """Assigning a ticket should record an assignment event."""
+        db = _make_mock_db()
+        service = TicketService(db)
+        actor = _make_user("it_agent")
+        target_agent_id = uuid.uuid4()
+
+        mock_ticket = MagicMock()
+        mock_ticket.id = uuid.uuid4()
+        mock_ticket.status = "new"
+        mock_ticket.assigned_to = None
+        mock_ticket.first_response_at = None
+
+        add_event_mock = AsyncMock()
+        with patch.object(service, "_get_ticket", return_value=mock_ticket):
+            with patch.object(service, "_add_event", add_event_mock):
+                await service.assign_ticket(mock_ticket.id, target_agent_id, actor)
+
+        add_event_mock.assert_called_once()
+        call_kwargs = add_event_mock.call_args
+        assert "ticket_assigned" in str(call_kwargs)
+
+    async def test_assign_ticket_transitions_new_to_triaged(self):
+        """Assigning a 'new' ticket moves it to 'triaged'."""
+        db = _make_mock_db()
+        service = TicketService(db)
+        actor = _make_user("it_agent")
+
+        mock_ticket = MagicMock()
+        mock_ticket.id = uuid.uuid4()
+        mock_ticket.status = "new"
+        mock_ticket.assigned_to = None
+        mock_ticket.first_response_at = None
+
+        with patch.object(service, "_get_ticket", return_value=mock_ticket):
+            with patch.object(service, "_add_event", new_callable=AsyncMock):
+                result = await service.assign_ticket(mock_ticket.id, uuid.uuid4(), actor)
+
+        assert result.status == "triaged"
+
+
+class TestInternalNotesIsolation:
+    """Tests that internal notes are hidden from employees."""
+
+    async def test_internal_comments_hidden_from_employee(self):
+        """Employee ticket view should not include internal notes."""
+        db = _make_mock_db()
+
+        # Return one non-internal comment and verify internal ones don't leak
+        mock_public_comment = MagicMock()
+        mock_public_comment.is_internal = False
+        mock_public_comment.content = "Public response"
+
+        mock_comments_result = MagicMock()
+        mock_comments_result.scalars.return_value.all.return_value = [mock_public_comment]
+
+        mock_events_result = MagicMock()
+        mock_events_result.scalars.return_value.all.return_value = []
+        db.execute.side_effect = [mock_comments_result, mock_events_result]
+
+        service = TicketService(db)
+        employee = _make_user("employee")
+
+        mock_ticket = MagicMock()
+        mock_ticket.requester_id = employee.id
+        mock_ticket.id = uuid.uuid4()
+
+        with patch.object(service, "_get_ticket", return_value=mock_ticket):
+            result = await service.get_ticket_for_employee(mock_ticket.id, employee)
+
+        # Only the non-internal comment was returned
+        assert len(result["comments"]) == 1
+        assert result["comments"][0].is_internal is False

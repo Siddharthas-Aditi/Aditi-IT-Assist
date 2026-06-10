@@ -1,21 +1,86 @@
-import { Routes, Route } from 'react-router-dom';
-import { Layout } from '@/components/Layout';
-import { ChatPage } from '@/pages/ChatPage';
-import { TicketsPage } from '@/pages/TicketsPage';
-import { AdminPage } from '@/pages/AdminPage';
+import { Routes, Route, Navigate } from 'react-router-dom';
+import { useAuthStore } from '@/stores/auth-store';
+import { RouteGuard, ITStaffRoute, AdminRoute, AuditorRoute } from '@/components/RouteGuard';
+import { ROLE_ROUTES } from '@/types/auth';
+
+// Layouts
+import { EmployeeLayout } from '@/components/layouts/EmployeeLayout';
+import { OperationsLayout } from '@/components/layouts/OperationsLayout';
+import { AdminLayout } from '@/components/layouts/AdminLayout';
+
+// Pages
 import { LoginPage } from '@/pages/LoginPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
+import { UnauthorizedPage } from '@/pages/UnauthorizedPage';
+
+// Employee pages
+import { SupportChatPage } from '@/pages/employee/SupportChatPage';
+import { MyTicketsPage } from '@/pages/employee/MyTicketsPage';
+import { TicketDetailPage } from '@/pages/employee/TicketDetailPage';
+import { ProfilePage } from '@/pages/employee/ProfilePage';
+
+// IT Operations pages
+import { LiveQueuePage } from '@/pages/operations/LiveQueuePage';
+import { AssignedTicketsPage } from '@/pages/operations/AssignedTicketsPage';
+import { TicketWorkspacePage } from '@/pages/operations/TicketWorkspacePage';
+import { RemoteAssistPage } from '@/pages/operations/RemoteAssistPage';
+
+// Admin/Lead pages
+import { DashboardPage } from '@/pages/admin/DashboardPage';
+import { TeamQueuePage } from '@/pages/admin/TeamQueuePage';
+import { AuditLogPage } from '@/pages/admin/AuditLogPage';
+import { UserManagementPage } from '@/pages/admin/UserManagementPage';
+import { KnowledgeManagementPage } from '@/pages/admin/KnowledgeManagementPage';
+
+function HomeRedirect() {
+  const { user, isAuthenticated } = useAuthStore();
+  if (!isAuthenticated || !user) return <Navigate to="/login" replace />;
+  const defaultRoute = ROLE_ROUTES[user.role] || '/support';
+  return <Navigate to={defaultRoute} replace />;
+}
 
 export function App() {
   return (
     <Routes>
+      {/* Public routes */}
       <Route path="/login" element={<LoginPage />} />
-      <Route path="/" element={<Layout />}>
-        <Route index element={<ChatPage />} />
-        <Route path="chat" element={<ChatPage />} />
-        <Route path="tickets" element={<TicketsPage />} />
-        <Route path="admin" element={<AdminPage />} />
+      <Route path="/unauthorized" element={<UnauthorizedPage />} />
+
+      {/* Home redirect based on role */}
+      <Route path="/" element={<HomeRedirect />} />
+
+      {/* Employee workspace (all authenticated users) */}
+      <Route path="/support" element={<RouteGuard><EmployeeLayout /></RouteGuard>}>
+        <Route index element={<SupportChatPage />} />
+        <Route path="chat" element={<SupportChatPage />} />
+        <Route path="tickets" element={<MyTicketsPage />} />
+        <Route path="tickets/:id" element={<TicketDetailPage />} />
+        <Route path="profile" element={<ProfilePage />} />
       </Route>
+
+      {/* IT Operations workspace (agents, leads, admins) */}
+      <Route path="/operations" element={<ITStaffRoute><OperationsLayout /></ITStaffRoute>}>
+        <Route index element={<LiveQueuePage />} />
+        <Route path="queue" element={<LiveQueuePage />} />
+        <Route path="assigned" element={<AssignedTicketsPage />} />
+        <Route path="tickets/:id" element={<TicketWorkspacePage />} />
+        <Route path="remote-assist" element={<RemoteAssistPage />} />
+      </Route>
+
+      {/* Admin/Lead dashboard */}
+      <Route path="/dashboard" element={<AdminRoute><AdminLayout /></AdminRoute>}>
+        <Route index element={<DashboardPage />} />
+        <Route path="team-queue" element={<TeamQueuePage />} />
+        <Route path="knowledge" element={<KnowledgeManagementPage />} />
+        <Route path="users" element={<UserManagementPage />} />
+      </Route>
+
+      {/* Audit (admin + auditor) */}
+      <Route path="/audit" element={<AuditorRoute><AdminLayout /></AuditorRoute>}>
+        <Route index element={<AuditLogPage />} />
+      </Route>
+
+      {/* Fallback */}
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
   );

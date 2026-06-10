@@ -4,7 +4,6 @@ from fastapi import APIRouter, Depends
 
 from app.schemas.knowledge import (
     KnowledgeArticleSchema,
-    KnowledgeSearchRequest,
     KnowledgeSearchResponse,
 )
 from app.services.knowledge_service import KnowledgeService, get_knowledge_service
@@ -17,7 +16,7 @@ async def search_knowledge(
     query: str,
     category: str | None = None,
     limit: int = 5,
-    service: KnowledgeService = Depends(get_knowledge_service),
+    service: KnowledgeService = Depends(get_knowledge_service),  # noqa: B008
 ) -> KnowledgeSearchResponse:
     """Search the knowledge base using semantic search.
 
@@ -50,7 +49,7 @@ async def list_articles(
     category: str | None = None,
     limit: int = 20,
     offset: int = 0,
-    service: KnowledgeService = Depends(get_knowledge_service),
+    service: KnowledgeService = Depends(get_knowledge_service),  # noqa: B008
 ) -> list[KnowledgeArticleSchema]:
     """List knowledge articles with optional filtering."""
     if category:

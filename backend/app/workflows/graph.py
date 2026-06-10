@@ -2,12 +2,12 @@
 
 from langgraph.graph import END, StateGraph
 
-from app.workflows.state import WorkflowState
-from app.workflows.nodes.triage import triage_node
-from app.workflows.nodes.retrieval import retrieval_node
-from app.workflows.nodes.resolution import resolution_node
 from app.workflows.nodes.escalation import escalation_node
+from app.workflows.nodes.resolution import resolution_node
+from app.workflows.nodes.retrieval import retrieval_node
 from app.workflows.nodes.ticketing import ticket_node
+from app.workflows.nodes.triage import triage_node
+from app.workflows.state import WorkflowState
 
 
 def route_after_triage(state: WorkflowState) -> str:

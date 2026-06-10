@@ -1,19 +1,57 @@
-"""Database models package — re-exports all models."""
+"""Database models package — re-exports all models for Aditi IT Assist enterprise platform."""
 
-from app.models.models import (  # noqa: F401
-    AuditEvent,
-    KnowledgeArticle,
-    Message,
-    SupportSession,
-    Ticket,
+from app.models.analytics import AnalyticsSnapshot
+from app.models.audit import AuditEvent
+from app.models.auth import (
+    AuthIdentity,
+    Group,
+    LoginSession,
+    Permission,
+    Role,
+    RolePermission,
     User,
+    UserGroup,
+    UserRoleAssignment,
 )
+from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
+from app.models.knowledge import KnowledgeArticle
+from app.models.remote_support import RemoteSessionEvent, RemoteSupportConsent, RemoteSupportSession
+from app.models.sso import IdentityProviderConfig, IdPGroupRoleMapping, SPCertificate
+from app.models.support import Message, SupportSession
+from app.models.ticket import Ticket, TicketComment, TicketEvent
 
 __all__ = [
+    "Base",
+    "TimestampMixin",
+    "UUIDPrimaryKeyMixin",
+    # Auth & RBAC
     "User",
+    "Role",
+    "Permission",
+    "RolePermission",
+    "UserRoleAssignment",
+    "Group",
+    "UserGroup",
+    "AuthIdentity",
+    "LoginSession",
+    # SSO / IdP
+    "IdentityProviderConfig",
+    "IdPGroupRoleMapping",
+    "SPCertificate",
+    # Support
     "SupportSession",
     "Message",
-    "KnowledgeArticle",
+    # Tickets
     "Ticket",
+    "TicketComment",
+    "TicketEvent",
+    # Knowledge
+    "KnowledgeArticle",
+    # Remote Support
+    "RemoteSupportSession",
+    "RemoteSupportConsent",
+    "RemoteSessionEvent",
+    # Audit & Analytics
     "AuditEvent",
+    "AnalyticsSnapshot",
 ]
