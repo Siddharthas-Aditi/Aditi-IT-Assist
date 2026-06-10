@@ -3,6 +3,7 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
+import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -10,17 +11,41 @@ from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.logging import setup_logging
 
+logger = structlog.get_logger()
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan: startup and shutdown events."""
     setup_logging()
-    # TODO(team): Initialize database connection pool on startup
-    # TODO(team): Initialize Redis connection on startup
+
+    # Import all models so their metadata is registered with Base
+    import app.models  # noqa: F401
+
+    if settings.APP_ENV == "development":
+        # Auto-create all tables on startup in development mode.
+        # This avoids the need for running alembic manually during local dev.
+        from app.core.database import engine
+        from app.models.base import Base
+
+        async with engine.begin() as conn:
+            # Enable pgvector extension (safe to run multiple times)
+            try:
+                await conn.execute(
+                    __import__("sqlalchemy").text("CREATE EXTENSION IF NOT EXISTS vector")
+                )
+            except Exception:
+                pass  # pgvector not available — skip, vector search will fall back to keyword
+            await conn.run_sync(Base.metadata.create_all)
+        logger.info("database_schema_ready", env=settings.APP_ENV)
+
     yield
-    # Shutdown: close connections
-    # TODO(team): Close database pool
-    # TODO(team): Close Redis connection
+
+    # Shutdown
+    if settings.APP_ENV == "development":
+        from app.core.database import engine
+        await engine.dispose()
+
 
 
 app = FastAPI(

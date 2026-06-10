@@ -186,7 +186,9 @@ class UserRoleAssignment(UUIDPrimaryKeyMixin, Base):
     user: Mapped["User"] = relationship(
         back_populates="role_assignments", foreign_keys=[user_id]
     )
-    role: Mapped["Role"] = relationship(back_populates="user_assignments")
+    role: Mapped["Role"] = relationship(
+        back_populates="user_assignments", lazy="selectin"
+    )
 
 # ─────────────────────────────────────────────────────────────────────
 # Auth Identity (SSO/SAML mapping)
