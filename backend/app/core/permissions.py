@@ -73,6 +73,13 @@ class Action(StrEnum):
     MANAGE = "manage"
     VIEW = "view"
     IMPERSONATE = "impersonate"
+    SUBMIT = "submit"
+    PUBLISH = "publish"
+    ARCHIVE = "archive"
+    REVIEW = "review"
+    REINDEX = "reindex"
+    SUGGEST = "suggest"
+    FEEDBACK = "feedback"
 
 
 class Scope(StrEnum):
@@ -158,6 +165,17 @@ class P(StrEnum):
     KNOWLEDGE_APPROVE = "knowledge:approve"
     KNOWLEDGE_DELETE = "knowledge:delete"
     KNOWLEDGE_MANAGE_CATEGORIES = "knowledge:manage_categories"
+    # Lifecycle & governance (enterprise knowledge management)
+    KNOWLEDGE_SUBMIT_REVIEW = "knowledge:submit_review"
+    KNOWLEDGE_REVIEW = "knowledge:review"
+    KNOWLEDGE_PUBLISH = "knowledge:publish"
+    KNOWLEDGE_ARCHIVE = "knowledge:archive"
+    KNOWLEDGE_REINDEX = "knowledge:reindex"
+    KNOWLEDGE_MANAGE_OWNERSHIP = "knowledge:manage_ownership"
+    KNOWLEDGE_VIEW_ANALYTICS = "knowledge:view_analytics"
+    KNOWLEDGE_VIEW_INTERNAL = "knowledge:view_internal"
+    KNOWLEDGE_SUGGEST = "knowledge:suggest"
+    KNOWLEDGE_SUBMIT_FEEDBACK = "knowledge:submit_feedback"
 
     # ── Analytics ──────────────────────────────────────────
     ANALYTICS_VIEW_OWN = "analytics:view_own"
@@ -231,6 +249,16 @@ PERMISSION_REGISTRY: list[PermissionDef] = [
     PermissionDef(P.KNOWLEDGE_APPROVE, "Approve KB Article", Resource.KNOWLEDGE, Action.APPROVE, Scope.ALL, audit_required=True),
     PermissionDef(P.KNOWLEDGE_DELETE, "Delete KB Article", Resource.KNOWLEDGE, Action.DELETE, Scope.ALL, audit_required=True, high_risk=True),
     PermissionDef(P.KNOWLEDGE_MANAGE_CATEGORIES, "Manage KB Categories", Resource.KNOWLEDGE, Action.MANAGE, Scope.ALL, audit_required=True),
+    PermissionDef(P.KNOWLEDGE_SUBMIT_REVIEW, "Submit Article for Review", Resource.KNOWLEDGE, Action.SUBMIT, Scope.OWN, audit_required=True),
+    PermissionDef(P.KNOWLEDGE_REVIEW, "Review KB Article", Resource.KNOWLEDGE, Action.REVIEW, Scope.ALL, audit_required=True),
+    PermissionDef(P.KNOWLEDGE_PUBLISH, "Publish KB Article", Resource.KNOWLEDGE, Action.PUBLISH, Scope.ALL, audit_required=True, high_risk=True),
+    PermissionDef(P.KNOWLEDGE_ARCHIVE, "Archive KB Article", Resource.KNOWLEDGE, Action.ARCHIVE, Scope.ALL, audit_required=True),
+    PermissionDef(P.KNOWLEDGE_REINDEX, "Trigger KB Reindex", Resource.KNOWLEDGE, Action.REINDEX, Scope.ALL, audit_required=True),
+    PermissionDef(P.KNOWLEDGE_MANAGE_OWNERSHIP, "Manage KB Ownership Groups", Resource.KNOWLEDGE, Action.MANAGE, Scope.ALL, audit_required=True),
+    PermissionDef(P.KNOWLEDGE_VIEW_ANALYTICS, "View KB Analytics", Resource.KNOWLEDGE, Action.VIEW, Scope.ALL),
+    PermissionDef(P.KNOWLEDGE_VIEW_INTERNAL, "Retrieve Internal/Unpublished KB", Resource.KNOWLEDGE, Action.READ, Scope.ALL, audit_required=True),
+    PermissionDef(P.KNOWLEDGE_SUGGEST, "Suggest KB Improvements", Resource.KNOWLEDGE, Action.SUGGEST, Scope.NONE),
+    PermissionDef(P.KNOWLEDGE_SUBMIT_FEEDBACK, "Submit KB Feedback", Resource.KNOWLEDGE, Action.FEEDBACK, Scope.OWN),
     # ── Analytics ──
     PermissionDef(P.ANALYTICS_VIEW_OWN, "View Own Stats", Resource.ANALYTICS, Action.VIEW, Scope.OWN),
     PermissionDef(P.ANALYTICS_VIEW_TEAM, "View Team Analytics", Resource.ANALYTICS, Action.VIEW, Scope.TEAM),
@@ -267,6 +295,7 @@ ROLE_PERMISSIONS: dict[UserRole, list[P]] = {
         P.REMOTE_END_SESSION,
         P.REMOTE_READ_OWN_SESSIONS,
         P.KNOWLEDGE_READ,
+        P.KNOWLEDGE_SUBMIT_FEEDBACK,
         P.ANALYTICS_VIEW_OWN,
     ],
     UserRole.SECURITY_AUDITOR: [
@@ -275,6 +304,9 @@ ROLE_PERMISSIONS: dict[UserRole, list[P]] = {
         P.REMOTE_READ_ALL_SESSIONS,
         P.ANALYTICS_VIEW_ALL,
         P.ADMIN_VIEW_AUDIT_LOG,
+        # Read-only visibility into knowledge content, versions, and audit trail
+        P.KNOWLEDGE_READ,
+        P.KNOWLEDGE_VIEW_INTERNAL,
     ],
     UserRole.IT_AGENT: [
         # Inherited from no one, explicit grants:
@@ -301,6 +333,10 @@ ROLE_PERMISSIONS: dict[UserRole, list[P]] = {
         P.KNOWLEDGE_READ,
         P.KNOWLEDGE_CREATE,
         P.KNOWLEDGE_UPDATE_OWN,
+        P.KNOWLEDGE_SUBMIT_REVIEW,
+        P.KNOWLEDGE_SUGGEST,
+        P.KNOWLEDGE_SUBMIT_FEEDBACK,
+        P.KNOWLEDGE_VIEW_INTERNAL,
         P.ANALYTICS_VIEW_OWN,
     ],
     UserRole.IT_LEAD: [
@@ -315,6 +351,10 @@ ROLE_PERMISSIONS: dict[UserRole, list[P]] = {
         P.REMOTE_READ_ALL_SESSIONS,
         P.KNOWLEDGE_UPDATE_ALL,
         P.KNOWLEDGE_APPROVE,
+        P.KNOWLEDGE_REVIEW,
+        P.KNOWLEDGE_PUBLISH,
+        P.KNOWLEDGE_ARCHIVE,
+        P.KNOWLEDGE_VIEW_ANALYTICS,
         P.ANALYTICS_VIEW_TEAM,
         P.ANALYTICS_VIEW_ALL,
         P.ANALYTICS_VIEW_AGENT_PERF,
@@ -326,6 +366,8 @@ ROLE_PERMISSIONS: dict[UserRole, list[P]] = {
         P.REMOTE_REQUEST_CONTROL,
         P.KNOWLEDGE_DELETE,
         P.KNOWLEDGE_MANAGE_CATEGORIES,
+        P.KNOWLEDGE_REINDEX,
+        P.KNOWLEDGE_MANAGE_OWNERSHIP,
         P.ANALYTICS_EXPORT,
         P.ADMIN_MANAGE_USERS,
         P.ADMIN_MANAGE_ROLES,

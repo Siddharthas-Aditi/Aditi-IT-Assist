@@ -51,6 +51,14 @@ retrieve relevant knowledge, guide troubleshooting, and escalate when needed.
 - Internal notes hidden from employees
 - Audit logs restricted to admin/auditor roles
 
+### Knowledge Management
+- Structured, governed articles with a lifecycle: `draft → in_review → approved → published → archived`
+- **The chat agent retrieves published articles only** (`KnowledgeRetrievalService`); drafts are never exposed to employee chat
+- Three boundaries: KB management (`services/knowledge/management.py`), KB retrieval (`retrieval.py`), indexing (`indexing.py`)
+- Per-action lifecycle permissions enforced in the service; coarse API gating via `require_permissions(knowledge:*)`
+- Publish triggers indexing; archive removes from the index; both snapshot a version
+- Docs: `docs/architecture/knowledge-management.md`, `docs/architecture/retrieval-and-indexing.md`, `docs/product/knowledge-workflow.md`, `docs/security/knowledge-access-control.md`
+
 ## Build Order (When Implementing Features)
 
 1. Define data models and schemas first
@@ -204,7 +212,8 @@ make lint               # Linting (both)
 | RBAC (5 roles) | ✅ | `require_roles`, `require_permissions` |
 | Ticket lifecycle | ✅ | SLA, assignment, events, isolation |
 | LangGraph workflow | ✅ | 6 nodes, state machine, routing |
-| Knowledge retrieval | ✅ | YAML seed, keyword search |
+| Knowledge retrieval | ✅ | Governed published-only retrieval + citations; YAML keyword fallback |
+| Knowledge Management | ✅ | Structured articles, lifecycle/governance, versioning, taxonomy, indexing, analytics — see `docs/architecture/knowledge-management.md` |
 | LLM integration | ✅ | LiteLLM abstraction, keyword fallback |
 | Remote support | ✅ | Session, consent, audit trail |
 | Analytics API | ✅ | Dashboard metrics, SLA, workload |

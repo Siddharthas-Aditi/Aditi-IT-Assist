@@ -62,6 +62,10 @@ class WorkflowState(TypedDict):
     # Knowledge retrieval (set by Knowledge Agent)
     knowledge_results: list[dict]
     knowledge_confidence: float
+    # Source attribution for grounded answers (title + citation label + id).
+    knowledge_citations: list[dict]
+    # True when retrieval was restricted to published, governed content only.
+    knowledge_published_only: bool
 
     # Resolution (set by Resolution Agent)
     resolution_steps: list[ResolutionStep]

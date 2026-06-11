@@ -31,6 +31,13 @@ import { TeamQueuePage } from '@/pages/admin/TeamQueuePage';
 import { AuditLogPage } from '@/pages/admin/AuditLogPage';
 import { UserManagementPage } from '@/pages/admin/UserManagementPage';
 import { KnowledgeManagementPage } from '@/pages/admin/KnowledgeManagementPage';
+import { KnowledgeArticleDetailPage } from '@/pages/admin/knowledge/KnowledgeArticleDetailPage';
+import { KnowledgeEditorPage } from '@/pages/admin/knowledge/KnowledgeEditorPage';
+import { KnowledgeReviewQueuePage } from '@/pages/admin/knowledge/KnowledgeReviewQueuePage';
+import { KnowledgeTaxonomyPage } from '@/pages/admin/knowledge/KnowledgeTaxonomyPage';
+import { KnowledgeVersionHistoryPage } from '@/pages/admin/knowledge/KnowledgeVersionHistoryPage';
+import { KnowledgeIndexingPage } from '@/pages/admin/knowledge/KnowledgeIndexingPage';
+import { KnowledgeAnalyticsPage } from '@/pages/admin/knowledge/KnowledgeAnalyticsPage';
 
 function HomeRedirect() {
   const { user, isAuthenticated } = useAuthStore();
@@ -72,6 +79,14 @@ export function App() {
         <Route index element={<DashboardPage />} />
         <Route path="team-queue" element={<TeamQueuePage />} />
         <Route path="knowledge" element={<KnowledgeManagementPage />} />
+        <Route path="knowledge/new" element={<KnowledgeEditorPage />} />
+        <Route path="knowledge/review" element={<KnowledgeReviewQueuePage />} />
+        <Route path="knowledge/taxonomy" element={<KnowledgeTaxonomyPage />} />
+        <Route path="knowledge/indexing" element={<KnowledgeIndexingPage />} />
+        <Route path="knowledge/analytics" element={<KnowledgeAnalyticsPage />} />
+        <Route path="knowledge/:id" element={<KnowledgeArticleDetailPage />} />
+        <Route path="knowledge/:id/edit" element={<KnowledgeEditorPage />} />
+        <Route path="knowledge/:id/versions" element={<KnowledgeVersionHistoryPage />} />
         <Route path="users" element={<UserManagementPage />} />
       </Route>
 

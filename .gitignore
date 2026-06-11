@@ -13,6 +13,9 @@ eggs/
 lib/
 lib64/
 parts/
+# The unanchored Python `lib/` pattern above must NOT hide frontend app source.
+!frontend/src/lib/
+!frontend/src/lib/**
 sdist/
 var/
 wheels/

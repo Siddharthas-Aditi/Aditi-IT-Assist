@@ -128,3 +128,13 @@ async def admin_client(mock_it_admin):
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+async def auditor_client(mock_auditor):
+    """Test client authenticated as a security auditor."""
+    app.dependency_overrides[get_current_active_user] = lambda: mock_auditor
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        yield ac
+    app.dependency_overrides.clear()

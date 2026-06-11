@@ -14,7 +14,15 @@ from app.models.auth import (
     UserRoleAssignment,
 )
 from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
-from app.models.knowledge import KnowledgeArticle
+from app.models.knowledge import (
+    KnowledgeArticle,
+    KnowledgeArticleVersion,
+    KnowledgeChunk,
+    KnowledgeFeedback,
+    KnowledgeOwnershipGroup,
+    KnowledgeReviewNote,
+    KnowledgeTaxonomyTerm,
+)
 from app.models.remote_support import RemoteSessionEvent, RemoteSupportConsent, RemoteSupportSession
 from app.models.sso import IdentityProviderConfig, IdPGroupRoleMapping, SPCertificate
 from app.models.support import Message, SupportSession
@@ -47,6 +55,12 @@ __all__ = [
     "TicketEvent",
     # Knowledge
     "KnowledgeArticle",
+    "KnowledgeArticleVersion",
+    "KnowledgeChunk",
+    "KnowledgeTaxonomyTerm",
+    "KnowledgeOwnershipGroup",
+    "KnowledgeFeedback",
+    "KnowledgeReviewNote",
     # Remote Support
     "RemoteSupportSession",
     "RemoteSupportConsent",

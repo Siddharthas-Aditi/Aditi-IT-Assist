@@ -520,3 +520,32 @@ class WorkflowState(TypedDict):
 | Knowledge gap rate | Learning Agent | > 20% no-result searches |
 | Node execution time | LangGraph metrics | > 10s any node |
 | LLM error rate | LiteLLM | > 5% failures |
+
+---
+
+## Knowledge Management (KB)
+
+The agent's answer quality depends on the governed knowledge base. Key rules for
+agents and contributors working in this area:
+
+- **Retrieval is published-only for employees.** The chat agent must ground answers
+  in published, approved content via `KnowledgeRetrievalService` (or the YAML dev
+  fallback). Never surface drafts/in-review/archived content to employee chat.
+- **Cite sources.** Retrieval returns `citation_label` + snippet per hit; the
+  retrieval node emits `knowledge_citations` into `WorkflowState` for traceable,
+  explainable answers.
+- **Low confidence → escalate.** Composite retrieval confidence below the
+  `LOW_CONFIDENCE_THRESHOLD` should bias the orchestrator toward escalation.
+- **Boundaries**: KB management (`services/knowledge/management.py`), KB retrieval
+  (`retrieval.py`), and indexing (`indexing.py`) are separate — the workflow only
+  consumes retrieval.
+- **Lifecycle**: `draft → in_review → approved → published → archived`; publish
+  indexes, archive de-indexes, both snapshot a version. Rules live in
+  `services/knowledge/lifecycle.py` (pure, unit-tested).
+- **Record outcomes**: usage / successful-resolution / feedback feed `quality_score`
+  and ranking. Use `KnowledgeRetrievalService.record_usage()` when an article helped.
+
+Docs: `docs/architecture/knowledge-management.md`,
+`docs/architecture/retrieval-and-indexing.md`,
+`docs/product/knowledge-workflow.md`,
+`docs/security/knowledge-access-control.md`.

@@ -304,6 +304,12 @@ async def run_seed() -> None:
         await seed_sample_tickets(db, users)
         print("    ✓ Sample tickets created")
 
+        print("  → Knowledge base (structured articles)...")
+        from app.knowledge_base.structured_seed import seed_knowledge
+
+        kb_count = await seed_knowledge(db, users)
+        print(f"    ✓ {kb_count} knowledge articles seeded (published + indexed)")
+
         await db.commit()
         print("\n✅ Enterprise seed complete!")
         print("\n📋 Sample credentials (local dev only):")

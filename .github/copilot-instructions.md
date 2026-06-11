@@ -110,3 +110,18 @@ async def node_name(state: WorkflowState) -> WorkflowState:
 - Don't hardcode secrets
 - Don't create files > 300 lines
 - Don't skip tests for services
+
+## Knowledge Management
+- Structured, governed articles — not a CRUD page. Lifecycle:
+  `draft → in_review → approved → published → archived`.
+- The chat agent retrieves **published articles only** (`KnowledgeRetrievalService`);
+  never expose drafts to employee chat.
+- Three boundaries: management (`services/knowledge/management.py`), retrieval
+  (`retrieval.py`), indexing (`indexing.py`). The workflow consumes retrieval only.
+- Lifecycle/validation rules are pure functions in `services/knowledge/lifecycle.py`.
+- Authorize with `require_permissions(knowledge:*)`; the transition endpoint enforces
+  the specific per-action permission inside the service.
+- Data-access goes through `repositories/knowledge_repository.py` (no inline queries).
+- Frontend: gate UI with `lib/permissions.ts` (`hasPermission`), data via React Query
+  hooks in `features/knowledge/api.ts`. Backend always re-checks.
+- Docs: `docs/architecture/knowledge-management.md` and siblings.
