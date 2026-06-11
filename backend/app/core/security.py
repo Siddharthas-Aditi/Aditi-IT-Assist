@@ -1,14 +1,23 @@
-"""Security utilities: JWT tokens, password hashing, authentication."""
+"""Security utilities: JWT tokens, password hashing, authentication.
+
+Password hashing uses the ``bcrypt`` library directly rather than passlib's
+``CryptContext``. passlib 1.7 is incompatible with bcrypt >= 4 (its backend
+probe calls ``hashpw`` with an over-72-byte value, which modern bcrypt rejects
+with a ``ValueError`` instead of truncating — breaking every hash/verify and
+returning HTTP 500 on login). Calling bcrypt directly removes that version
+coupling and stays compatible with existing ``$2b$`` hashes.
+"""
 
 from datetime import datetime, timedelta, timezone
 
+import bcrypt
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 
 from app.core.config import settings
 
-# Password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# bcrypt only uses the first 72 bytes of the password; modern bcrypt raises if
+# given more, so we truncate explicitly (matching passlib's historical behavior).
+_BCRYPT_MAX_BYTES = 72
 
 # JWT configuration
 ALGORITHM = "HS256"
@@ -34,11 +43,19 @@ def verify_token(token: str) -> dict | None:
         return None
 
 
+def _to_bcrypt_bytes(password: str) -> bytes:
+    """Encode and truncate a password to bcrypt's 72-byte input limit."""
+    return password.encode("utf-8")[:_BCRYPT_MAX_BYTES]
+
+
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a password against its hash."""
-    return pwd_context.verify(plain_password, hashed_password)
+    """Verify a password against its bcrypt hash."""
+    try:
+        return bcrypt.checkpw(_to_bcrypt_bytes(plain_password), hashed_password.encode("utf-8"))
+    except (ValueError, TypeError):
+        return False
 
 
 def hash_password(password: str) -> str:
-    """Hash a password for storage."""
-    return pwd_context.hash(password)
+    """Hash a password for storage using bcrypt."""
+    return bcrypt.hashpw(_to_bcrypt_bytes(password), bcrypt.gensalt()).decode("utf-8")
