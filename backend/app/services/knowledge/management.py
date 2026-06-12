@@ -244,6 +244,14 @@ class KnowledgeManagementService:
                 f"Permission '{action.permission}' required to {action.label.lower()}"
             )
 
+        # Submit-for-review gate: must have minimum viable content.
+        if action_key == "submit_for_review":
+            issues = lifecycle.validate_for_submit(article_to_dict(article))
+            if issues:
+                raise KnowledgeManagementError(
+                    "Article is not ready to submit for review: " + "; ".join(issues)
+                )
+
         # Publish-readiness gate.
         if action.requires_publish_validation:
             issues = lifecycle.validate_for_publish(article_to_dict(article))
@@ -425,6 +433,73 @@ class KnowledgeManagementService:
 
     async def list_feedback(self, article_id: uuid.UUID) -> list[KnowledgeFeedback]:
         return await self.repo.list_feedback(article_id)
+
+    # ── Quality / author tools ──────────────────────────────────────
+
+    async def get_completeness(self, article_id: uuid.UUID):
+        """Return a ``CompletenessReport`` for an article."""
+        from app.services.knowledge.quality import compute_completeness
+
+        article = await self.repo.get(article_id)
+        if not article:
+            raise KnowledgeManagementError("Article not found")
+        return compute_completeness(article_to_dict(article))
+
+    async def get_author_warnings(self, article_id: uuid.UUID):
+        """Return a list of ``AuthorWarning`` for the editor view."""
+        from app.services.knowledge.quality import get_author_warnings
+
+        article = await self.repo.get(article_id)
+        if not article:
+            raise KnowledgeManagementError("Article not found")
+        return get_author_warnings(article_to_dict(article))
+
+    async def get_stale_analysis(self, article_id: uuid.UUID):
+        """Return a ``StaleAnalysis`` for an article."""
+        from app.services.knowledge.quality import detect_staleness
+
+        article = await self.repo.get(article_id)
+        if not article:
+            raise KnowledgeManagementError("Article not found")
+        return detect_staleness(article_to_dict(article))
+
+    async def create_from_template(
+        self, actor: "User", template_key: str, overrides: dict
+    ) -> "KnowledgeArticle":
+        """Create a draft article pre-filled from a template.
+
+        ``overrides`` may supply title, category, subcategory, ownership_group_id,
+        or any other ``ArticleCreate``-compatible fields.  Template defaults are
+        applied first; overrides win.
+        """
+        from app.schemas.knowledge import ArticleCreate
+        from app.services.knowledge.templates import get_template
+
+        template = get_template(template_key)
+        if template is None:
+            raise KnowledgeManagementError(f"Unknown template key: {template_key!r}")
+
+        # Merge: template defaults < caller overrides.
+        merged: dict = {
+            "title": template.label,
+            "category": template.category,
+            "subcategory": template.subcategory,
+            "product_or_system": template.product_or_system,
+            **template.defaults,
+            **{k: v for k, v in overrides.items() if v is not None},
+        }
+
+        # Coerce step dicts into StepSchema objects for ArticleCreate.
+        from app.schemas.knowledge import StepSchema
+
+        for step_field in ("troubleshooting_steps", "resolution_steps", "validation_steps"):
+            raw_steps = merged.get(step_field) or []
+            merged[step_field] = [
+                StepSchema(**s) if isinstance(s, dict) else s for s in raw_steps
+            ]
+
+        data = ArticleCreate(**merged)
+        return await self.create_draft(actor, data)
 
     # ── Quality scoring ─────────────────────────────────────────
 

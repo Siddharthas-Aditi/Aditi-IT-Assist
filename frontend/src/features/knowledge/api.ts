@@ -8,7 +8,11 @@ import type {
   ArticleFilters,
   ArticleListResponse,
   ArticleSummary,
+  ArticleTemplate,
   ArticleWritePayload,
+  AuthorWarning,
+  CompletenessReport,
+  DuplicateHint,
   FeedbackItem,
   IndexingStatus,
   KnowledgeAnalyticsSummary,
@@ -17,6 +21,7 @@ import type {
   ReindexResult,
   RetrievalPreview,
   ReviewNote,
+  StaleAnalysis,
   TaxonomyTerm,
   VersionSummary,
 } from '@/types/knowledge';
@@ -37,6 +42,11 @@ export const knowledgeKeys = {
   ownership: ['knowledge', 'ownership'] as const,
   indexing: ['knowledge', 'indexing'] as const,
   analytics: ['knowledge', 'analytics'] as const,
+  completeness: (id: string) => ['knowledge', 'completeness', id] as const,
+  warnings: (id: string) => ['knowledge', 'warnings', id] as const,
+  staleAnalysis: (id: string) => ['knowledge', 'stale-analysis', id] as const,
+  templates: ['knowledge', 'templates'] as const,
+  duplicates: (title: string) => ['knowledge', 'duplicates', title] as const,
 };
 
 // ── Queries ────────────────────────────────────────────────────────
@@ -209,3 +219,73 @@ export function useCreateTaxonomyTerm() {
     onSuccess: () => qc.invalidateQueries({ queryKey: knowledgeKeys.taxonomy }),
   });
 }
+
+// ── Quality / completeness / templates ────────────────────────────
+
+export function useCompleteness(id: string | undefined) {
+  return useQuery({
+    queryKey: knowledgeKeys.completeness(id ?? ''),
+    queryFn: () => apiRequest<CompletenessReport>(`${ADMIN}/articles/${id}/completeness`),
+    enabled: Boolean(id),
+    staleTime: 30_000,
+  });
+}
+
+export function useAuthorWarnings(id: string | undefined) {
+  return useQuery({
+    queryKey: knowledgeKeys.warnings(id ?? ''),
+    queryFn: () => apiRequest<AuthorWarning[]>(`${ADMIN}/articles/${id}/warnings`),
+    enabled: Boolean(id),
+    staleTime: 15_000,
+  });
+}
+
+export function useStaleAnalysis(id: string | undefined) {
+  return useQuery({
+    queryKey: knowledgeKeys.staleAnalysis(id ?? ''),
+    queryFn: () => apiRequest<StaleAnalysis>(`${ADMIN}/articles/${id}/stale-analysis`),
+    enabled: Boolean(id),
+    staleTime: 60_000,
+  });
+}
+
+export function useTemplates() {
+  return useQuery({
+    queryKey: knowledgeKeys.templates,
+    queryFn: () => apiRequest<ArticleTemplate[]>(`${ADMIN}/templates`),
+    staleTime: Infinity,
+  });
+}
+
+export function useDuplicateHints(title: string) {
+  return useQuery({
+    queryKey: knowledgeKeys.duplicates(title),
+    queryFn: () =>
+      apiRequest<DuplicateHint[]>(`${ADMIN}/duplicates`, { query: { title } }),
+    enabled: title.trim().length >= 5,
+    staleTime: 10_000,
+  });
+}
+
+export function useCreateFromTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      template_key: string;
+      title?: string;
+      ownership_group_id?: string;
+    }) =>
+      apiRequest<ArticleDetail>(
+        `${ADMIN}/articles/from-template/${input.template_key}`,
+        {
+          method: 'POST',
+          query: {
+            title: input.title,
+            ownership_group_id: input.ownership_group_id,
+          },
+        },
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: knowledgeKeys.all }),
+  });
+}
+

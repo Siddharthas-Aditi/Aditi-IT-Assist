@@ -128,6 +128,39 @@ REQUIRED_FOR_PUBLISH: tuple[str, ...] = (
     "citation_label",
 )
 
+#: Minimum fields required to submit an article for review.
+REQUIRED_FOR_SUBMIT: tuple[str, ...] = (
+    "title",
+    "category",
+)
+
+
+def validate_for_submit(article: dict) -> list[str]:
+    """Return issues that block a *submit-for-review* action.
+
+    Looser than the publish gate — we want authors to get early reviewer
+    feedback even if the article is incomplete, but we still enforce that the
+    minimum viable information is present.
+    """
+    issues: list[str] = []
+
+    for field in REQUIRED_FOR_SUBMIT:
+        value = article.get(field)
+        if value is None or (isinstance(value, str) and not value.strip()):
+            issues.append(f"Missing required field: {field}")
+
+    # Must have *something* actionable for reviewers to evaluate.
+    has_body = any(
+        article.get(f) for f in ("resolution_steps", "troubleshooting_steps", "content")
+    )
+    if not has_body:
+        issues.append(
+            "Article must include at least resolution steps, troubleshooting steps, "
+            "or body content before submitting for review"
+        )
+
+    return issues
+
 
 def validate_for_publish(article: dict) -> list[str]:
     """Return a list of human-readable issues blocking publication.

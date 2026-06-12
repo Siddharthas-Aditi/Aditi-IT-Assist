@@ -259,3 +259,60 @@ export interface ArticleFilters {
   limit?: number;
   offset?: number;
 }
+
+// ─────────────────────────────────────────────────────────────────────
+// Quality, completeness, stale analysis, templates
+// ─────────────────────────────────────────────────────────────────────
+
+export interface DimensionScore {
+  name: string;
+  label: string;
+  score: number;            // 0.0 – 1.0
+  earned: string[];
+  missing: string[];
+}
+
+export interface CompletenessReport {
+  score: number;            // 0 – 100
+  grade: 'A' | 'B' | 'C' | 'D' | 'F';
+  dimensions: DimensionScore[];
+  ready_for_review: boolean;
+  ready_for_publish: boolean;
+  blocking_issues: string[];
+  suggestions: string[];
+}
+
+export type WarningSeverity = 'error' | 'warning' | 'info';
+
+export interface AuthorWarning {
+  severity: WarningSeverity;
+  field?: string | null;
+  message: string;
+  guidance?: string | null;
+}
+
+export interface StaleAnalysis {
+  is_stale: boolean;
+  staleness_score: number;         // 0.0 (fresh) – 1.0 (very stale)
+  days_since_update?: number | null;
+  days_overdue?: number | null;
+  reasons: string[];
+  recommendations: string[];
+}
+
+export interface ArticleTemplate {
+  key: string;
+  label: string;
+  category: string;
+  subcategory: string;
+  product_or_system: string;
+  description: string;
+  icon: string;
+}
+
+export interface DuplicateHint {
+  id: string;
+  title: string;
+  status: string;
+}
+

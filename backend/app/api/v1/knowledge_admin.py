@@ -23,7 +23,11 @@ from app.schemas.knowledge import (
     ArticleDetail,
     ArticleListResponse,
     ArticleSummary,
+    ArticleTemplateSchema,
     ArticleUpdate,
+    AuthorWarningSchema,
+    CompletenessReportSchema,
+    DuplicateHintSchema,
     FeedbackSchema,
     IndexingStatusResponse,
     KnowledgeAnalyticsSummary,
@@ -35,6 +39,7 @@ from app.schemas.knowledge import (
     RetrievalPreviewResponse,
     ReviewNoteCreate,
     ReviewNoteSchema,
+    StaleAnalysisSchema,
     TaxonomyTermCreate,
     TaxonomyTermSchema,
     TaxonomyTermUpdate,
@@ -149,11 +154,12 @@ async def stale_articles(actor: InternalReader, db: DBDep) -> list[ArticleSummar
     return [ArticleSummary(**article_summary(a)) for a in await service.stale_articles()]
 
 
-@router.get("/duplicates", response_model=list[dict])
-async def duplicate_hints(actor: InternalReader, db: DBDep, title: str) -> list[dict]:
+@router.get("/duplicates", response_model=list[DuplicateHintSchema])
+async def duplicate_hints(actor: InternalReader, db: DBDep, title: str) -> list[DuplicateHintSchema]:
     """Lightweight duplicate-title hints for the editor."""
     service = KnowledgeManagementService(db)
-    return await service.find_duplicate_hints(title)
+    rows = await service.find_duplicate_hints(title)
+    return [DuplicateHintSchema(**r) for r in rows]
 
 
 @router.post("/articles", response_model=ArticleDetail, status_code=201)
@@ -405,6 +411,103 @@ async def create_ownership_group(
         member_ids=data.member_ids,
     )
     return OwnershipGroupSchema(**ownership_group_to_dict(group))
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Quality, completeness, stale analysis, templates
+# ─────────────────────────────────────────────────────────────────────
+
+
+@router.get("/articles/{article_id}/completeness", response_model=CompletenessReportSchema)
+async def article_completeness(
+    article_id: str, actor: InternalReader, db: DBDep
+) -> CompletenessReportSchema:
+    """Return a multi-dimension completeness report for an article."""
+    service = KnowledgeManagementService(db)
+    try:
+        report = await service.get_completeness(_parse_uuid(article_id))
+    except KnowledgeManagementError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    from dataclasses import asdict
+
+    return CompletenessReportSchema(**asdict(report))
+
+
+@router.get("/articles/{article_id}/warnings", response_model=list[AuthorWarningSchema])
+async def article_warnings(
+    article_id: str, actor: InternalReader, db: DBDep
+) -> list[AuthorWarningSchema]:
+    """Return inline author warnings for the editor view."""
+    service = KnowledgeManagementService(db)
+    try:
+        raw = await service.get_author_warnings(_parse_uuid(article_id))
+    except KnowledgeManagementError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return [AuthorWarningSchema(severity=w.severity, field=w.field, message=w.message,
+                                guidance=w.guidance) for w in raw]
+
+
+@router.get("/articles/{article_id}/stale-analysis", response_model=StaleAnalysisSchema)
+async def article_stale_analysis(
+    article_id: str, actor: InternalReader, db: DBDep
+) -> StaleAnalysisSchema:
+    """Return a detailed staleness analysis for a published article."""
+    service = KnowledgeManagementService(db)
+    try:
+        result = await service.get_stale_analysis(_parse_uuid(article_id))
+    except KnowledgeManagementError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    from dataclasses import asdict
+
+    return StaleAnalysisSchema(**asdict(result))
+
+
+@router.get("/templates", response_model=list[ArticleTemplateSchema])
+async def list_article_templates(actor: Author, db: DBDep) -> list[ArticleTemplateSchema]:
+    """List available article scaffolding templates."""
+    from app.services.knowledge.templates import list_templates
+
+    return [
+        ArticleTemplateSchema(
+            key=t.key,
+            label=t.label,
+            category=t.category,
+            subcategory=t.subcategory,
+            product_or_system=t.product_or_system,
+            description=t.description,
+            icon=t.icon,
+        )
+        for t in list_templates()
+    ]
+
+
+@router.post("/articles/from-template/{template_key}", response_model=ArticleDetail,
+             status_code=201)
+async def create_article_from_template(
+    template_key: str,
+    actor: Author,
+    db: DBDep,
+    title: str | None = None,
+    ownership_group_id: str | None = None,
+) -> ArticleDetail:
+    """Create a draft article pre-filled from a named template.
+
+    Pass ``title`` and ``ownership_group_id`` as query params to override
+    the template defaults immediately.
+    """
+    service = KnowledgeManagementService(db)
+    overrides: dict = {}
+    if title:
+        overrides["title"] = title
+    if ownership_group_id:
+        overrides["ownership_group_id"] = ownership_group_id
+    try:
+        article = await service.create_from_template(actor, template_key, overrides)
+    except KnowledgeManagementError as exc:
+        detail = str(exc)
+        code = 400 if "Unknown template" in detail else 422
+        raise HTTPException(status_code=code, detail=detail) from exc
+    return ArticleDetail(**article_detail(article))
 
 
 # ─────────────────────────────────────────────────────────────────────

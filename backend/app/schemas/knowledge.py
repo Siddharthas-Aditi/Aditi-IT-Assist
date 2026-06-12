@@ -449,3 +449,69 @@ class RetrievalResponse(BaseModel):
     source: str
     published_only: bool
     low_confidence: bool
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Quality, completeness, staleness, templates
+# ─────────────────────────────────────────────────────────────────────
+
+
+class DimensionScoreSchema(BaseModel):
+    name: str
+    label: str
+    score: float
+    earned: list[str] = []
+    missing: list[str] = []
+
+
+class CompletenessReportSchema(BaseModel):
+    """Multi-dimension completeness report for the article editor."""
+
+    score: float                    # 0 – 100
+    grade: str                      # A / B / C / D / F
+    dimensions: list[DimensionScoreSchema]
+    ready_for_review: bool
+    ready_for_publish: bool
+    blocking_issues: list[str]      # hard blockers preventing publication
+    suggestions: list[str]          # non-blocking improvements
+
+
+class AuthorWarningSchema(BaseModel):
+    """Inline warning item shown in the article editor."""
+
+    severity: str           # "error" | "warning" | "info"
+    field: str | None = None
+    message: str
+    guidance: str | None = None
+
+
+class StaleAnalysisSchema(BaseModel):
+    """Detailed staleness analysis for an article."""
+
+    is_stale: bool
+    staleness_score: float          # 0.0 (fresh) – 1.0 (very stale)
+    days_since_update: int | None = None
+    days_overdue: int | None = None
+    reasons: list[str]
+    recommendations: list[str]
+
+
+class ArticleTemplateSchema(BaseModel):
+    """A pre-filled article scaffold shown in the template picker."""
+
+    key: str
+    label: str
+    category: str
+    subcategory: str
+    product_or_system: str
+    description: str
+    icon: str
+
+
+class DuplicateHintSchema(BaseModel):
+    """A lightweight hint returned when a similar article title is detected."""
+
+    id: str
+    title: str
+    status: str
+

@@ -10,3 +10,7 @@ export { ArticleMetadataPanel } from './components/ArticleMetadataPanel';
 export { RetrievalPreviewPanel } from './components/RetrievalPreviewPanel';
 export { ArticlePreviewPanel } from './components/ArticlePreviewPanel';
 export { KnowledgeFilters } from './components/KnowledgeFilters';
+export { CompletenessScore } from './components/CompletenessScore';
+export { AuthorWarnings, FieldWarning } from './components/AuthorWarnings';
+export { TemplateSelector } from './components/TemplateSelector';
+export { DuplicateHints } from './components/DuplicateHints';
