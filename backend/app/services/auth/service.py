@@ -121,20 +121,40 @@ class AuthService:
         return await self.get_user_by_id(user_id)
 
     async def get_user_permissions(self, user: User) -> set[str]:
-        """Get all permission codes for a user across all roles."""
+        """Get all permission codes for a user across all roles.
+
+        Uses the code-defined ROLE_PERMISSIONS as the authoritative source so
+        the DB never drifts out of sync when new permissions are added.  Any
+        extra permissions stored in the DB (future per-user grants) are merged
+        in on top.
+        """
+        from app.core.permissions import UserRole, get_effective_permissions
+
+        # 1. Code-defined permissions for every role the user holds
+        code_perms: set[str] = set()
+        for assignment in user.role_assignments:
+            role_name = assignment.role.name if hasattr(assignment.role, "name") else str(assignment.role_id)
+            try:
+                code_perms |= {str(p) for p in get_effective_permissions(UserRole(role_name))}
+            except ValueError:
+                pass  # unknown role name — skip gracefully
+
+        # 2. DB-stored permissions (custom grants, future extensibility)
         from app.models.auth import Permission, RolePermission
 
         role_ids = [a.role_id for a in user.role_assignments]
-        if not role_ids:
-            return set()
+        if role_ids:
+            stmt = (
+                select(Permission.code)
+                .join(RolePermission, RolePermission.permission_id == Permission.id)
+                .where(RolePermission.role_id.in_(role_ids))
+            )
+            result = await self.db.execute(stmt)
+            db_perms = {row[0] for row in result.all()}
+        else:
+            db_perms = set()
 
-        stmt = (
-            select(Permission.code)
-            .join(RolePermission, RolePermission.permission_id == Permission.id)
-            .where(RolePermission.role_id.in_(role_ids))
-        )
-        result = await self.db.execute(stmt)
-        return {row[0] for row in result.all()}
+        return code_perms | db_perms
 
 
 class AuthenticationError(Exception):
