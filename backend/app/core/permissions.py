@@ -50,6 +50,7 @@ class Resource(StrEnum):
     KNOWLEDGE = "knowledge"
     ANALYTICS = "analytics"
     ADMIN = "admin"
+    FEEDBACK = "feedback"
 
 
 class Action(StrEnum):
@@ -199,6 +200,12 @@ class P(StrEnum):
     ADMIN_EXPORT_AUDIT_LOG = "admin:export_audit_log"
     ADMIN_IMPERSONATE_USER = "admin:impersonate_user"
 
+    # ── Feedback ───────────────────────────────────────────
+    FEEDBACK_SUBMIT = "feedback:submit"
+    FEEDBACK_VIEW_OWN = "feedback:view_own"
+    FEEDBACK_VIEW_ANALYTICS = "feedback:view_analytics"
+    FEEDBACK_REVIEW = "feedback:review"
+
 
 # ─── Permission Registry ───────────────────────────────────────────────────────
 #
@@ -264,6 +271,11 @@ PERMISSION_REGISTRY: list[PermissionDef] = [
     PermissionDef(P.KNOWLEDGE_SUBMIT_FEEDBACK, "Submit KB Feedback", Resource.KNOWLEDGE, Action.FEEDBACK, Scope.OWN),
     PermissionDef(P.KNOWLEDGE_INGEST, "Upload & Ingest Documents", Resource.KNOWLEDGE, Action.CREATE, Scope.NONE, audit_required=True),
     PermissionDef(P.KNOWLEDGE_INGEST_REVIEW, "Review & Save Ingestion Candidates", Resource.KNOWLEDGE, Action.UPDATE, Scope.ALL, audit_required=True),
+    # ── Feedback ──
+    PermissionDef(P.FEEDBACK_SUBMIT, "Submit Conversation Feedback", Resource.FEEDBACK, Action.SUBMIT, Scope.OWN),
+    PermissionDef(P.FEEDBACK_VIEW_OWN, "View Own Feedback", Resource.FEEDBACK, Action.READ, Scope.OWN),
+    PermissionDef(P.FEEDBACK_VIEW_ANALYTICS, "View Feedback Analytics", Resource.FEEDBACK, Action.VIEW, Scope.ALL),
+    PermissionDef(P.FEEDBACK_REVIEW, "Review Flagged Feedback", Resource.FEEDBACK, Action.REVIEW, Scope.ALL, audit_required=True),
     # ── Analytics ──
     PermissionDef(P.ANALYTICS_VIEW_OWN, "View Own Stats", Resource.ANALYTICS, Action.VIEW, Scope.OWN),
     PermissionDef(P.ANALYTICS_VIEW_TEAM, "View Team Analytics", Resource.ANALYTICS, Action.VIEW, Scope.TEAM),
@@ -302,6 +314,8 @@ ROLE_PERMISSIONS: dict[UserRole, list[P]] = {
         P.KNOWLEDGE_READ,
         P.KNOWLEDGE_SUBMIT_FEEDBACK,
         P.ANALYTICS_VIEW_OWN,
+        P.FEEDBACK_SUBMIT,
+        P.FEEDBACK_VIEW_OWN,
     ],
     UserRole.SECURITY_AUDITOR: [
         P.TICKET_READ_ALL,
@@ -365,6 +379,8 @@ ROLE_PERMISSIONS: dict[UserRole, list[P]] = {
         P.ANALYTICS_VIEW_TEAM,
         P.ANALYTICS_VIEW_ALL,
         P.ANALYTICS_VIEW_AGENT_PERF,
+        P.FEEDBACK_VIEW_ANALYTICS,
+        P.FEEDBACK_REVIEW,
     ],
     UserRole.IT_ADMIN: [
         # Inherits all IT_LEAD permissions, plus:
@@ -388,6 +404,8 @@ ROLE_PERMISSIONS: dict[UserRole, list[P]] = {
         P.ADMIN_VIEW_AUDIT_LOG,
         P.ADMIN_EXPORT_AUDIT_LOG,
         P.ADMIN_IMPERSONATE_USER,
+        P.FEEDBACK_VIEW_ANALYTICS,
+        P.FEEDBACK_REVIEW,
     ],
 }
 

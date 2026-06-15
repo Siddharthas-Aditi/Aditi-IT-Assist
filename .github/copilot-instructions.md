@@ -150,3 +150,29 @@ async def node_name(state: WorkflowState) -> WorkflowState:
   `docs/architecture/knowledge-ingestion-pipeline.md`,
   `docs/development/parser-rules.md`,
   `docs/development/extraction-schema.md`.
+
+## Post-Chat Feedback System
+- **Data model**: `conversation_feedback` (one per session per user, idempotent
+  upsert) + `message_feedback` (thumbs up/down per message). Both in
+  `models/feedback.py`, exported from `models/__init__.py`.
+- **`quality_bucket`** (POSITIVE/NEUTRAL/NEGATIVE) and **`review_flag`** are
+  computed at write time in `feedback_service.py` — never re-derive them in
+  queries.
+- **Service boundaries**: `feedback_service.py` handles submission/idempotency;
+  `feedback_analytics_service.py` handles aggregations; `repositories/feedback_repository.py`
+  owns all DB access.
+- **Knowledge improvement loop**: `FeedbackAnalyticsService.flag_articles_for_review()`
+  identifies articles with ≥3 negative sessions. Caller writes flag to KB — this
+  service is read-only with respect to the KB.
+- **No auto-publish/unpublish of KB articles** from feedback signals.
+- **Privacy**: employees may only submit feedback for their own sessions.
+  Comment text gated to `it_agent+`. No survey spam (one per session).
+- **Permissions**: `feedback:submit` → employee+; `feedback:view_analytics`
+  and `feedback:review` → it_lead, it_admin. Defined in `core/permissions.py`.
+- **Frontend**: `PostChatFeedbackCard.tsx` (5-step wizard), `MessageFeedbackControls.tsx`
+  (inline thumbs), `feedbackApi.ts` (React Query hooks), all in `features/chat/`.
+  Admin queue: `pages/admin/FeedbackReviewPage.tsx`, route `/dashboard/feedback/review`.
+- Docs: `docs/product/feedback-workflow.md`, `docs/architecture/feedback-analytics.md`,
+  `docs/architecture/conversation-feedback-model.md`,
+  `docs/architecture/knowledge-feedback-loop.md`,
+  `docs/security/feedback-access-and-privacy.md`.

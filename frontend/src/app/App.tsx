@@ -41,6 +41,7 @@ import { KnowledgeAnalyticsPage } from '@/pages/admin/knowledge/KnowledgeAnalyti
 import { KnowledgeUploadPage } from '@/pages/admin/knowledge/KnowledgeUploadPage';
 import { CandidateReviewPage } from '@/pages/admin/knowledge/CandidateReviewPage';
 import { CandidateEditorPage } from '@/pages/admin/knowledge/CandidateEditorPage';
+import { FeedbackReviewPage } from '@/pages/admin/FeedbackReviewPage';
 
 function HomeRedirect() {
   const { user, isAuthenticated } = useAuthStore();
@@ -94,6 +95,7 @@ export function App() {
         <Route path="knowledge/ingest/:jobId" element={<CandidateReviewPage />} />
         <Route path="knowledge/ingest/:jobId/:candidateId" element={<CandidateEditorPage />} />
         <Route path="users" element={<UserManagementPage />} />
+        <Route path="feedback/review" element={<FeedbackReviewPage />} />
       </Route>
 
       {/* Audit (admin + auditor) */}

@@ -595,3 +595,51 @@ Docs: `docs/architecture/document-ingestion.md`,
 `docs/architecture/knowledge-ingestion-pipeline.md`,
 `docs/development/parser-rules.md`,
 `docs/development/extraction-schema.md`.
+
+---
+
+## Post-Chat Feedback System
+
+> Not a conversational agent — a post-session feedback collection and analytics
+> pipeline.
+
+Employees submit a 5-step progressive-disclosure survey after each resolved
+support session. The feedback is stored, analysed, and surfaced to IT leads
+for quality improvement.
+
+### Data Model
+- `conversation_feedback` — one row per session per employee (idempotent upsert)
+- `message_feedback` — one row per message per employee (thumbs up/down)
+- `quality_bucket` (POSITIVE/NEUTRAL/NEGATIVE) and `review_flag` computed at
+  write time for fast analytics queries.
+
+### Service Boundaries
+- `services/feedback_service.py` — submission, idempotency, auto-derived fields
+- `services/feedback_analytics_service.py` — aggregations, article health, agent summaries
+- `repositories/feedback_repository.py` — all DB access (no inline queries)
+
+### Knowledge Improvement Loop
+- Negative feedback is associated with `knowledge_article_ids` from the session
+- `FeedbackAnalyticsService.flag_articles_for_review(threshold=3)` identifies
+  articles with repeated negative outcomes
+- Admin task / `KnowledgeLearningAgent` writes flags to `KnowledgeArticle`
+- Pipeline **must NEVER auto-edit or auto-unpublish** articles
+
+### Privacy Rules
+- Employees submit feedback only for their own sessions
+- Comment text is only visible to `it_agent` and above
+- No survey spam: one survey per session, hidden once submitted
+
+### Permissions
+| Permission | Roles |
+|------------|-------|
+| `feedback:submit` | employee+ |
+| `feedback:view_own` | employee+ |
+| `feedback:view_analytics` | it_lead, it_admin |
+| `feedback:review` | it_lead, it_admin |
+
+Docs: `docs/product/feedback-workflow.md`,
+`docs/architecture/feedback-analytics.md`,
+`docs/architecture/conversation-feedback-model.md`,
+`docs/architecture/knowledge-feedback-loop.md`,
+`docs/security/feedback-access-and-privacy.md`.
