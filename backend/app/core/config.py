@@ -86,6 +86,9 @@ class Settings(BaseSettings):
     AZURE_OPENAI_LLM_DEPLOYMENT: str = "gpt-4.1"
     AZURE_OPENAI_EMBEDDING_DEPLOYMENT: str = "text-embedding-3-large"
     EMBEDDING_DIMENSIONS: int = 3072  # text-embedding-3-large default (max); 1536 for Ada
+    # Set False when running behind a corporate SSL-inspecting proxy.
+    # Disables TLS certificate verification for all Azure AI / LiteLLM calls.
+    AZURE_OPENAI_VERIFY_SSL: bool = True
 
     # ── Derived helpers ────────────────────────────────────────────────────
     @property

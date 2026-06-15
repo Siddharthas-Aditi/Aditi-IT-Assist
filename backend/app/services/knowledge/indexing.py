@@ -65,7 +65,13 @@ class AzureOpenAIEmbeddingClient(EmbeddingClient):
         self.api_base = settings.AZURE_OPENAI_ENDPOINT
         self.api_version = settings.AZURE_OPENAI_API_VERSION
         self.dimensions = settings.EMBEDDING_DIMENSIONS
+        self.ssl_verify = settings.AZURE_OPENAI_VERIFY_SSL
         self.available = bool(self.api_key and self.api_base)
+        # Apply global LiteLLM SSL flag immediately so all subsequent httpx
+        # clients created by LiteLLM inherit the setting.
+        if not self.ssl_verify:
+            import litellm as _litellm  # noqa: PLC0415
+            _litellm.ssl_verify = False
 
     async def embed(self, texts: list[str]) -> list[list[float]] | None:
         """Embed a batch of texts using Azure text-embedding-3-large.

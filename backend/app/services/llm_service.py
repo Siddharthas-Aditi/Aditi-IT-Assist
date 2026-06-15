@@ -31,6 +31,12 @@ class LLMService:
         self.temperature = settings.LLM_TEMPERATURE
         self.max_tokens = settings.LLM_MAX_TOKENS
         self._available = settings.llm_is_configured
+        self._ssl_verify = settings.AZURE_OPENAI_VERIFY_SSL
+        # Apply global LiteLLM SSL setting at init time so all internal
+        # httpx clients created by LiteLLM pick it up automatically.
+        if not self._ssl_verify:
+            import litellm as _litellm  # noqa: PLC0415
+            _litellm.ssl_verify = False
 
     @property
     def is_available(self) -> bool:
