@@ -234,6 +234,7 @@ class KnowledgeManagementService:
         *,
         note: str | None = None,
         change_summary: str | None = None,
+        ownership_group_id: str | None = None,
     ) -> KnowledgeArticle:
         """Move an article through its governed lifecycle."""
         article = await self.repo.get(article_id)
@@ -256,6 +257,13 @@ class KnowledgeManagementService:
 
         # Publish-readiness gate.
         if action.requires_publish_validation:
+            # Allow the caller to assign an ownership group inline during the
+            # publish transition so the admin doesn't have to navigate away.
+            if ownership_group_id and not article.ownership_group_id:
+                try:
+                    article.ownership_group_id = uuid.UUID(ownership_group_id)
+                except ValueError:
+                    pass
             issues = lifecycle.validate_for_publish(article_to_dict(article))
             if issues:
                 raise KnowledgeManagementError(
@@ -529,3 +537,36 @@ class KnowledgeManagementService:
             score += 0.1 * min(1.0, resolved / usage)
         article.quality_score = round(min(1.0, score), 3)
         article.confidence_level = article.quality_score
+
+    # ── Delete ──────────────────────────────────────────────────
+
+    async def delete_article(
+        self, actor: User, actor_permissions: set[str], article_id: uuid.UUID
+    ) -> None:
+        """Hard-delete an article (admin-only, any status).
+
+        Also removes the article from the retrieval index if it was published.
+        """
+        from app.core.permissions import P as _P
+
+        if _P.KNOWLEDGE_DELETE not in actor_permissions:
+            raise PermissionError(f"Permission '{_P.KNOWLEDGE_DELETE}' required to delete articles")
+
+        article = await self.repo.get(article_id)
+        if not article:
+            raise KnowledgeManagementError("Article not found")
+
+        title = article.title
+        # De-index before deletion so the vector store stays clean.
+        if article.status == "published":
+            await self.indexing.remove_from_index(article)
+
+        await self.repo.delete(article)
+        await self.audit.log(
+            "knowledge.article_deleted",
+            "knowledge_article",
+            actor=actor,
+            resource_id=str(article_id),
+            description=f"Article '{title}' permanently deleted",
+        )
+        logger.info("knowledge_article_deleted", article_id=str(article_id), actor=actor.email)

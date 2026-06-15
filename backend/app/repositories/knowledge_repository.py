@@ -54,6 +54,11 @@ class KnowledgeRepository:
         await self.db.flush()
         return article
 
+    async def delete(self, article: KnowledgeArticle) -> None:
+        """Hard-delete an article and all its chunks (cascade handles chunks)."""
+        await self.db.delete(article)
+        await self.db.flush()
+
     async def list(
         self,
         *,

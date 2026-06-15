@@ -216,6 +216,7 @@ async def transition_article(
             data.action,
             note=data.note,
             change_summary=data.change_summary,
+            ownership_group_id=data.ownership_group_id,
         )
     except PermissionError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
@@ -226,6 +227,29 @@ async def transition_article(
         code = 404 if "not found" in detail.lower() else 422
         raise HTTPException(status_code=code, detail=detail) from exc
     return ArticleDetail(**article_detail(article))
+
+
+@router.delete("/articles/{article_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_article(
+    article_id: str,
+    actor: InternalReader,
+    db: DBDep,
+) -> None:
+    """Permanently delete an article (requires knowledge:delete permission).
+
+    Removes the article from the vector index first if it was published.
+    """
+    service = KnowledgeManagementService(db)
+    permissions = await AuthService(db).get_user_permissions(actor)
+    try:
+        await service.delete_article(actor, permissions, _parse_uuid(article_id))
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except KnowledgeManagementError as exc:
+        detail = str(exc)
+        code = 404 if "not found" in detail.lower() else 422
+        raise HTTPException(status_code=code, detail=detail) from exc
+    await db.commit()
 
 
 # ─────────────────────────────────────────────────────────────────────

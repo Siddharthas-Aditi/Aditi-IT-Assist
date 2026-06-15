@@ -177,7 +177,12 @@ export function useUpdateArticle(id: string) {
 export function useTransitionArticle(id: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { action: LifecycleAction; note?: string; change_summary?: string }) =>
+    mutationFn: (input: {
+      action: LifecycleAction;
+      note?: string;
+      change_summary?: string;
+      ownership_group_id?: string;
+    }) =>
       apiRequest<ArticleDetail>(`${ADMIN}/articles/${id}/transition`, {
         method: 'POST',
         body: input,
@@ -204,6 +209,15 @@ export function useReindex() {
     mutationFn: (input: { article_ids?: string[]; only_stale?: boolean }) =>
       apiRequest<ReindexResult>(`${ADMIN}/indexing/reindex`, { method: 'POST', body: input }),
     onSuccess: () => qc.invalidateQueries({ queryKey: knowledgeKeys.indexing }),
+  });
+}
+
+export function useDeleteArticle() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiRequest<void>(`${ADMIN}/articles/${id}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: knowledgeKeys.all }),
   });
 }
 

@@ -1,16 +1,18 @@
 /** Knowledge article detail — content, retrieval preview, review, versions. */
 
-import { ArrowLeft, History, Pencil } from 'lucide-react';
+import { ArrowLeft, History, Pencil, Trash2 } from 'lucide-react';
 import { useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import {
   ArticleMetadataPanel,
   ArticlePreviewPanel,
   ArticleStatusBadge,
   LifecycleActions,
+  Modal,
   RetrievalPreviewPanel,
   useArticle,
+  useDeleteArticle,
   useFeedback,
   useReviewNotes,
 } from '@/features/knowledge';
@@ -28,17 +30,32 @@ const TABS: { key: Tab; label: string }[] = [
 
 export function KnowledgeArticleDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const { data: article, isLoading, isError } = useArticle(id);
   const { data: reviewNotes } = useReviewNotes(id);
   const { data: feedback } = useFeedback(id);
+  const deleteArticle = useDeleteArticle();
   const [tab, setTab] = useState<Tab>('content');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   if (isLoading) return <div className="p-6 text-muted-foreground">Loading article…</div>;
   if (isError || !article)
     return <div className="p-6 text-red-600">Article not found.</div>;
 
   const canEdit = hasPermission(user, P.KNOWLEDGE_UPDATE_OWN);
+  const canDelete = hasPermission(user, P.KNOWLEDGE_DELETE);
+
+  const handleDelete = async () => {
+    setDeleteError(null);
+    try {
+      await deleteArticle.mutateAsync(article.id);
+      navigate('/dashboard/knowledge');
+    } catch (e) {
+      setDeleteError(e instanceof Error ? e.message : 'Delete failed');
+    }
+  };
 
   return (
     <div className="p-6">
@@ -73,6 +90,14 @@ export function KnowledgeArticleDetailPage() {
             >
               <Pencil size={15} /> Edit
             </Link>
+          )}
+          {canDelete && (
+            <button
+              onClick={() => { setShowDeleteConfirm(true); setDeleteError(null); }}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50"
+            >
+              <Trash2 size={15} /> Delete
+            </button>
           )}
         </div>
       </div>
@@ -186,6 +211,40 @@ export function KnowledgeArticleDetailPage() {
           <ArticleMetadataPanel article={article} />
         </aside>
       </div>
+
+      {/* Delete confirmation modal */}
+      <Modal
+        open={showDeleteConfirm}
+        title="Delete article"
+        onClose={() => setShowDeleteConfirm(false)}
+        footer={
+          <>
+            <button
+              onClick={() => setShowDeleteConfirm(false)}
+              className="rounded-lg border border-border px-3 py-1.5 text-sm"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleDelete}
+              disabled={deleteArticle.isPending}
+              className="rounded-lg bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+            >
+              {deleteArticle.isPending ? 'Deleting…' : 'Delete permanently'}
+            </button>
+          </>
+        }
+      >
+        <p className="text-sm text-muted-foreground">
+          Are you sure you want to permanently delete{' '}
+          <strong className="text-foreground">"{article.title}"</strong>?
+          {article.status === 'published' && (
+            <> This article is currently <strong>published</strong> and will be removed from the retrieval index immediately.</>
+          )}
+          {' '}This action cannot be undone.
+        </p>
+        {deleteError && <p className="mt-2 text-xs text-red-600">{deleteError}</p>}
+      </Modal>
     </div>
   );
 }

@@ -149,10 +149,22 @@ async def upload_document(
 async def _run_pipeline_task(job_id: uuid.UUID) -> None:
     """Background task wrapper — creates its own DB session."""
     from app.core.database import async_session_factory
+    from app.core.config import settings as _settings
+
+    # Wire LLM service for Stage 8 enrichment when configured.
+    llm_service: object | None = None
+    if getattr(_settings, "INGESTION_LLM_ENABLED", False):
+        try:
+            from app.services.llm_service import LLMService
+            _svc = LLMService()
+            if getattr(_svc, "is_available", False) or getattr(_svc, "llm_is_configured", False):
+                llm_service = _svc
+        except Exception:
+            logger.warning("LLM service unavailable for pipeline enrichment, continuing without LLM")
 
     async with async_session_factory() as db:
         try:
-            await run_pipeline(job_id, db)
+            await run_pipeline(job_id, db, llm_service=llm_service)
         except Exception:
             logger.exception("Background pipeline task failed for job=%s", job_id)
 

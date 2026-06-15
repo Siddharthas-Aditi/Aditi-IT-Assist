@@ -163,14 +163,37 @@ class KnowledgeIndexingService:
 
         Only published articles are indexed for the user-facing agent; callers
         gate on status before invoking this for publication.
+
+        Duplicate-content guard: if a chunk's content is identical to what is
+        already stored (same article, same chunk_index) its embedding_status is
+        kept at "indexed" and no re-embedding is requested — preventing duplicate
+        vectors in the vector store for unchanged content.
         """
         chunk_count = await self.prepare_article(article)
         chunks = await self.repo.list_chunks(article.id)
 
-        # Compute embeddings when a provider is wired; otherwise fall back to
-        # keyword retrieval over the prepared chunks (still "indexed" + usable).
-        await self.embedder.embed([c.content for c in chunks])
+        # Determine which chunks actually need (re)embedding by comparing their
+        # content against what was previously indexed.  We key on chunk_index so
+        # unchanged sections skip the embedding call entirely.
+        existing_chunks = {c.chunk_index: c for c in chunks if c.embedding_status == "indexed"}
+        new_chunks_to_embed = [
+            c for c in chunks
+            if c.chunk_index not in existing_chunks
+            or existing_chunks[c.chunk_index].content != c.content
+        ]
 
+        if new_chunks_to_embed:
+            await self.embedder.embed([c.content for c in new_chunks_to_embed])
+            for chunk in new_chunks_to_embed:
+                chunk.embedding_status = "indexed"
+        else:
+            logger.info(
+                "knowledge_index_skip_embed",
+                article_id=str(article.id),
+                reason="all chunks unchanged",
+            )
+
+        # Mark all chunks (including unchanged) at the new version.
         article.index_version += 1
         for chunk in chunks:
             chunk.embedding_status = "indexed"
@@ -182,6 +205,7 @@ class KnowledgeIndexingService:
             "knowledge_indexed",
             article_id=str(article.id),
             chunks=chunk_count,
+            reembedded=len(new_chunks_to_embed),
             index_version=article.index_version,
             vector_store=self.embedder.store_type,
             real_embeddings=self.embedder.available,

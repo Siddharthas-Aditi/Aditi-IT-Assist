@@ -232,6 +232,9 @@ class LifecycleTransitionRequest(BaseModel):
     ]
     note: str | None = None
     change_summary: str | None = None
+    # Optional: assign an ownership group as part of the publish transition
+    # so authors don't have to navigate to the editor just to unblock publish.
+    ownership_group_id: str | None = None
 
 
 class ReviewNoteCreate(BaseModel):
