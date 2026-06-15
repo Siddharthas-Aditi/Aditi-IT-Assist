@@ -38,6 +38,9 @@ import { KnowledgeTaxonomyPage } from '@/pages/admin/knowledge/KnowledgeTaxonomy
 import { KnowledgeVersionHistoryPage } from '@/pages/admin/knowledge/KnowledgeVersionHistoryPage';
 import { KnowledgeIndexingPage } from '@/pages/admin/knowledge/KnowledgeIndexingPage';
 import { KnowledgeAnalyticsPage } from '@/pages/admin/knowledge/KnowledgeAnalyticsPage';
+import { KnowledgeUploadPage } from '@/pages/admin/knowledge/KnowledgeUploadPage';
+import { CandidateReviewPage } from '@/pages/admin/knowledge/CandidateReviewPage';
+import { CandidateEditorPage } from '@/pages/admin/knowledge/CandidateEditorPage';
 
 function HomeRedirect() {
   const { user, isAuthenticated } = useAuthStore();
@@ -87,6 +90,9 @@ export function App() {
         <Route path="knowledge/:id" element={<KnowledgeArticleDetailPage />} />
         <Route path="knowledge/:id/edit" element={<KnowledgeEditorPage />} />
         <Route path="knowledge/:id/versions" element={<KnowledgeVersionHistoryPage />} />
+        <Route path="knowledge/upload" element={<KnowledgeUploadPage />} />
+        <Route path="knowledge/ingest/:jobId" element={<CandidateReviewPage />} />
+        <Route path="knowledge/ingest/:jobId/:candidateId" element={<CandidateEditorPage />} />
         <Route path="users" element={<UserManagementPage />} />
       </Route>
 

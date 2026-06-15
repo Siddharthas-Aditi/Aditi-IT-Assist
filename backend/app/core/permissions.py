@@ -176,6 +176,9 @@ class P(StrEnum):
     KNOWLEDGE_VIEW_INTERNAL = "knowledge:view_internal"
     KNOWLEDGE_SUGGEST = "knowledge:suggest"
     KNOWLEDGE_SUBMIT_FEEDBACK = "knowledge:submit_feedback"
+    # Document ingestion
+    KNOWLEDGE_INGEST = "knowledge:ingest"          # upload + run pipeline
+    KNOWLEDGE_INGEST_REVIEW = "knowledge:ingest_review"  # review + save candidates
 
     # ── Analytics ──────────────────────────────────────────
     ANALYTICS_VIEW_OWN = "analytics:view_own"
@@ -259,6 +262,8 @@ PERMISSION_REGISTRY: list[PermissionDef] = [
     PermissionDef(P.KNOWLEDGE_VIEW_INTERNAL, "Retrieve Internal/Unpublished KB", Resource.KNOWLEDGE, Action.READ, Scope.ALL, audit_required=True),
     PermissionDef(P.KNOWLEDGE_SUGGEST, "Suggest KB Improvements", Resource.KNOWLEDGE, Action.SUGGEST, Scope.NONE),
     PermissionDef(P.KNOWLEDGE_SUBMIT_FEEDBACK, "Submit KB Feedback", Resource.KNOWLEDGE, Action.FEEDBACK, Scope.OWN),
+    PermissionDef(P.KNOWLEDGE_INGEST, "Upload & Ingest Documents", Resource.KNOWLEDGE, Action.CREATE, Scope.NONE, audit_required=True),
+    PermissionDef(P.KNOWLEDGE_INGEST_REVIEW, "Review & Save Ingestion Candidates", Resource.KNOWLEDGE, Action.UPDATE, Scope.ALL, audit_required=True),
     # ── Analytics ──
     PermissionDef(P.ANALYTICS_VIEW_OWN, "View Own Stats", Resource.ANALYTICS, Action.VIEW, Scope.OWN),
     PermissionDef(P.ANALYTICS_VIEW_TEAM, "View Team Analytics", Resource.ANALYTICS, Action.VIEW, Scope.TEAM),
@@ -355,6 +360,8 @@ ROLE_PERMISSIONS: dict[UserRole, list[P]] = {
         P.KNOWLEDGE_PUBLISH,
         P.KNOWLEDGE_ARCHIVE,
         P.KNOWLEDGE_VIEW_ANALYTICS,
+        P.KNOWLEDGE_INGEST,
+        P.KNOWLEDGE_INGEST_REVIEW,
         P.ANALYTICS_VIEW_TEAM,
         P.ANALYTICS_VIEW_ALL,
         P.ANALYTICS_VIEW_AGENT_PERF,
@@ -368,6 +375,8 @@ ROLE_PERMISSIONS: dict[UserRole, list[P]] = {
         P.KNOWLEDGE_MANAGE_CATEGORIES,
         P.KNOWLEDGE_REINDEX,
         P.KNOWLEDGE_MANAGE_OWNERSHIP,
+        P.KNOWLEDGE_INGEST,
+        P.KNOWLEDGE_INGEST_REVIEW,
         P.ANALYTICS_EXPORT,
         P.ADMIN_MANAGE_USERS,
         P.ADMIN_MANAGE_ROLES,

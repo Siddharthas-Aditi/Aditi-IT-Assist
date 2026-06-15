@@ -1,6 +1,6 @@
 /** Knowledge management list page — admin/lead control of KB articles. */
 
-import { BarChart3, BookOpen, Database, FolderTree, ListChecks, Plus } from 'lucide-react';
+import { BarChart3, BookOpen, Database, FolderTree, ListChecks, Plus, Upload } from 'lucide-react';
 import { useState } from 'react';
 import { Link, NavLink } from 'react-router-dom';
 
@@ -21,6 +21,7 @@ const SUB_NAV = [
   { to: '/dashboard/knowledge/taxonomy', label: 'Taxonomy', icon: FolderTree },
   { to: '/dashboard/knowledge/indexing', label: 'Indexing', icon: Database },
   { to: '/dashboard/knowledge/analytics', label: 'Analytics', icon: BarChart3 },
+  { to: '/dashboard/knowledge/upload', label: 'Upload', icon: Upload },
 ];
 
 export function KnowledgeManagementPage() {

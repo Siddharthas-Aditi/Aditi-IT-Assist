@@ -14,6 +14,7 @@ from app.models.auth import (
     UserRoleAssignment,
 )
 from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
+from app.models.ingestion import IngestionCandidate, IngestionJob
 from app.models.knowledge import (
     KnowledgeArticle,
     KnowledgeArticleVersion,
@@ -68,4 +69,7 @@ __all__ = [
     # Audit & Analytics
     "AuditEvent",
     "AnalyticsSnapshot",
+    # Document Ingestion
+    "IngestionJob",
+    "IngestionCandidate",
 ]

@@ -103,6 +103,12 @@ class Settings(BaseSettings):
     RATE_LIMIT_REQUESTS_PER_MINUTE: int = 60
     RATE_LIMIT_BURST: int = 10
 
+    # Document Ingestion
+    UPLOAD_DIR: str = "/tmp/aditi_uploads"
+    MAX_UPLOAD_MB: int = 50
+    INGESTION_PARSER_VERSION: str = "1.0.0"
+    INGESTION_LLM_ENABLED: bool = True   # set False to skip LLM enrichment
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 
