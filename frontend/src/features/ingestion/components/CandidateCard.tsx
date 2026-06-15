@@ -1,4 +1,4 @@
-import { AlertCircle, AlertTriangle, CheckCircle2, Tag, XCircle } from 'lucide-react';
+import { AlertCircle, AlertTriangle, ArrowUpRight, CheckCircle2, Tag, XCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import type { IngestionCandidateSummary } from '@/types/ingestion';
@@ -44,7 +44,11 @@ export function CandidateCard({ candidate, jobId, selected = false, onSelect }: 
           <div className="flex items-center gap-2">
             {REVIEW_ICON[candidate.review_status]}
             <Link
-              to={`/dashboard/knowledge/ingest/${jobId}/${candidate.id}`}
+              to={
+                candidate.mapped_article_id
+                  ? `/dashboard/knowledge/${candidate.mapped_article_id}`
+                  : `/dashboard/knowledge/ingest/${jobId}/${candidate.id}`
+              }
               className="truncate text-sm font-semibold text-gray-900 hover:text-indigo-600 dark:text-gray-100 dark:hover:text-indigo-400"
             >
               {candidate.extracted_title ?? `Candidate #${candidate.candidate_index + 1}`}
@@ -76,7 +80,14 @@ export function CandidateCard({ candidate, jobId, selected = false, onSelect }: 
               </span>
             )}
             {candidate.mapped_article_id && (
-              <span className="text-indigo-500">Saved as article</span>
+              <Link
+                to={`/dashboard/knowledge/${candidate.mapped_article_id}`}
+                onClick={(e) => e.stopPropagation()}
+                className="inline-flex items-center gap-0.5 rounded bg-indigo-100 px-1.5 py-0.5 text-xs font-medium text-indigo-700 hover:bg-indigo-200 dark:bg-indigo-900/40 dark:text-indigo-300"
+              >
+                Saved as article
+                <ArrowUpRight className="h-3 w-3" />
+              </Link>
             )}
           </div>
         </div>

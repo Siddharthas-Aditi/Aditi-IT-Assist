@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, CheckCircle2, Save, XCircle } from 'lucide-react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { ArrowLeft, ArrowUpRight, CheckCircle2, Save, Send, XCircle } from 'lucide-react';
 
 import {
   useCandidate,
@@ -13,6 +13,7 @@ import { ConfidenceBadge } from '@/features/ingestion/components/ConfidenceBadge
 import { DuplicateSuggestionPanel } from '@/features/ingestion/components/DuplicateSuggestionPanel';
 import { ExtractionMetaBanner } from '@/features/ingestion/components/ExtractionMetaBanner';
 import { RawTextPreview } from '@/features/ingestion/components/RawTextPreview';
+import { apiRequest } from '@/lib/api';
 import type { CandidateUpdatePayload, IngestionWarning } from '@/types/ingestion';
 
 function WarnBadge({ w }: { w: IngestionWarning }) {
@@ -73,11 +74,17 @@ export function CandidateEditorPage() {
     setDirty(true);
   };
 
-  const handleSave = async () => {
+  const handleSave = async (submitForReview = false) => {
     setSaveError(null);
     try {
       if (dirty) await update.mutateAsync(form);
       const result = await save.mutateAsync({});
+      if (submitForReview) {
+        await apiRequest(`/knowledge/admin/articles/${result.article_id}/transition`, {
+          method: 'POST',
+          body: { action: 'submit_for_review' },
+        });
+      }
       // Navigate directly to the new article so the user can continue the lifecycle
       navigate(`/dashboard/knowledge/${result.article_id}`);
     } catch (err) {
@@ -149,17 +156,36 @@ export function CandidateEditorPage() {
               )}
               <button
                 type="button"
-                onClick={handleSave}
+                onClick={() => handleSave(false)}
+                disabled={save.isPending || blockingErrors.length > 0}
+                title={blockingErrors.length > 0 ? 'Fill in required fields (marked with *) to enable' : undefined}
+                className="flex items-center gap-1.5 rounded-md border border-indigo-300 px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-50 disabled:opacity-50"
+              >
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                Save as Draft
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSave(true)}
                 disabled={save.isPending || blockingErrors.length > 0}
                 title={blockingErrors.length > 0 ? 'Fill in required fields (marked with *) to enable' : undefined}
                 className="flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
               >
-                <CheckCircle2 className="h-3.5 w-3.5" />
-                Save as Draft Article
+                <Send className="h-3.5 w-3.5" />
+                Save & Submit for Review
               </button>
             </>
           )}
-          {isSaved && (
+          {isSaved && candidate.mapped_article_id && (
+            <Link
+              to={`/dashboard/knowledge/${candidate.mapped_article_id}`}
+              className="flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700"
+            >
+              <ArrowUpRight className="h-3.5 w-3.5" />
+              View Article & Continue Workflow
+            </Link>
+          )}
+          {isSaved && !candidate.mapped_article_id && (
             <span className="rounded-full bg-indigo-100 px-3 py-1 text-xs font-medium text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300">
               ✓ Saved as article
             </span>

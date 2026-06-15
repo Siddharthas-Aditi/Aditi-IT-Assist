@@ -106,6 +106,16 @@ export function KnowledgeArticleDetailPage() {
         <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Lifecycle
         </h3>
+        {article.status === 'draft' && (
+          <div className="mb-3 flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800">
+            <span className="mt-0.5 shrink-0">📋</span>
+            <span>
+              <strong>Draft article</strong> — not yet visible to the chatbot.
+              Click <strong>Submit for Review</strong> below to begin the approval process
+              (in_review → approved → published).
+            </span>
+          </div>
+        )}
         {article.status === 'approved' && !article.ownership_group_id && (
           <div className="mb-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
             <span className="mt-0.5 shrink-0">⚠️</span>

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Briefcase, CheckSquare, RefreshCw, XSquare } from 'lucide-react';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 
 import {
   useBulkSave,
@@ -32,6 +32,7 @@ export function CandidateReviewPage() {
   const { jobId } = useParams<{ jobId: string }>();
   const [activeTab, setActiveTab] = useState<CandidateReviewStatus | 'all'>('all');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkSavedCount, setBulkSavedCount] = useState<number | null>(null);
 
   const { data: jobData, isLoading: jobLoading } = useIngestionJob(jobId);
   const { data: candidates, isLoading: candidatesLoading } = useCandidates(
@@ -52,8 +53,10 @@ export function CandidateReviewPage() {
 
   const handleBulkSave = async () => {
     if (!jobId || !selectedIds.size) return;
+    const count = selectedIds.size;
     await bulkSave.mutateAsync({ candidate_ids: [...selectedIds] });
     setSelectedIds(new Set());
+    setBulkSavedCount(count);
   };
 
   if (jobLoading) return <div className="p-6 text-sm text-gray-500">Loading job…</div>;
@@ -116,6 +119,31 @@ export function CandidateReviewPage() {
           </div>
         ))}
       </div>
+
+      {/* Post-bulk-save guidance */}
+      {bulkSavedCount !== null && (
+        <div className="flex items-center justify-between rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-800 dark:border-indigo-700 dark:bg-indigo-950/30 dark:text-indigo-300">
+          <span>
+            ✅ <strong>{bulkSavedCount} article{bulkSavedCount !== 1 ? 's' : ''}</strong> saved as draft.
+            {' '}Submit each one for review to begin the approval workflow.
+          </span>
+          <div className="flex items-center gap-2 ml-4">
+            <Link
+              to="/dashboard/knowledge?status=draft"
+              className="whitespace-nowrap rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700"
+            >
+              View Draft Articles →
+            </Link>
+            <button
+              type="button"
+              onClick={() => setBulkSavedCount(null)}
+              className="text-xs text-indigo-600 hover:underline dark:text-indigo-400"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Processing indicator */}
       {isPending && (

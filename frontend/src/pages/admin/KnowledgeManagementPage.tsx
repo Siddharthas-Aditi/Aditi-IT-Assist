@@ -2,7 +2,7 @@
 
 import { BarChart3, BookOpen, Database, FolderTree, ListChecks, Plus, Upload } from 'lucide-react';
 import { useState } from 'react';
-import { Link, NavLink } from 'react-router-dom';
+import { Link, NavLink, useSearchParams } from 'react-router-dom';
 
 import { EmptyState } from '@/components/ui';
 import {
@@ -26,7 +26,12 @@ const SUB_NAV = [
 
 export function KnowledgeManagementPage() {
   const user = useAuthStore((s) => s.user);
-  const [filters, setFilters] = useState<ArticleFilters>({ limit: 25, offset: 0 });
+  const [searchParams] = useSearchParams();
+  const [filters, setFilters] = useState<ArticleFilters>(() => ({
+    limit: 25,
+    offset: 0,
+    status: (searchParams.get('status') as ArticleFilters['status']) ?? undefined,
+  }));
   const { data, isLoading, isError } = useArticles(filters);
 
   const canCreate = hasPermission(user, P.KNOWLEDGE_CREATE);
