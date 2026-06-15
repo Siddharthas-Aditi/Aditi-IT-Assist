@@ -125,7 +125,7 @@ export function useUpdateCandidate(jobId: string, candidateId: string) {
     mutationFn: (payload: CandidateUpdatePayload) =>
       apiRequest<IngestionCandidateDetail>(
         `${BASE}/jobs/${jobId}/candidates/${candidateId}`,
-        { method: 'PATCH', body: JSON.stringify(payload) }
+        { method: 'PATCH', body: payload }
       ),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ingestionKeys.candidate(jobId, candidateId) });
@@ -140,7 +140,7 @@ export function useSaveCandidate(jobId: string, candidateId: string) {
     mutationFn: (payload: SaveCandidateRequest) =>
       apiRequest<SaveCandidateResponse>(
         `${BASE}/jobs/${jobId}/candidates/${candidateId}/save`,
-        { method: 'POST', body: JSON.stringify(payload) }
+        { method: 'POST', body: payload }
       ),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ingestionKeys.candidate(jobId, candidateId) });
@@ -156,7 +156,7 @@ export function useRejectCandidate(jobId: string, candidateId: string) {
     mutationFn: (payload: RejectCandidateRequest) =>
       apiRequest<void>(
         `${BASE}/jobs/${jobId}/candidates/${candidateId}/reject`,
-        { method: 'POST', body: JSON.stringify(payload) }
+        { method: 'POST', body: payload }
       ),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ingestionKeys.candidates(jobId) });
@@ -172,7 +172,7 @@ export function useBulkSave(jobId: string) {
     mutationFn: (payload: BulkSaveRequest) =>
       apiRequest<BulkSaveResponse>(`${BASE}/jobs/${jobId}/bulk-save`, {
         method: 'POST',
-        body: JSON.stringify(payload),
+        body: payload,
       }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ingestionKeys.candidates(jobId) });

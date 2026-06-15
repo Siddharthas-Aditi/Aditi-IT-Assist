@@ -298,7 +298,9 @@ async def update_candidate(
 
     updates: dict = {}
     for field_name, value in payload.model_dump(exclude_none=True).items():
-        db_field = f"extracted_{field_name}"
+        # CandidateUpdatePayload fields are already named with the "extracted_" prefix
+        # (e.g. extracted_title, extracted_category) — use them directly as column names.
+        db_field = field_name
         if hasattr(c, db_field):
             # Convert Pydantic ExtractionStep models to plain dicts for JSONB
             if isinstance(value, list) and value and hasattr(value[0], "model_dump"):
@@ -338,8 +340,21 @@ async def save_candidate_as_article(
 
     # Build ArticleCreate from candidate fields
     article_create = map_candidate_to_article_create(
-        {f.replace("extracted_", "extracted_"): getattr(c, f)
-         for f in vars(c.__class__) if f.startswith("extracted_")},
+        {
+            "extracted_title": c.extracted_title,
+            "extracted_summary": c.extracted_summary,
+            "extracted_category": c.extracted_category,
+            "extracted_subcategory": c.extracted_subcategory,
+            "extracted_product_or_system": c.extracted_product_or_system,
+            "extracted_platform": c.extracted_platform,
+            "extracted_symptoms": c.extracted_symptoms,
+            "extracted_troubleshooting_steps": c.extracted_troubleshooting_steps,
+            "extracted_resolution_steps": c.extracted_resolution_steps,
+            "extracted_escalation_criteria": c.extracted_escalation_criteria,
+            "extracted_tags": c.extracted_tags,
+            "extracted_keywords": c.extracted_keywords,
+            "extracted_owner_group": c.extracted_owner_group,
+        },
         job_id=str(job_id),
         candidate_index=c.candidate_index,
         ownership_group_id=str(payload.ownership_group_id) if payload.ownership_group_id else None,
@@ -442,7 +457,21 @@ async def bulk_save_candidates(
             continue
         try:
             article_create = map_candidate_to_article_create(
-                {f: getattr(c, f) for f in vars(c.__class__) if f.startswith("extracted_")},
+                {
+                    "extracted_title": c.extracted_title,
+                    "extracted_summary": c.extracted_summary,
+                    "extracted_category": c.extracted_category,
+                    "extracted_subcategory": c.extracted_subcategory,
+                    "extracted_product_or_system": c.extracted_product_or_system,
+                    "extracted_platform": c.extracted_platform,
+                    "extracted_symptoms": c.extracted_symptoms,
+                    "extracted_troubleshooting_steps": c.extracted_troubleshooting_steps,
+                    "extracted_resolution_steps": c.extracted_resolution_steps,
+                    "extracted_escalation_criteria": c.extracted_escalation_criteria,
+                    "extracted_tags": c.extracted_tags,
+                    "extracted_keywords": c.extracted_keywords,
+                    "extracted_owner_group": c.extracted_owner_group,
+                },
                 job_id=str(job_id),
                 candidate_index=c.candidate_index,
                 ownership_group_id=str(payload.ownership_group_id) if payload.ownership_group_id else None,

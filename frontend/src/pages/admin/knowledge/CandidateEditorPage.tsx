@@ -43,6 +43,7 @@ export function CandidateEditorPage() {
   const [dirty, setDirty] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [showRejectPrompt, setShowRejectPrompt] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!candidate) return;
@@ -73,9 +74,15 @@ export function CandidateEditorPage() {
   };
 
   const handleSave = async () => {
-    if (dirty) await update.mutateAsync(form);
-    await save.mutateAsync({});
-    navigate(`/dashboard/knowledge/ingest/${jobId}`);
+    setSaveError(null);
+    try {
+      if (dirty) await update.mutateAsync(form);
+      const result = await save.mutateAsync({});
+      // Navigate directly to the new article so the user can continue the lifecycle
+      navigate(`/dashboard/knowledge/${result.article_id}`);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Save failed. Please try again.');
+    }
   };
 
   const handleReject = async () => {
@@ -200,6 +207,14 @@ export function CandidateEditorPage() {
 
       {/* v2 pipeline metadata banner */}
       <ExtractionMetaBanner candidate={candidate} />
+
+      {/* Save error banner */}
+      {saveError && (
+        <div className="mb-4 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/20 dark:text-red-400">
+          <XCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{saveError}</span>
+        </div>
+      )}
 
       {/* Warnings */}
       {(candidate.validation_warnings ?? []).length > 0 && (
