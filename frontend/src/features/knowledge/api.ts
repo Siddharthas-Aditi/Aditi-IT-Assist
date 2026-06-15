@@ -207,6 +207,15 @@ export function useReindex() {
   });
 }
 
+export function useCreateOwnershipGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { name: string; display_name: string; description?: string }) =>
+      apiRequest<OwnershipGroup>(`${ADMIN}/ownership-groups`, { method: 'POST', body: input }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: knowledgeKeys.ownership }),
+  });
+}
+
 export function useCreateTaxonomyTerm() {
   const qc = useQueryClient();
   return useMutation({

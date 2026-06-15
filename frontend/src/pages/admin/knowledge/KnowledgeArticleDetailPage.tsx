@@ -81,6 +81,22 @@ export function KnowledgeArticleDetailPage() {
         <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Lifecycle
         </h3>
+        {article.status === 'approved' && !article.ownership_group_id && (
+          <div className="mb-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            <span className="mt-0.5 shrink-0">⚠️</span>
+            <span>
+              This article needs an <strong>ownership group</strong> before it can be published.{' '}
+              {canEdit && (
+                <Link
+                  to={`/dashboard/knowledge/${article.id}/edit`}
+                  className="font-medium underline hover:text-amber-900"
+                >
+                  Edit article to assign one →
+                </Link>
+              )}
+            </span>
+          </div>
+        )}
         <LifecycleActions article={article} />
       </div>
 

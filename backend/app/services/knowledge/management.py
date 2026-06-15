@@ -67,6 +67,8 @@ _DIRECT_UPDATE_FIELDS = (
     "citation_label",
     "source_type",
     "source_reference",
+    "ownership_group_id",
+    "review_interval_days",
 )
 _STEP_FIELDS = ("troubleshooting_steps", "resolution_steps", "validation_steps")
 

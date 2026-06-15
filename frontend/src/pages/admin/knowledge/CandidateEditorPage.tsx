@@ -88,8 +88,17 @@ export function CandidateEditorPage() {
 
   const isSaved = candidate.review_status === 'saved';
   const isRejected = candidate.review_status === 'rejected';
+
+  // Re-evaluate error-severity warnings against the *current* form state.
+  // If the user has already filled in a previously-missing field, that warning
+  // is no longer blocking — don't keep the Save button disabled indefinitely.
   const blockingErrors = (candidate.validation_warnings ?? []).filter(
-    (w: IngestionWarning) => w.severity === 'error',
+    (w: IngestionWarning) => {
+      if (w.severity !== 'error') return false;
+      if (w.code === 'MISSING_TITLE' && (form.extracted_title ?? '').trim()) return false;
+      if (w.code === 'MISSING_CATEGORY' && (form.extracted_category ?? '').trim()) return false;
+      return true;
+    },
   );
 
   return (
@@ -135,7 +144,7 @@ export function CandidateEditorPage() {
                 type="button"
                 onClick={handleSave}
                 disabled={save.isPending || blockingErrors.length > 0}
-                title={blockingErrors.length > 0 ? 'Resolve errors before saving' : undefined}
+                title={blockingErrors.length > 0 ? 'Fill in required fields (marked with *) to enable' : undefined}
                 className="flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
               >
                 <CheckCircle2 className="h-3.5 w-3.5" />

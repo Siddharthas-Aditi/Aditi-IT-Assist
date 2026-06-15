@@ -20,6 +20,7 @@ import {
   useCompleteness,
   useCreateArticle,
   useCreateFromTemplate,
+  useCreateOwnershipGroup,
   useDuplicateHints,
   useOwnershipGroups,
   useTemplates,
@@ -151,11 +152,15 @@ export function KnowledgeEditorPage() {
   const create = useCreateArticle();
   const update = useUpdateArticle(id ?? '');
   const createFromTemplate = useCreateFromTemplate();
+  const createGroup = useCreateOwnershipGroup();
 
   const [form, setForm] = useState<ArticleWritePayload>(EMPTY);
   const [showPreview, setShowPreview] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showTemplatePicker, setShowTemplatePicker] = useState(!isEdit);
+  // Inline ownership-group creation
+  const [showCreateGroup, setShowCreateGroup] = useState(false);
+  const [newGroupName, setNewGroupName] = useState('');
 
   // Server-side quality data (only for saved/existing articles)
   const { data: completenessReport } = useCompleteness(id);
@@ -516,20 +521,81 @@ export function KnowledgeEditorPage() {
             </Field>
 
             <Field label="Ownership group">
-              <select
-                value={form.ownership_group_id ?? ''}
-                onChange={(e) => set('ownership_group_id', e.target.value)}
-                className={
-                  warnFor('ownership_group_id')?.severity === 'error' ? inputErrCls : inputCls
-                }
-              >
-                <option value="">— Select —</option>
-                {(groups ?? []).map((g) => (
-                  <option key={g.id} value={g.id}>
-                    {g.display_name}
-                  </option>
-                ))}
-              </select>
+              {showCreateGroup ? (
+                <div className="space-y-2">
+                  <input
+                    autoFocus
+                    value={newGroupName}
+                    onChange={(e) => setNewGroupName(e.target.value)}
+                    placeholder="Team name (e.g. Endpoint & Productivity)"
+                    className={inputCls}
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      disabled={createGroup.isPending || !newGroupName.trim()}
+                      onClick={async () => {
+                        const slug = newGroupName
+                          .trim()
+                          .toLowerCase()
+                          .replace(/[^a-z0-9]+/g, '-')
+                          .replace(/(^-|-$)/g, '');
+                        try {
+                          const g = await createGroup.mutateAsync({
+                            name: slug,
+                            display_name: newGroupName.trim(),
+                          });
+                          set('ownership_group_id', g.id);
+                          setNewGroupName('');
+                          setShowCreateGroup(false);
+                        } catch {
+                          // error stays in createGroup.error
+                        }
+                      }}
+                      className="rounded-md bg-primary px-3 py-1 text-xs font-medium text-white disabled:opacity-50"
+                    >
+                      {createGroup.isPending ? 'Creating…' : 'Create'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setShowCreateGroup(false); setNewGroupName(''); }}
+                      className="rounded-md border border-border px-3 py-1 text-xs"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                  {createGroup.isError && (
+                    <p className="text-xs text-red-600">
+                      {createGroup.error instanceof Error ? createGroup.error.message : 'Failed to create group'}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <select
+                    value={form.ownership_group_id ?? ''}
+                    onChange={(e) => set('ownership_group_id', e.target.value)}
+                    className={`flex-1 ${
+                      warnFor('ownership_group_id')?.severity === 'error' ? inputErrCls : inputCls
+                    }`}
+                  >
+                    <option value="">— Select —</option>
+                    {(groups ?? []).map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {g.display_name}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateGroup(true)}
+                    title="Create a new ownership group"
+                    className="shrink-0 rounded-lg border border-border px-2 py-1 text-xs hover:bg-accent"
+                  >
+                    + New
+                  </button>
+                </div>
+              )}
               <FieldWarning warnings={activeWarnings} field="ownership_group_id" />
             </Field>
 

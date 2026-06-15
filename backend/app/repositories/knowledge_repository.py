@@ -219,6 +219,9 @@ class KnowledgeRepository:
         )
         for chunk in existing:
             await self.db.delete(chunk)
+        # Flush deletes before inserts to avoid the unique constraint on
+        # (article_id, chunk_index) firing when SQLAlchemy batches them together.
+        await self.db.flush()
         for chunk in chunks:
             self.db.add(chunk)
         await self.db.flush()
