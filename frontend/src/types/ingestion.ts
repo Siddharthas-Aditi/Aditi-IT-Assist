@@ -7,6 +7,9 @@ export type CandidateReviewStatus = 'pending' | 'approved' | 'rejected' | 'saved
 export type WarningSeverity = 'error' | 'warning' | 'info';
 export type AllowedExtension = 'docx' | 'pdf' | 'pptx' | 'txt' | 'md';
 
+/** v2 pipeline confidence classification. */
+export type ConfidenceLevel = 'high' | 'medium' | 'low' | 'very_low';
+
 // ── Step ───────────────────────────────────────────────────────────────────
 export interface ExtractionStep {
   step_number: number;
@@ -55,6 +58,10 @@ export interface IngestionCandidateSummary {
   mapped_article_id: string | null;
   warning_count: number;
   created_at: string;
+  /** v2 pipeline — HIGH / MEDIUM / LOW / VERY_LOW */
+  confidence_level: ConfidenceLevel | null;
+  /** v2 pipeline — whether human review is required */
+  review_required: boolean;
 }
 
 export interface IngestionCandidateDetail {
@@ -82,6 +89,20 @@ export interface IngestionCandidateDetail {
   normalized_payload_json: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
+  /** v2 pipeline — extraction schema version */
+  schema_version: string | null;
+  /** v2 pipeline — parser profile name */
+  parser_profile: string | null;
+  /** v2 pipeline — pipeline version */
+  parser_version: string | null;
+  /** v2 pipeline — HIGH / MEDIUM / LOW / VERY_LOW */
+  confidence_level: ConfidenceLevel | null;
+  /** v2 pipeline — human review required before save */
+  review_required: boolean;
+  /** v2 pipeline — per-field confidence scores (0–1) */
+  field_confidences: Record<string, number> | null;
+  /** v2 pipeline — human-readable extraction warnings */
+  parser_warnings: string[] | null;
 }
 
 export interface CandidateUpdatePayload {

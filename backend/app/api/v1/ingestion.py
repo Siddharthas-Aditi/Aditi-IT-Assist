@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, UploadFile, status
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -374,6 +375,7 @@ async def save_candidate_as_article(
 @router.post(
     "/jobs/{job_id}/candidates/{candidate_id}/reject",
     status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
 )
 async def reject_candidate(
     job_id: uuid.UUID,
@@ -381,7 +383,7 @@ async def reject_candidate(
     payload: RejectCandidateRequest,
     actor: ReviewUser,
     db: DBDep,
-) -> None:
+) -> Response:
     """Reject a candidate — it will not become an article."""
     repo = IngestionRepository(db)
     c = await repo.get_candidate(candidate_id)
@@ -402,6 +404,7 @@ async def reject_candidate(
         {"review_status": "rejected", "validation_warnings": existing_warnings or None},
     )
     await db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

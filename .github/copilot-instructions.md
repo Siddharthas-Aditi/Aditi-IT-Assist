@@ -125,3 +125,28 @@ async def node_name(state: WorkflowState) -> WorkflowState:
 - Frontend: gate UI with `lib/permissions.ts` (`hasPermission`), data via React Query
   hooks in `features/knowledge/api.ts`. Backend always re-checks.
 - Docs: `docs/architecture/knowledge-management.md` and siblings.
+
+## Document Ingestion Pipeline
+- **Core principle**: "Schema-stable, parser-flexible." `ExtractionCandidate`
+  in `services/ingestion/schema.py` is the stable output contract — never change
+  it without bumping `SCHEMA_VERSION`.
+- **Adding new document formats**: create a `ParserProfile` in
+  `services/ingestion/profiles/` and register it. NO code changes to the
+  extraction engine are needed. See `docs/development/parser-rules.md`.
+- **Five service layers** (each independent):
+  - `extractor.py` — raw text only
+  - `normalizer.py` — structure tokens only, no semantic decisions
+  - `segmenter.py` — topic segments + `section_map`, no field values
+  - `field_extractor.py` — deterministic field values, no LLM
+  - `llm_extractor.py` — additive LLM enrichment with hallucination guard
+- **Confidence**: every `FieldExtraction` carries `confidence`, `method`,
+  `source_excerpt`. Composite score uses profile weights. `review_required = True`
+  when `confidence_level` is LOW or VERY_LOW.
+- **Pipeline must NEVER auto-publish** — all candidates require human review.
+- **LLM enrichment** (`INGESTION_LLM_ENABLED`): opt-in, only fills fields below
+  `profile.thresholds.medium`. Hallucination guard discards values not grounded
+  in source text.
+- Docs: `docs/architecture/document-ingestion.md`,
+  `docs/architecture/knowledge-ingestion-pipeline.md`,
+  `docs/development/parser-rules.md`,
+  `docs/development/extraction-schema.md`.

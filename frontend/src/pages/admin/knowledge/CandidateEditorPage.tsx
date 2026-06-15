@@ -11,6 +11,7 @@ import {
 } from '@/features/ingestion';
 import { ConfidenceBadge } from '@/features/ingestion/components/ConfidenceBadge';
 import { DuplicateSuggestionPanel } from '@/features/ingestion/components/DuplicateSuggestionPanel';
+import { ExtractionMetaBanner } from '@/features/ingestion/components/ExtractionMetaBanner';
 import { RawTextPreview } from '@/features/ingestion/components/RawTextPreview';
 import type { CandidateUpdatePayload, IngestionWarning } from '@/types/ingestion';
 
@@ -104,7 +105,11 @@ export function CandidateEditorPage() {
           Back to job
         </button>
         <div className="flex items-center gap-2">
-          <ConfidenceBadge score={candidate.extracted_confidence} size="md" />
+          <ConfidenceBadge
+            score={candidate.extracted_confidence ?? undefined}
+            level={candidate.confidence_level}
+            size="md"
+          />
           {!isSaved && !isRejected && (
             <>
               <button
@@ -183,6 +188,9 @@ export function CandidateEditorPage() {
           </div>
         </div>
       )}
+
+      {/* v2 pipeline metadata banner */}
+      <ExtractionMetaBanner candidate={candidate} />
 
       {/* Warnings */}
       {(candidate.validation_warnings ?? []).length > 0 && (

@@ -1,4 +1,4 @@
-import { AlertCircle, CheckCircle2, Tag, XCircle } from 'lucide-react';
+import { AlertCircle, AlertTriangle, CheckCircle2, Tag, XCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import type { IngestionCandidateSummary } from '@/types/ingestion';
@@ -59,7 +59,16 @@ export function CandidateCard({ candidate, jobId, selected = false, onSelect }: 
                 {candidate.extracted_category}
               </span>
             )}
-            <ConfidenceBadge score={candidate.extracted_confidence} />
+            <ConfidenceBadge
+              score={candidate.extracted_confidence ?? undefined}
+              level={candidate.confidence_level}
+            />
+            {candidate.review_required && candidate.review_status === 'pending' && (
+              <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
+                <AlertTriangle className="h-3 w-3" />
+                Review required
+              </span>
+            )}
             {candidate.warning_count > 0 && (
               <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
                 <AlertCircle className="h-3 w-3" />

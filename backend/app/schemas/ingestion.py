@@ -13,7 +13,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 # ── Enums (strings, mirror ORM enums) ─────────────────────────────────────────
@@ -128,7 +128,32 @@ class IngestionCandidateSummary(BaseModel):
     )
     created_at: datetime
 
+    # ── Adaptive extraction metadata (v2 pipeline) ─────────────────────────
+    confidence_level: str | None = Field(
+        default=None,
+        description="HIGH / MEDIUM / LOW / VERY_LOW — from normalized_payload_json",
+    )
+    review_required: bool = Field(
+        default=True,
+        description="Whether human review is required before saving",
+    )
+
     model_config = {"from_attributes": True}
+
+    @model_validator(mode="before")
+    @classmethod
+    def _populate_from_payload(cls, data: Any) -> Any:
+        """Extract confidence_level and review_required from normalized_payload_json."""
+        if not isinstance(data, dict):
+            # ORM object — let from_attributes handle it; fields default to None/True
+            return data
+        payload = data.get("normalized_payload_json") or {}
+        if isinstance(payload, dict):
+            if "confidence_level" not in data or data.get("confidence_level") is None:
+                data["confidence_level"] = payload.get("confidence_level")
+            if "review_required" not in data:
+                data["review_required"] = payload.get("review_required", True)
+        return data
 
 
 class IngestionCandidateDetail(BaseModel):
@@ -163,10 +188,49 @@ class IngestionCandidateDetail(BaseModel):
     raw_segment_text: str | None = None
     normalized_payload_json: dict[str, Any] | None = None
 
+    # ── Adaptive extraction metadata (v2 pipeline) ─────────────────────────
+    schema_version: str | None = Field(
+        default=None, description="Extraction schema version (e.g. '2.0.0')"
+    )
+    parser_profile: str | None = Field(
+        default=None, description="Name of the parser profile used"
+    )
+    parser_version: str | None = Field(
+        default=None, description="Pipeline version that produced this candidate"
+    )
+    confidence_level: str | None = Field(
+        default=None, description="HIGH / MEDIUM / LOW / VERY_LOW"
+    )
+    review_required: bool = Field(
+        default=True, description="Whether human review is required before saving"
+    )
+    field_confidences: dict[str, float] | None = Field(
+        default=None, description="Per-field extraction confidence scores (0–1)"
+    )
+    parser_warnings: list[str] | None = Field(
+        default=None, description="Human-readable extraction quality warnings"
+    )
+
     created_at: datetime
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+    @model_validator(mode="before")
+    @classmethod
+    def _populate_from_payload(cls, data: Any) -> Any:
+        """Unpack normalized_payload_json into top-level convenience fields."""
+        if not isinstance(data, dict):
+            return data
+        payload = data.get("normalized_payload_json") or {}
+        if not isinstance(payload, dict):
+            return data
+        for key in ("schema_version", "parser_profile", "parser_version",
+                    "confidence_level", "review_required",
+                    "field_confidences", "parser_warnings"):
+            if key not in data or data.get(key) is None:
+                data[key] = payload.get(key)
+        return data
 
 
 class CandidateUpdatePayload(BaseModel):

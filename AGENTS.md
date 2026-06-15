@@ -549,3 +549,49 @@ Docs: `docs/architecture/knowledge-management.md`,
 `docs/architecture/retrieval-and-indexing.md`,
 `docs/product/knowledge-workflow.md`,
 `docs/security/knowledge-access-control.md`.
+
+---
+
+## Document Ingestion Pipeline
+
+> Not a conversational agent — a background ETL pipeline for admin-uploaded documents.
+
+The document ingestion pipeline converts uploaded IT support documents (DOCX,
+PDF, PPTX, TXT, Markdown) into structured `IngestionCandidate` records that
+reviewers can promote to draft `KnowledgeArticle` entries.
+
+### Design Principle: Schema-Stable, Parser-Flexible
+
+`ExtractionCandidate` in `services/ingestion/schema.py` is the stable contract.
+How a document is parsed (profiles, strategies) may evolve freely — the output
+schema does not change without a version bump.
+
+### Pipeline Layers
+
+| Layer | File | Responsibility |
+|-------|------|----------------|
+| A | `extractor.py` | Raw text from any file format |
+| B | `normalizer.py` | Typed `NormalizedLine` sequence |
+| — | `profiles/` | Document-family configuration (no code change for new formats) |
+| C | `segmenter.py` | Topic boundaries + `section_map` |
+| D | `field_extractor.py` | Deterministic multi-strategy field extraction |
+| D+ | `llm_extractor.py` | Optional LLM enrichment for low-confidence fields |
+| — | `confidence.py` | Weighted composite score |
+
+### Adding a New Document Format
+
+Create a new `ParserProfile` in `services/ingestion/profiles/` and register it.
+**No changes to the extraction engine are needed.**
+See `docs/development/parser-rules.md` for the step-by-step guide.
+
+### Key Rules
+- ❌ The pipeline must NEVER auto-publish articles — candidates require human review
+- ❌ LLM enrichment must NEVER invent steps not grounded in the source text
+- ✅ Every extracted field carries `confidence`, `method`, and `source_excerpt`
+- ✅ Candidates with `confidence_level = LOW` or `VERY_LOW` set `review_required = True`
+- ✅ All pipeline stages are logged with per-stage timing in `processing_summary`
+
+Docs: `docs/architecture/document-ingestion.md`,
+`docs/architecture/knowledge-ingestion-pipeline.md`,
+`docs/development/parser-rules.md`,
+`docs/development/extraction-schema.md`.
