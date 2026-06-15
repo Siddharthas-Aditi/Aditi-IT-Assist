@@ -51,6 +51,65 @@ class EmbeddingClient:
         raise NotImplementedError("Wire a concrete embedding provider here")
 
 
+class AzureOpenAIEmbeddingClient(EmbeddingClient):
+    """Production embedding client using Azure OpenAI text-embedding-3-large via LiteLLM.
+
+    Activated automatically when LLM_PROVIDER=azure and
+    AZURE_OPENAI_API_KEY / AZURE_OPENAI_ENDPOINT are set.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(store_type=settings.VECTOR_STORE_TYPE)
+        self.model = settings.effective_embedding_model           # e.g. "azure/text-embedding-3-large"
+        self.api_key = settings.AZURE_OPENAI_API_KEY
+        self.api_base = settings.AZURE_OPENAI_ENDPOINT
+        self.api_version = settings.AZURE_OPENAI_API_VERSION
+        self.dimensions = settings.EMBEDDING_DIMENSIONS
+        self.available = bool(self.api_key and self.api_base)
+
+    async def embed(self, texts: list[str]) -> list[list[float]] | None:
+        """Embed a batch of texts using Azure text-embedding-3-large.
+
+        Returns a list of float vectors in the same order as ``texts``,
+        or None if the client is not configured.
+        """
+        if not self.available:
+            return None
+        if not texts:
+            return []
+
+        try:
+            import litellm
+
+            response = await litellm.aembedding(
+                model=self.model,
+                input=texts,
+                api_key=self.api_key,
+                api_base=self.api_base,
+                api_version=self.api_version,
+                dimensions=self.dimensions,
+            )
+            vectors = [item["embedding"] for item in response.data]
+            logger.info(
+                "embeddings_generated",
+                model=self.model,
+                count=len(vectors),
+                dimensions=self.dimensions,
+            )
+            return vectors
+        except Exception as exc:
+            logger.error("embedding_failed", model=self.model, error=str(exc))
+            return None
+
+
+def get_embedding_client() -> EmbeddingClient:
+    """Return the appropriate embedding client based on configured provider."""
+    if settings.is_azure and settings.AZURE_OPENAI_API_KEY and settings.AZURE_OPENAI_ENDPOINT:
+        return AzureOpenAIEmbeddingClient()
+    return EmbeddingClient(settings.VECTOR_STORE_TYPE)
+
+
+
 class KnowledgeIndexingService:
     """Prepares and (re)indexes knowledge articles for retrieval."""
 
@@ -61,7 +120,7 @@ class KnowledgeIndexingService:
         embedder: EmbeddingClient | None = None,
     ) -> None:
         self.repo = repo
-        self.embedder = embedder or EmbeddingClient(settings.VECTOR_STORE_TYPE)
+        self.embedder = embedder or get_embedding_client()
 
     async def prepare_article(self, article: KnowledgeArticle) -> int:
         """Regenerate retrieval_text + chunks for an article (no index write).

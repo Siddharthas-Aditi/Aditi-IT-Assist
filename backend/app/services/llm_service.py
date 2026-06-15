@@ -27,10 +27,10 @@ class LLMService:
     """
 
     def __init__(self) -> None:
-        self.model = settings.LLM_MODEL
+        self.model = settings.effective_llm_model
         self.temperature = settings.LLM_TEMPERATURE
         self.max_tokens = settings.LLM_MAX_TOKENS
-        self._available = bool(settings.LLM_API_KEY and settings.LLM_API_KEY != "your-api-key-here")
+        self._available = settings.llm_is_configured
 
     @property
     def is_available(self) -> bool:
@@ -61,6 +61,7 @@ class LLMService:
         logger.debug(
             "llm_request",
             model=self.model,
+            provider=settings.LLM_PROVIDER,
             prompt_length=len(prompt),
         )
 
@@ -69,7 +70,16 @@ class LLMService:
             messages=messages,
             temperature=temperature or self.temperature,
             max_tokens=max_tokens or self.max_tokens,
-            api_key=settings.LLM_API_KEY,
+            api_key=settings.effective_llm_api_key,
+            # Azure-specific routing — ignored by LiteLLM for non-azure providers
+            **(
+                {
+                    "api_base": settings.AZURE_OPENAI_ENDPOINT,
+                    "api_version": settings.AZURE_OPENAI_API_VERSION,
+                }
+                if settings.is_azure
+                else {}
+            ),
         )
 
         content = response.choices[0].message.content or ""

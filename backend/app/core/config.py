@@ -73,11 +73,47 @@ class Settings(BaseSettings):
     SAML_DEFAULT_ROLE: str = "employee"
 
     # LLM Configuration
-    LLM_PROVIDER: str = "openai"
-    LLM_MODEL: str = "gpt-4o"
-    LLM_API_KEY: str = ""
+    LLM_PROVIDER: str = "openai"         # "openai" | "azure" | "anthropic"
+    LLM_MODEL: str = "gpt-4o"            # used when LLM_PROVIDER != "azure"
+    LLM_API_KEY: str = ""                # OpenAI key (ignored when LLM_PROVIDER=azure)
     LLM_TEMPERATURE: float = 0.3
     LLM_MAX_TOKENS: int = 4096
+
+    # Azure OpenAI / Azure AI Services (LLM_PROVIDER=azure)
+    AZURE_OPENAI_ENDPOINT: str = ""                        # https://resource.services.ai.azure.com
+    AZURE_OPENAI_API_KEY: str = ""                         # Azure resource key
+    AZURE_OPENAI_API_VERSION: str = "2024-12-01-preview"
+    AZURE_OPENAI_LLM_DEPLOYMENT: str = "gpt-4.1"
+    AZURE_OPENAI_EMBEDDING_DEPLOYMENT: str = "text-embedding-3-large"
+    EMBEDDING_DIMENSIONS: int = 3072  # text-embedding-3-large default (max); 1536 for Ada
+
+    # ── Derived helpers ────────────────────────────────────────────────────
+    @property
+    def is_azure(self) -> bool:
+        return self.LLM_PROVIDER.lower() == "azure"
+
+    @property
+    def effective_llm_model(self) -> str:
+        """LiteLLM model string, e.g. 'azure/gpt-4.1' or 'gpt-4o'."""
+        if self.is_azure:
+            return f"azure/{self.AZURE_OPENAI_LLM_DEPLOYMENT}"
+        return self.LLM_MODEL
+
+    @property
+    def effective_llm_api_key(self) -> str:
+        return self.AZURE_OPENAI_API_KEY if self.is_azure else self.LLM_API_KEY
+
+    @property
+    def effective_embedding_model(self) -> str:
+        if self.is_azure:
+            return f"azure/{self.AZURE_OPENAI_EMBEDDING_DEPLOYMENT}"
+        return "text-embedding-3-small"  # fallback for non-azure
+
+    @property
+    def llm_is_configured(self) -> bool:
+        """True when a real key is present (not placeholder)."""
+        key = self.effective_llm_api_key
+        return bool(key and key not in ("your-api-key-here", "your-azure-key-here", ""))
 
     # Vector Store
     VECTOR_STORE_TYPE: str = "pgvector"
