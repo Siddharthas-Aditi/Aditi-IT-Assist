@@ -152,20 +152,25 @@ async def run_pipeline(
             # Validate (works on flat dict)
             vr = validate_candidate(_candidate_to_validator_dict(candidate))
 
-            # Duplicate hints
+            # Duplicate hints — use a SAVEPOINT so that if the SELECT fails
+            # (e.g. schema mismatch, transient error) the outer transaction is
+            # NOT poisoned. Without this, a caught Python exception still leaves
+            # the PostgreSQL connection in an aborted-transaction state, causing
+            # every subsequent statement to fail with InFailedSQLTransactionError.
             dup_warnings: list[dict] = []
             try:
                 dup_title = str(candidate.field_value("title") or "")
                 dup_tags = list(candidate.field_value("tags") or [])  # type: ignore[arg-type]
                 dup_product = _str_val(candidate.field_value("product_or_system"))
                 dup_category = _str_val(candidate.field_value("category"))
-                matches = await find_duplicates(
-                    title=dup_title,
-                    tags=dup_tags,
-                    product_or_system=dup_product,
-                    category=dup_category,
-                    db=db,
-                )
+                async with db.begin_nested():
+                    matches = await find_duplicates(
+                        title=dup_title,
+                        tags=dup_tags,
+                        product_or_system=dup_product,
+                        category=dup_category,
+                        db=db,
+                    )
                 dup_warnings = [
                     {
                         "code": "DUPLICATE_HINT",
@@ -247,6 +252,10 @@ async def run_pipeline(
         tb = traceback.format_exc()
         logger.exception("Ingestion pipeline FAILED for job=%s", job_id)
         try:
+            # The session may be in a failed/rolled-back state after the error.
+            # Explicitly roll back before issuing new SQL so we get a clean
+            # transaction for the status update.
+            await db.rollback()
             await repo.update_job(
                 job_id,
                 {
