@@ -133,19 +133,39 @@ def _build_focused_query(diag_ctx: DiagnosticContext, state: WorkflowState) -> s
     """Build a focused retrieval query from diagnostic context.
 
     Priority order:
-    1. Exact problem statement (most specific)
-    2. Symptom + category combination
-    3. Subcategory + any error message
-    4. Fall back to latest user message
+    1. Entity-specific: use normalized system + symptom for targeted search
+    2. Exact problem statement (most specific)
+    3. Symptom + category combination
+    4. Subcategory + any error message
+    5. Fall back to latest user message
     """
-    # Best case: we have a specific problem statement
+    # Best case: entity-specific query (e.g. "sixth sense login locked account")
+    if diag_ctx.normalized_system:
+        parts = [diag_ctx.normalized_system.replace("_", " ")]
+        if diag_ctx.symptom:
+            parts.append(diag_ctx.symptom.replace("-", " "))
+        if diag_ctx.login_issue_flag:
+            parts.append("login")
+        if diag_ctx.blocked_account_flag == "yes":
+            parts.append("account locked blocked")
+        if diag_ctx.otp_issue_flag:
+            parts.append("otp")
+        if diag_ctx.unhandled_message_flag:
+            parts.append("unhandled message")
+        if diag_ctx.error_message and "unhandled" not in parts[-1]:
+            parts.append(diag_ctx.error_message)
+        if diag_ctx.exact_problem_statement:
+            parts.append(diag_ctx.exact_problem_statement)
+        return " ".join(parts)
+
+    # Good case: specific problem statement
     if diag_ctx.exact_problem_statement:
         parts = [diag_ctx.exact_problem_statement]
         if diag_ctx.error_message:
             parts.append(diag_ctx.error_message)
         return " ".join(parts)
 
-    # Good case: we have a categorized symptom
+    # Okay case: categorized symptom
     if diag_ctx.symptom:
         parts = []
         if diag_ctx.issue_category:

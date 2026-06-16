@@ -16,6 +16,12 @@ def route_after_triage(state: WorkflowState) -> str:
         return END  # Return clarification question to user
     if state.get("issue_category") is None:
         return "escalate"  # Cannot classify after attempts
+
+    # Check if diagnostic context indicates live agent request
+    diag = state.get("diagnostic_context") or {}
+    if diag.get("live_agent_requested"):
+        return "escalate"
+
     return "retrieve"
 
 
@@ -29,7 +35,11 @@ def route_after_retrieval(state: WorkflowState) -> str:
 
 
 def route_after_resolution(state: WorkflowState) -> str:
-    """Route after resolution attempt."""
+    """Route after resolution attempt.
+
+    Higher threshold (0.5) to return resolution.
+    The resolution node itself adds "Did this help?" framing.
+    """
     confidence = state.get("resolution_confidence", 0)
     if confidence >= 0.5:
         return END  # Provide resolution (with disclaimer if < 0.8)

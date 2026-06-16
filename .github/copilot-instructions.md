@@ -176,3 +176,27 @@ async def node_name(state: WorkflowState) -> WorkflowState:
   `docs/architecture/conversation-feedback-model.md`,
   `docs/architecture/knowledge-feedback-loop.md`,
   `docs/security/feedback-access-and-privacy.md`.
+
+## Conversational Intelligence (Entity + Intent + Playbooks)
+- **Entity normalization**: `services/agents/entity_normalizer.py` maps fuzzy
+  product/system mentions (including typos) to canonical system IDs.
+  Uses three-phase matching: exact alias → substring → fuzzy (SequenceMatcher).
+- **Intent detection**: `detect_issue_intent()` extracts login, lock, OTP,
+  error, crash, performance flags from user text. Orthogonal to entity.
+- **Playbook registry**: `services/agents/playbooks.py` — each supported system
+  has a diagnostic playbook that defines required slots, clarification questions,
+  retrieval filters, and escalation triggers.
+- **Triage flow**: entity normalize → intent detect → classify → playbook
+  evaluate → clarify or proceed. Entity match overrides broad keyword categories.
+- **Entity-specific playbooks**: `SIXTH_SENSE_PLAYBOOK`, `OUTLOOK_PLAYBOOK`,
+  `ZOOM_PLAYBOOK`, etc. Use `get_playbook_for_entity(canonical_name)`.
+- **Context persistence**: `DiagnosticContext` carries `normalized_system`,
+  `login_issue_flag`, `blocked_account_flag`, `otp_issue_flag` across turns.
+  Chat service no longer resets context between non-clarification turns.
+- **Escalation policy**: only escalate after meaningful diagnostic attempt —
+  never on first symptom mention. Include entity context in handoff summary.
+- Docs: `docs/architecture/intent-analysis.md`,
+  `docs/architecture/entity-normalization.md`,
+  `docs/architecture/chat-playbooks.md`,
+  `docs/product/conversation-quality-guidelines.md`,
+  `docs/development/failure-cases-and-golden-conversations.md`.

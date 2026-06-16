@@ -58,11 +58,22 @@ class DiagnosticContext:
     symptom: str | None = None
     exact_problem_statement: str | None = None
 
+    # ── Entity Normalization ─────────────────────────────────────
+    normalized_system: str | None = None     # Canonical system name from entity registry
+    raw_system_mention: str | None = None    # Original text the user typed
+    entity_confidence: float = 0.0           # Entity recognition confidence
+
     # ── Environment Context ──────────────────────────────────────
     affected_system: str | None = None
     device_type: str | None = None
     platform_os: str | None = None
     error_message: str | None = None
+
+    # ── Issue-Specific Flags ─────────────────────────────────────
+    login_issue_flag: bool = False
+    blocked_account_flag: str | None = None   # "yes" | "no" | "unsure"
+    otp_issue_flag: bool = False
+    unhandled_message_flag: bool = False
 
     # ── Temporal & Impact ────────────────────────────────────────
     duration: str | None = None
@@ -96,6 +107,7 @@ class DiagnosticContext:
         The minimum requirement is:
         - A specific category (not just broad product match)
         - AND at least one of: symptom, exact problem, error message
+        - OR: a recognized entity + login flag (enough for playbook-guided flow)
         """
         has_category = bool(self.issue_category)
         has_specificity = bool(
@@ -104,7 +116,12 @@ class DiagnosticContext:
             or self.error_message
             or self.issue_subcategory
         )
-        return has_category and has_specificity
+        # Entity-aware: if we know the system AND have a login/issue flag, proceed
+        has_entity_context = bool(
+            self.normalized_system
+            and (self.login_issue_flag or self.otp_issue_flag or self.unhandled_message_flag)
+        )
+        return (has_category and has_specificity) or has_entity_context
 
     def should_clarify(self) -> bool:
         """Determine if the agent should ask a follow-up question."""
@@ -158,10 +175,18 @@ class DiagnosticContext:
             "exact_problem_statement", "affected_system", "device_type",
             "platform_os", "error_message", "duration", "urgency",
             "business_impact", "vpn_status", "network_type",
+            "normalized_system", "raw_system_mention",
+            "blocked_account_flag",
         ]:
             val = getattr(self, slot_name, None)
             if val:
-                result[slot_name] = val
+                result[slot_name] = str(val)
+        if self.login_issue_flag:
+            result["login_issue_flag"] = "true"
+        if self.otp_issue_flag:
+            result["otp_issue_flag"] = "true"
+        if self.unhandled_message_flag:
+            result["unhandled_message_flag"] = "true"
         if self.steps_already_tried:
             result["steps_already_tried"] = ", ".join(self.steps_already_tried)
         return result
@@ -182,10 +207,17 @@ class DiagnosticContext:
             "issue_subcategory": self.issue_subcategory,
             "symptom": self.symptom,
             "exact_problem_statement": self.exact_problem_statement,
+            "normalized_system": self.normalized_system,
+            "raw_system_mention": self.raw_system_mention,
+            "entity_confidence": self.entity_confidence,
             "affected_system": self.affected_system,
             "device_type": self.device_type,
             "platform_os": self.platform_os,
             "error_message": self.error_message,
+            "login_issue_flag": self.login_issue_flag,
+            "blocked_account_flag": self.blocked_account_flag,
+            "otp_issue_flag": self.otp_issue_flag,
+            "unhandled_message_flag": self.unhandled_message_flag,
             "duration": self.duration,
             "urgency": self.urgency,
             "business_impact": self.business_impact,

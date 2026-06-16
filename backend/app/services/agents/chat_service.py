@@ -68,19 +68,21 @@ class ChatService:
             # Append new human message and increment turn count
             state["messages"] = state["messages"] + [HumanMessage(content=user_message)]
             state["turn_count"] = state.get("turn_count", 0) + 1
-            # If the previous turn ended with a clarification question,
-            # preserve the category and diagnostic context for follow-up.
+
+            # ALWAYS preserve diagnostic_context and issue_category across turns.
+            # Only reset them if the user is clearly starting a new topic (detected
+            # by the triage node, not by the chat service).
             was_clarification_turn = state.get("needs_clarification", False)
             state["needs_clarification"] = False
             state["clarification_question"] = None
             state["quick_replies"] = None
-            if not was_clarification_turn:
-                # Fresh issue — reset category and all retrieval state
-                state["issue_category"] = None
-                state["issue_subcategory"] = None
-                # Reset diagnostic context for new topic
-                state["diagnostic_context"] = None
-            # Always reset retrieval/resolution state for the new turn
+
+            # NOTE: We no longer reset issue_category or diagnostic_context here.
+            # The triage node handles topic-shift detection internally. Resetting
+            # context here was the root cause of the "Sixth Sense" conversation
+            # failure — context was lost between the first and second message.
+
+            # Reset retrieval/resolution state for the new turn
             state["knowledge_results"] = []
             state["knowledge_confidence"] = 0.0
             state["knowledge_citations"] = []

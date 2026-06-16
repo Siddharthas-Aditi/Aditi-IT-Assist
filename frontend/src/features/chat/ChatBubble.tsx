@@ -9,14 +9,6 @@ interface ChatBubbleProps {
   index: number;
 }
 
-/** Format category slug into a readable label, e.g. "email/outlook" → "Email / Outlook" */
-function formatCategory(category: string): string {
-  return category
-    .split('/')
-    .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
-    .join(' / ');
-}
-
 /**
  * Render LLM prose content with basic markdown-style formatting.
  * Handles **bold**, numbered lists, and line breaks.
@@ -114,16 +106,11 @@ export function ChatBubble({ message, index }: ChatBubbleProps) {
           <ProseContent text={proseSingleStep} />
         )}
 
-        {/* Metadata row — category badge + confidence */}
+        {/* Metadata row — confidence only (removed noisy category badge) */}
         {!isUser && message.confidence !== undefined && message.confidence > 0 && (
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            {message.category && (
-              <Badge variant="primary" className="text-[10px]">
-                {formatCategory(message.category)}
-              </Badge>
-            )}
             <Badge
-              variant={message.confidence >= 0.8 ? 'success' : 'warning'}
+              variant={message.confidence >= 0.8 ? 'success' : message.confidence >= 0.5 ? 'warning' : 'default'}
               className="text-[10px]"
             >
               <Shield className="mr-1 h-2.5 w-2.5" />

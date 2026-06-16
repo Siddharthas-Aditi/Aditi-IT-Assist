@@ -488,6 +488,135 @@ HARDWARE_OTHER_PLAYBOOK = IssuePlaybook(
     retrieval_boost_terms=["hardware", "peripheral", "device", "driver"],
 )
 
+SIXTH_SENSE_PLAYBOOK = IssuePlaybook(
+    category="access/sixth_sense",
+    display_name="Sixth Sense / Naukri",
+    description="Sixth Sense (Naukri) portal login, account lock, and OTP issues",
+    required_slots=["symptom"],
+    subtypes=[
+        "login-failure",
+        "account-locked",
+        "unhandled-message",
+        "otp-issue",
+        "password-reset",
+        "blocked-account",
+    ],
+    questions=[
+        PlaybookQuestion(
+            slot="symptom",
+            question=(
+                "I see you're having trouble with Sixth Sense (Naukri). "
+                "Can you tell me what's happening?"
+            ),
+            priority=1,
+            options=[
+                ClarificationOption(
+                    "Can't log in / login error", "login-failure",
+                    follow_up="Are you seeing an 'Unhandled Message' error?",
+                ),
+                ClarificationOption(
+                    "Account seems locked/blocked", "account-locked",
+                    follow_up="Did you enter your password incorrectly multiple times?",
+                ),
+                ClarificationOption(
+                    "'Unhandled Message' error", "unhandled-message",
+                ),
+                ClarificationOption(
+                    "OTP not received", "otp-issue",
+                ),
+                ClarificationOption(
+                    "Need to reset password", "password-reset",
+                ),
+                ClarificationOption("Something else", "other"),
+            ],
+        ),
+        PlaybookQuestion(
+            slot="error_message",
+            question=(
+                "When you try to log in, do you see a specific error message? "
+                "For example, 'Unhandled Message' or 'Account blocked'?"
+            ),
+            priority=2,
+            skip_if=["exact_problem_statement"],
+            condition="login-failure",
+        ),
+        PlaybookQuestion(
+            slot="blocked_account_flag",
+            question=(
+                "Did you enter your password incorrectly several times before this happened? "
+                "Naukri accounts get temporarily blocked after 5 or more wrong attempts."
+            ),
+            priority=2,
+            options=[
+                ClarificationOption("Yes, multiple wrong passwords", "yes"),
+                ClarificationOption("No, first attempt today", "no"),
+                ClarificationOption("Not sure", "unsure"),
+            ],
+            skip_if=["error_message"],
+            condition="account-locked",
+        ),
+    ],
+    retrieval_category_filter="access/permissions",
+    retrieval_boost_terms=[
+        "sixth sense", "naukri", "login", "locked", "blocked",
+        "unhandled message", "otp", "password",
+    ],
+    max_retrieval_results=3,
+    escalation_triggers=[
+        PlaybookEscalationTrigger(
+            condition="account_locked_over_1_hour",
+            reason="Account still locked after 1-hour wait — needs IT admin intervention",
+            priority="P2",
+        ),
+        PlaybookEscalationTrigger(
+            condition="otp_delivery_failure",
+            reason="OTP not received after following all steps — contact info may need update",
+            priority="P2",
+        ),
+    ],
+)
+
+AUDIO_PLAYBOOK = IssuePlaybook(
+    category="hardware/audio",
+    display_name="Audio / Headset / Speakers",
+    description="Audio output, microphone, and headset issues",
+    required_slots=["symptom"],
+    subtypes=[
+        "no-audio-output",
+        "microphone-not-working",
+        "headset-not-detected",
+        "audio-crackling",
+        "bluetooth-audio-issue",
+    ],
+    questions=[
+        PlaybookQuestion(
+            slot="symptom",
+            question="What audio issue are you experiencing?",
+            priority=1,
+            options=[
+                ClarificationOption("No sound at all", "no-audio-output"),
+                ClarificationOption("Microphone not working", "microphone-not-working"),
+                ClarificationOption("Headset not detected", "headset-not-detected"),
+                ClarificationOption("Audio crackling / static", "audio-crackling"),
+                ClarificationOption("Bluetooth audio issue", "bluetooth-audio-issue"),
+                ClarificationOption("Something else", "other"),
+            ],
+        ),
+        PlaybookQuestion(
+            slot="affected_system",
+            question="Which application are you trying to use audio with?",
+            priority=2,
+        ),
+        PlaybookQuestion(
+            slot="device_type",
+            question="What type of audio device — built-in speakers, USB headset, or Bluetooth?",
+            priority=3,
+        ),
+    ],
+    retrieval_category_filter="hardware/other",
+    retrieval_boost_terms=["audio", "headset", "microphone", "speaker", "sound"],
+)
+
 OTHER_PLAYBOOK = IssuePlaybook(
     category="other",
     display_name="Other IT Issues",
@@ -517,16 +646,49 @@ _PLAYBOOK_REGISTRY: dict[str, IssuePlaybook] = {
     "device-management/intune": INTUNE_PLAYBOOK,
     "hardware/camera": CAMERA_PLAYBOOK,
     "hardware/other": HARDWARE_OTHER_PLAYBOOK,
+    "hardware/audio": AUDIO_PLAYBOOK,
     "software/other": SOFTWARE_PLAYBOOK,
     "network/connectivity": NETWORK_PLAYBOOK,
     "access/permissions": ACCESS_PLAYBOOK,
+    "access/sixth_sense": SIXTH_SENSE_PLAYBOOK,
     "other": OTHER_PLAYBOOK,
 }
 
 
 def get_playbook(category: str) -> IssuePlaybook:
-    """Get the playbook for a given issue category."""
-    return _PLAYBOOK_REGISTRY.get(category, OTHER_PLAYBOOK)
+    """Get the playbook for a given issue category.
+
+    Also checks for entity-specific playbooks (e.g. access/sixth_sense)
+    before falling back to the broad category playbook.
+    """
+    if category in _PLAYBOOK_REGISTRY:
+        return _PLAYBOOK_REGISTRY[category]
+
+    # Try broad category match (e.g. "access/permissions" → ACCESS_PLAYBOOK)
+    for key in _PLAYBOOK_REGISTRY:
+        if category.startswith(key.split("/")[0] + "/"):
+            return _PLAYBOOK_REGISTRY[key]
+
+    return OTHER_PLAYBOOK
+
+
+def get_playbook_for_entity(entity_canonical: str) -> IssuePlaybook | None:
+    """Get a playbook specialized for a specific product/system entity.
+
+    Returns None if no entity-specific playbook exists.
+    """
+    entity_map: dict[str, str] = {
+        "sixth_sense": "access/sixth_sense",
+        "outlook": "email/outlook",
+        "zoom": "video-conferencing/zoom",
+        "teams": "video-conferencing/zoom",
+        "intune": "device-management/intune",
+        "vpn": "network/connectivity",
+    }
+    category = entity_map.get(entity_canonical)
+    if category:
+        return _PLAYBOOK_REGISTRY.get(category)
+    return None
 
 
 def get_all_playbooks() -> dict[str, IssuePlaybook]:

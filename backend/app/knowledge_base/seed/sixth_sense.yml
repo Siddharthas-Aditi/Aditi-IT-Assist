@@ -1,0 +1,157 @@
+category: "access/permissions"
+description: "Troubleshooting playbooks for Sixth Sense (Naukri) portal access issues"
+
+articles:
+  - id: "sixth-sense-001"
+    title: "Sixth Sense / Naukri Login Issues — Account Locked or Unhandled Message"
+    category: "access/permissions"
+    subcategory: "sixth-sense-login"
+    tags:
+      - "sixth sense"
+      - "naukri"
+      - "login"
+      - "account locked"
+      - "unhandled message"
+      - "password"
+      - "otp"
+      - "blocked"
+    content: |
+      This playbook covers common Sixth Sense (Naukri) login issues including
+      account lockouts from multiple incorrect password attempts, the
+      "Unhandled Message" error on direct Naukri website login, and OTP-related
+      problems after account recovery.
+    short_summary: |
+      Account gets blocked after 5+ incorrect password attempts. Wait 1 hour
+      for auto-unlock. Do NOT attempt login during lock period. Change password
+      after unlock, then update in Sixth Sense portal.
+    resolution_steps:
+      - step_number: 1
+        instruction: "Stop all login attempts immediately"
+        details: >
+          If you've entered your password incorrectly more than 5 times, your
+          Naukri account is now temporarily blocked. Do NOT try to log in again
+          — each attempt resets the 1-hour lock timer.
+      - step_number: 2
+        instruction: "Wait for 1 hour for the account to auto-unlock"
+        details: >
+          The Naukri system automatically unlocks your account after 1 hour of
+          inactivity. Set a timer and do not attempt any login during this period.
+      - step_number: 3
+        instruction: "After 1 hour, go to the Naukri website and reset your password"
+        details: >
+          Visit naukri.com and click 'Forgot Password'. Follow the email/OTP
+          verification to set a new password. Use a strong password that you
+          haven't used before.
+      - step_number: 4
+        instruction: "Update the new password in the Sixth Sense portal"
+        details: >
+          Once your Naukri password is reset, open the Sixth Sense portal and
+          update your credentials there with the new password. This keeps both
+          systems in sync.
+      - step_number: 5
+        instruction: "Resolve any OTP issues"
+        details: >
+          If you're having trouble receiving the OTP after the 1-hour unlock
+          period, check your registered email's spam/junk folder. If the OTP
+          still doesn't arrive, wait a few minutes and request a new one. Make
+          sure your registered email/phone is correct in your Naukri profile.
+    troubleshooting_steps:
+      - "Stop all login attempts immediately"
+      - "Wait 1 hour for auto-unlock — do NOT attempt login during this time"
+      - "After 1 hour, reset your password on naukri.com via 'Forgot Password'"
+      - "Update the new password in the Sixth Sense portal"
+      - "If OTP issues persist after unlock, check spam folder or request new OTP"
+    escalation_trigger: >
+      If the account remains locked after 1 hour of no attempts, or if
+      the user cannot receive OTP/password reset emails, escalate to IT support.
+    resolution_rate: 0.80
+
+  - id: "sixth-sense-002"
+    title: "Sixth Sense — 'Unhandled Message' Error on Direct Login"
+    category: "access/permissions"
+    subcategory: "sixth-sense-unhandled-message"
+    tags:
+      - "sixth sense"
+      - "naukri"
+      - "unhandled message"
+      - "error"
+      - "direct login"
+    content: |
+      Users who try to log into Naukri directly through the Naukri website
+      may encounter an "Unhandled Message" error. This is a known behavior
+      when the Sixth Sense integration expects login through the portal.
+    short_summary: |
+      "Unhandled Message" error occurs when logging in directly through
+      naukri.com instead of the Sixth Sense portal. Use the portal URL.
+    resolution_steps:
+      - step_number: 1
+        instruction: "Do not log in through naukri.com directly"
+        details: >
+          Direct login via the Naukri website may trigger the
+          "Unhandled Message" error due to SSO/integration configuration.
+      - step_number: 2
+        instruction: "Use the Sixth Sense portal URL to access the system"
+        details: >
+          Always access Sixth Sense through the designated portal URL
+          provided by your IT team. This ensures proper authentication flow.
+      - step_number: 3
+        instruction: "Clear browser cache and cookies if the error persists"
+        details: >
+          Old session data can cause login conflicts. Clear cookies for
+          naukri.com and the Sixth Sense portal domain, then try again.
+    troubleshooting_steps:
+      - "Use the Sixth Sense portal URL instead of logging in directly on naukri.com"
+      - "Clear browser cache and cookies for naukri.com"
+      - "Try an incognito/private browser window"
+    escalation_trigger: >
+      If the error persists after using the portal URL and clearing cache,
+      escalate to IT support.
+    resolution_rate: 0.85
+
+  - id: "sixth-sense-003"
+    title: "Sixth Sense — OTP Not Received After Account Recovery"
+    category: "access/permissions"
+    subcategory: "sixth-sense-otp"
+    tags:
+      - "sixth sense"
+      - "naukri"
+      - "otp"
+      - "verification"
+      - "password reset"
+    content: |
+      After recovering a locked Naukri account, some users may not receive
+      the OTP needed for password reset or login verification.
+    short_summary: |
+      OTP delivery may fail if attempted during the 1-hour lock period.
+      Wait for full unlock, check spam, and ensure correct contact info.
+    resolution_steps:
+      - step_number: 1
+        instruction: "Ensure the 1-hour lock period has fully elapsed"
+        details: >
+          OTP delivery may be blocked during the active lock period. Wait
+          the full hour before requesting any OTP.
+      - step_number: 2
+        instruction: "Check spam/junk folder in your registered email"
+        details: >
+          OTP emails from Naukri sometimes land in spam. Search for emails
+          from naukri.com in your spam/junk folder.
+      - step_number: 3
+        instruction: "Request a new OTP after a 2-minute wait"
+        details: >
+          If the first OTP didn't arrive, wait at least 2 minutes before
+          requesting a new one. Rapid requests may be rate-limited.
+      - step_number: 4
+        instruction: "Verify your registered email/phone is correct"
+        details: >
+          If you recently changed your email or phone, the OTP may be
+          going to the old contact. Contact IT support to update your
+          registered details.
+    troubleshooting_steps:
+      - "Wait for the full 1-hour lock period to elapse"
+      - "Check spam/junk folder for OTP email from naukri.com"
+      - "Wait 2 minutes, then request a new OTP"
+      - "Verify registered email/phone is current"
+    escalation_trigger: >
+      If OTP is still not received after following all steps, escalate
+      to IT support to verify the registered contact information.
+    resolution_rate: 0.70
