@@ -21,24 +21,24 @@ ISSUE_CATEGORIES = [
     "other",
 ]
 
-CLASSIFICATION_PROMPT = """You are an IT support triage specialist at Aditi Consulting.
-Analyze the user's message and classify their IT issue.
+CLASSIFICATION_PROMPT = """You are a professional IT support classification specialist at Aditi Consulting.
+Your role is to accurately categorize employee IT issues to route them to the correct resolution path.
 
-Categories:
-- email/outlook: Email not receiving, Outlook slow, sync issues
-- video-conferencing/zoom: Zoom sign-in, audio, video issues
-- device-management/intune: Intune compliance, device management
-- hardware/camera: Camera not working, permissions
-- hardware/other: Other hardware issues
-- software/other: Other software issues
-- network/connectivity: VPN, WiFi, internet issues
-- access/permissions: Login, access denied issues
-- other: Anything else
+Analyze the user's message carefully and classify their IT issue into one of these categories:
+- email/outlook: Email delivery, sync, Outlook crashes, configuration issues
+- video-conferencing/zoom: Zoom sign-in, audio/video problems, meeting join failures
+- device-management/intune: Intune compliance, device enrollment, MDM sync
+- hardware/camera: Camera not working, permissions, driver issues
+- hardware/other: Keyboards, monitors, docking stations, peripherals
+- software/other: Application installs, crashes, licensing, updates
+- network/connectivity: VPN, WiFi, Ethernet, DNS resolution
+- access/permissions: Login failures, MFA, password resets, access denied
+- other: Issues that don't fit the above categories
 
-Respond with JSON:
+Respond ONLY with valid JSON (no markdown, no explanation):
 {
-  "category": "<category>",
-  "subcategory": "<specific issue>",
+  "category": "<category from list above>",
+  "subcategory": "<specific issue type>",
   "severity": "low|medium|high|critical",
   "urgency": "low|medium|high",
   "needs_clarification": false,
@@ -46,8 +46,8 @@ Respond with JSON:
   "confidence": 0.85
 }
 
-If the message is too vague to classify, set needs_clarification=true and provide
-a clarification_question.
+If the message is too vague to classify confidently, set needs_clarification=true and provide
+a polite, professional clarification_question that helps narrow the issue.
 
 User message: {user_message}"""
 
@@ -69,14 +69,18 @@ async def triage_node(state: WorkflowState) -> dict:
             "current_node": "triage",
             "needs_clarification": True,
             "clarification_question": (
-                "Hi! I'm here to help with your IT issue. "
-                "Could you describe what problem you're experiencing?"
+                "Welcome to Aditi IT Support. I'm your dedicated IT assistant, "
+                "here to help resolve technical issues quickly and efficiently. "
+                "Please describe the issue you're experiencing, and I'll guide you "
+                "through the resolution process."
             ),
             "messages": [
                 AIMessage(
                     content=(
-                        "Hi! I'm here to help with your IT issue. "
-                        "Could you describe what problem you're experiencing?"
+                        "Welcome to Aditi IT Support. I'm your dedicated IT assistant, "
+                        "here to help resolve technical issues quickly and efficiently. "
+                        "Please describe the issue you're experiencing, and I'll guide you "
+                        "through the resolution process."
                     )
                 )
             ],
@@ -118,6 +122,13 @@ async def triage_node(state: WorkflowState) -> dict:
     }
 
 
+TRIAGE_SYSTEM_PROMPT = (
+    "You are a professional IT support triage specialist at Aditi Consulting. "
+    "You must respond ONLY with valid JSON as specified. No explanation, no markdown fences. "
+    "Be precise, accurate, and always provide a classification even for vague messages."
+)
+
+
 async def _classify_issue(message: str) -> dict:
     """Classify an IT issue from user message.
 
@@ -130,7 +141,7 @@ async def _classify_issue(message: str) -> dict:
     if llm.is_available:
         try:
             prompt = CLASSIFICATION_PROMPT.format(user_message=message)
-            result = await llm.complete_json(prompt)
+            result = await llm.complete_json(prompt, system_prompt=TRIAGE_SYSTEM_PROMPT)
             if result and "category" in result:
                 result["_method"] = "llm"
                 return result
@@ -193,8 +204,9 @@ def _keyword_classify(message: str) -> dict:
             "urgency": "medium",
             "needs_clarification": True,
             "clarification_question": (
-                "Could you provide more details about your issue? "
-                "For example, what application or device is affected?"
+                "I'd like to help you with this. Could you provide a few more details? "
+                "For example, which application, device, or service is affected, "
+                "and when did the issue first occur?"
             ),
             "confidence": 0.3,
             "_method": "keyword",

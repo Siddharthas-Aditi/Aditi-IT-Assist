@@ -8,25 +8,26 @@ from app.workflows.state import WorkflowState
 
 logger = get_logger(__name__)
 
-RESOLUTION_PROMPT = """You are an IT support resolution specialist at Aditi Consulting.
-Based on the knowledge base articles provided, generate clear step-by-step
-troubleshooting instructions for the user.
+RESOLUTION_PROMPT = """You are a professional IT Support Specialist at Aditi Consulting's internal help desk.
+Your role is to provide clear, actionable troubleshooting guidance to employees based on verified internal knowledge base articles.
 
-Rules:
-- Only use steps found in the knowledge base articles
-- Be clear and specific in each step
-- Number your steps
+Communication guidelines:
+- Be professional, empathetic, and concise
+- Address the user respectfully
+- Present steps in a clear numbered format
 - Include expected outcomes for each step
-- If you're unsure, say so and offer to escalate
-- Rate your confidence from 0.0 to 1.0
+- If confidence is below 80%, offer to escalate to a human specialist
+- Never guess or invent steps not supported by the knowledge articles
+- Always cite which knowledge source the steps come from
+- End with a supportive closing that invites follow-up questions
 
-Knowledge articles:
+Knowledge base articles (verified internal documentation):
 {knowledge_articles}
 
-User's issue: {user_issue}
-Category: {category}
+Employee's issue: {user_issue}
+Classified category: {category}
 
-Generate a helpful resolution response."""
+Provide a professional, helpful resolution response with numbered steps. Start with a brief acknowledgment of the issue, then present the steps, and close with a follow-up offer."""
 
 
 async def resolution_node(state: WorkflowState) -> dict:
@@ -90,6 +91,15 @@ async def _generate_resolution(knowledge_results: list[dict], state: WorkflowSta
     return _direct_resolution(knowledge_results, state)
 
 
+RESOLUTION_SYSTEM_PROMPT = (
+    "You are a professional IT Support Specialist at Aditi Consulting's internal help desk. "
+    "You provide accurate, empathetic, and actionable support grounded exclusively in the "
+    "provided knowledge base articles. Never invent steps not found in the knowledge base. "
+    "Maintain a professional, respectful tone at all times. "
+    "Format your response with clear numbered steps and expected outcomes."
+)
+
+
 async def _llm_resolution(
     knowledge_results: list[dict],
     state: WorkflowState,
@@ -102,7 +112,10 @@ async def _llm_resolution(
 
     # Format knowledge articles for the prompt
     articles_text = "\n\n".join(
-        f"Article: {a.get('title', 'Untitled')}\nSteps: {a.get('steps', [])}"
+        f"Article: {a.get('title', 'Untitled')}\n"
+        f"Category: {a.get('category', 'general')}\n"
+        f"Steps: {a.get('steps', [])}\n"
+        f"Content: {a.get('content', '')[:1000]}"
         for a in knowledge_results[:3]
     )
 
@@ -118,7 +131,7 @@ async def _llm_resolution(
         category=state.get("issue_category", "other"),
     )
 
-    content = await llm.complete(prompt)
+    content = await llm.complete(prompt, system_prompt=RESOLUTION_SYSTEM_PROMPT)
 
     # LLM returns prose — wrap as a single "step" for consistent format
     steps = [{"step_number": 1, "instruction": content, "details": None}]
@@ -152,23 +165,27 @@ def _direct_resolution(knowledge_results: list[dict], state: WorkflowState) -> d
 
 
 def _format_resolution_message(resolution: dict) -> str:
-    """Format resolution into a user-friendly message."""
+    """Format resolution into a professional user-friendly message."""
     if not resolution["steps"]:
         return (
-            "I found some information about your issue, but I'm not confident "
-            "enough in the resolution. Would you like me to connect you with "
-            "a human IT support agent?"
+            "Thank you for contacting Aditi IT Support. I've reviewed your issue but "
+            "I'm unable to provide a confident resolution based on our current knowledge base. "
+            "I'd recommend connecting you with a specialist who can assist further.\n\n"
+            "Would you like me to escalate this to our IT support team?"
         )
 
     confidence = resolution["confidence"]
     lines = []
 
     if confidence >= 0.8:
-        lines.append("I can help you with that! Here are the steps to resolve your issue:\n")
+        lines.append(
+            "Thank you for reaching out. I've identified a solution for your issue. "
+            "Please follow these steps:\n"
+        )
     else:
         lines.append(
-            "I found some steps that might help. Please try them and let me know "
-            "if the issue persists:\n"
+            "Thank you for contacting IT Support. Based on our knowledge base, "
+            "here are some troubleshooting steps that may resolve your issue:\n"
         )
 
     for step in resolution["steps"]:
@@ -177,10 +194,16 @@ def _format_resolution_message(resolution: dict) -> str:
             lines.append(f"   _{step['details']}_")
         lines.append("")
 
-    if confidence < 0.8:
+    if confidence >= 0.8:
         lines.append(
-            "\nIf these steps don't resolve your issue, I can escalate to a "
-            "human support agent. Just let me know!"
+            "\nPlease let me know if these steps resolved your issue, or if you need "
+            "further assistance. I'm here to help."
+        )
+    else:
+        lines.append(
+            "\nIf these steps don't fully resolve your issue, I can connect you with "
+            "a specialist from our IT support team for additional assistance. "
+            "Just let me know how it goes."
         )
 
     return "\n".join(lines)
