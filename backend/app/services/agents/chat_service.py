@@ -68,13 +68,18 @@ class ChatService:
             # Append new human message and increment turn count
             state["messages"] = state["messages"] + [HumanMessage(content=user_message)]
             state["turn_count"] = state.get("turn_count", 0) + 1
-            # Reset ALL per-turn fields so each message is processed fresh.
-            # Without this, stale knowledge_results from a prior turn bleed into
-            # routing decisions (e.g. old Outlook results returned for a VPN query).
+            # If the previous turn ended with a clarification question (needs_clarification=True),
+            # the user is now answering it. Preserve the category that was already identified
+            # so triage can refine the subcategory rather than reclassifying from scratch.
+            # In all other cases, reset per-turn fields to avoid state bleed.
+            was_clarification_turn = state.get("needs_clarification", False)
             state["needs_clarification"] = False
             state["clarification_question"] = None
-            state["issue_category"] = None
-            state["issue_subcategory"] = None
+            if not was_clarification_turn:
+                # Fresh issue — reset category and all retrieval state
+                state["issue_category"] = None
+                state["issue_subcategory"] = None
+            # Always reset retrieval/resolution state for the new turn
             state["knowledge_results"] = []
             state["knowledge_confidence"] = 0.0
             state["knowledge_citations"] = []
@@ -108,7 +113,7 @@ class ChatService:
                 "ticket_created": False,
                 "current_node": "start",
                 "turn_count": 1,
-                "needs_clarification": False,
+                 "needs_clarification": False,
                 "clarification_question": None,
                 "audit_trail": [],
             }
@@ -173,3 +178,4 @@ class ChatService:
 def get_chat_service() -> ChatService:
     """Create a ChatService instance."""
     return ChatService()
+
