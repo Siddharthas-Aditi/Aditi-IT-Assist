@@ -6,6 +6,11 @@ export interface ResolutionStep {
   details?: string;
 }
 
+export interface QuickReplyOption {
+  label: string;
+  value: string;
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
@@ -15,6 +20,8 @@ export interface ChatMessage {
   steps?: ResolutionStep[];
   requiresEscalation?: boolean;
   followUpQuestion?: string;
+  quickReplies?: QuickReplyOption[];
+  conversationPhase?: string;
   timestamp: Date;
 }
 
@@ -27,6 +34,8 @@ export interface ChatResponse {
   resolution_steps: ResolutionStep[];
   requires_escalation: boolean;
   follow_up_question: string | null;
+  quick_replies: QuickReplyOption[] | null;
+  conversation_phase: string | null;
 }
 
 export interface Ticket {

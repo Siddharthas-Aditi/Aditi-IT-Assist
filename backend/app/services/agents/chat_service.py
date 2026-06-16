@@ -5,7 +5,7 @@ from uuid import uuid4
 from langchain_core.messages import AIMessage, HumanMessage
 
 from app.core.logging import get_logger
-from app.schemas.chat import ChatMessageResponse, ResolutionStepSchema
+from app.schemas.chat import ChatMessageResponse, QuickReplyOption, ResolutionStepSchema
 
 logger = get_logger(__name__)
 
@@ -68,17 +68,18 @@ class ChatService:
             # Append new human message and increment turn count
             state["messages"] = state["messages"] + [HumanMessage(content=user_message)]
             state["turn_count"] = state.get("turn_count", 0) + 1
-            # If the previous turn ended with a clarification question (needs_clarification=True),
-            # the user is now answering it. Preserve the category that was already identified
-            # so triage can refine the subcategory rather than reclassifying from scratch.
-            # In all other cases, reset per-turn fields to avoid state bleed.
+            # If the previous turn ended with a clarification question,
+            # preserve the category and diagnostic context for follow-up.
             was_clarification_turn = state.get("needs_clarification", False)
             state["needs_clarification"] = False
             state["clarification_question"] = None
+            state["quick_replies"] = None
             if not was_clarification_turn:
                 # Fresh issue — reset category and all retrieval state
                 state["issue_category"] = None
                 state["issue_subcategory"] = None
+                # Reset diagnostic context for new topic
+                state["diagnostic_context"] = None
             # Always reset retrieval/resolution state for the new turn
             state["knowledge_results"] = []
             state["knowledge_confidence"] = 0.0
@@ -113,8 +114,12 @@ class ChatService:
                 "ticket_created": False,
                 "current_node": "start",
                 "turn_count": 1,
-                 "needs_clarification": False,
+                "needs_clarification": False,
                 "clarification_question": None,
+                "quick_replies": None,
+                "diagnostic_context": None,
+                "conversation_phase": None,
+                "resolution_confirmed": None,
                 "audit_trail": [],
             }
 
@@ -147,6 +152,15 @@ class ChatService:
             for step in result.get("resolution_steps", [])
         ]
 
+        # Build quick-reply options if present
+        quick_replies = None
+        raw_replies = result.get("quick_replies")
+        if raw_replies:
+            quick_replies = [
+                QuickReplyOption(label=r["label"], value=r["value"])
+                for r in raw_replies
+            ]
+
         return ChatMessageResponse(
             session_id=session_id,
             message_id=str(uuid4()),
@@ -156,6 +170,8 @@ class ChatService:
             resolution_steps=steps,
             requires_escalation=result.get("should_escalate", False),
             follow_up_question=result.get("clarification_question"),
+            quick_replies=quick_replies,
+            conversation_phase=result.get("conversation_phase"),
         )
 
     def _error_response(self, session_id: str) -> ChatMessageResponse:

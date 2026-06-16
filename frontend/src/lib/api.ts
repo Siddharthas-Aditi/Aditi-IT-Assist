@@ -95,6 +95,8 @@ export interface ChatMessageResponse {
   resolution_steps: { step_number: number; instruction: string; details?: string }[];
   requires_escalation: boolean;
   follow_up_question: string | null;
+  quick_replies: { label: string; value: string }[] | null;
+  conversation_phase: string | null;
 }
 
 export const chatApi = {

@@ -5,6 +5,8 @@ import { useChatStore } from '../../stores/chat-store';
 import { ChatBubble } from './ChatBubble';
 import { TypingIndicator } from './TypingIndicator';
 import { EscalationBanner } from './EscalationBanner';
+import { QuickReplies } from './QuickReplies';
+import { ResolutionConfirm } from './ResolutionConfirm';
 
 const QUICK_PROMPTS = [
   { icon: Monitor, label: 'Outlook not syncing', query: 'My Outlook is not syncing emails' },
@@ -37,6 +39,8 @@ export function ChatPanel() {
 
   const lastMessage = messages[messages.length - 1];
   const showEscalation = lastMessage?.requiresEscalation && lastMessage.role === 'assistant';
+  const showQuickReplies = lastMessage?.quickReplies && lastMessage.quickReplies.length > 0 && lastMessage.role === 'assistant' && !isLoading;
+  const showResolutionConfirm = lastMessage?.conversationPhase === 'confirming' && lastMessage.role === 'assistant' && !isLoading && !showEscalation;
   const isEmpty = messages.length === 0;
 
   return (
@@ -102,6 +106,20 @@ export function ChatPanel() {
               <ChatBubble key={message.id} message={message} index={idx} />
             ))}
             {isLoading && <TypingIndicator />}
+            {showQuickReplies && lastMessage?.quickReplies && (
+              <QuickReplies
+                options={lastMessage.quickReplies}
+                onSelect={(value) => sendMessage(value)}
+                disabled={isLoading}
+              />
+            )}
+            {showResolutionConfirm && (
+              <ResolutionConfirm
+                onResolved={() => sendMessage("Yes, that resolved my issue. Thank you!")}
+                onNotResolved={() => sendMessage("The issue is still not resolved.")}
+                disabled={isLoading}
+              />
+            )}
             {showEscalation && <EscalationBanner />}
           </div>
         )}

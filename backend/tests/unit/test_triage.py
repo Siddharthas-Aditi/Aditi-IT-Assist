@@ -9,9 +9,10 @@ class TestKeywordClassify:
     """Tests for the deterministic keyword classifier."""
 
     def test_classify_outlook_keywords(self):
-        """Should classify Outlook-related messages."""
-        result = _keyword_classify("My Outlook is not receiving emails")
+        """Should classify Outlook-related messages with specific symptoms."""
+        result = _keyword_classify("My Outlook keeps crashing when I open it")
         assert result["category"] == "email/outlook"
+        assert result["has_specific_symptom"] is True
         assert result["confidence"] >= 0.8
         assert result["_method"] == "keyword"
 
@@ -32,11 +33,24 @@ class TestKeywordClassify:
         assert result["category"] == "hardware/camera"
 
     def test_classify_vague_message(self):
-        """Should request clarification for vague messages."""
+        """Should return low confidence for vague messages."""
         result = _keyword_classify("something is broken")
         assert result["category"] == "other"
-        assert result["needs_clarification"] is True
         assert result["confidence"] < 0.5
+
+    def test_classify_specific_outlook_has_high_confidence(self):
+        """Should detect specific symptoms and give high confidence."""
+        result = _keyword_classify("Outlook keeps crashing when I open attachments")
+        assert result["category"] == "email/outlook"
+        assert result["has_specific_symptom"] is True
+        assert result["confidence"] >= 0.8
+
+    def test_classify_vague_outlook_has_lower_confidence(self):
+        """Vague Outlook message should have lower confidence."""
+        result = _keyword_classify("Outlook issue")
+        assert result["category"] == "email/outlook"
+        assert result["has_specific_symptom"] is False
+        assert result["confidence"] < 0.8
 
 
 class TestClassifyIssue:
@@ -55,7 +69,6 @@ class TestClassifyIssue:
         """Should classify email issues correctly."""
         result = await _classify_issue("I can't receive emails in my inbox")
         assert result["category"] == "email/outlook"
-        assert result["needs_clarification"] is False
 
     @pytest.mark.asyncio
     async def test_classify_zoom_issue(self):
@@ -77,16 +90,47 @@ class TestTriageNode:
         assert "messages" in result
 
     @pytest.mark.asyncio
+    async def test_triage_vague_query_asks_clarification(self):
+        """Vague Outlook query should trigger clarification, not retrieval."""
+        from langchain_core.messages import HumanMessage
+
+        state = {
+            "messages": [HumanMessage(content="I have an Outlook issue")],
+            "session_id": "test-vague",
+            "diagnostic_context": None,
+        }
+        result = await triage_node(state)
+        assert result["needs_clarification"] is True
+        assert result["issue_category"] == "email/outlook"
+        assert result.get("quick_replies") is not None
+
+    @pytest.mark.asyncio
+    async def test_triage_specific_query_proceeds(self):
+        """Specific query should NOT ask clarification."""
+        from langchain_core.messages import HumanMessage
+
+        state = {
+            "messages": [HumanMessage(content="My Outlook is not syncing emails since this morning")],
+            "session_id": "test-specific",
+            "diagnostic_context": None,
+        }
+        result = await triage_node(state)
+        assert result["needs_clarification"] is False
+        assert result["issue_category"] == "email/outlook"
+
+    @pytest.mark.asyncio
     async def test_triage_includes_audit_trail(self):
-        """Should include an audit trail entry with method."""
+        """Should include an audit trail entry."""
         from langchain_core.messages import HumanMessage
 
         state = {
             "messages": [HumanMessage(content="My email is broken")],
             "session_id": "test-456",
+            "diagnostic_context": None,
         }
         result = await triage_node(state)
         assert "audit_trail" in result
         audit = result["audit_trail"][0]
-        assert audit["event"] == "triage.classified"
-        assert "method" in audit
+        assert "event" in audit
+        assert "triage" in audit["event"]
+

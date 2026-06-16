@@ -1,48 +1,56 @@
-"""Resolution Agent Node — generates step-by-step troubleshooting guidance."""
+"""Resolution Agent Node — concise, grounded troubleshooting guidance.
+
+This upgraded resolution node:
+1. Generates focused responses based on diagnostic context
+2. Provides next-step guidance (not full KB dumps)
+3. Asks whether the step resolved the issue
+4. Uses progressive disclosure — fewer steps at a time
+"""
 
 from langchain_core.messages import AIMessage
 
 from app.core.logging import get_logger
+from app.services.agents.diagnostic_state import DiagnosticContext, DiagnosticPhase
 from app.services.llm_service import get_llm_service
 from app.workflows.state import WorkflowState
 
 logger = get_logger(__name__)
 
 RESOLUTION_SYSTEM_PROMPT = (
-    "You are a professional IT Support Specialist at Aditi Consulting's internal help desk. "
-    "Aditi Consulting is an IT services company. Employees use Microsoft 365 (Outlook, Teams), "
-    "Zoom, Intune-managed Windows/Mac devices, Azure AD / Entra ID for identity, "
-    "Keka and greytHR for HR, Freshservice for IT tickets, TeamViewer for remote support, "
-    "3CX for VoIP, and ActivTrak for activity monitoring. "
-    "You provide accurate, empathetic, and actionable support grounded exclusively in the "
-    "provided knowledge base articles. "
-    "Never invent steps not found in the knowledge base. "
-    "If the knowledge base does not cover the issue, say so honestly and offer to escalate. "
-    "Maintain a professional, respectful tone. "
-    "Format your response with clear numbered steps and expected outcomes for each step."
+    "You are a friendly, concise IT Support Specialist at Aditi Consulting's internal help desk. "
+    "You help employees troubleshoot IT issues step-by-step.\n\n"
+    "IMPORTANT RULES:\n"
+    "- Be brief and conversational — like a helpful colleague, not a manual\n"
+    "- Give 2-3 steps at most per response\n"
+    "- After giving steps, ask if they worked\n"
+    "- Never dump all possible solutions at once\n"
+    "- Only use information from the provided knowledge base articles\n"
+    "- If you're not confident, say so and offer to escalate\n"
+    "- Use plain language, avoid jargon\n"
+    "- Format steps with numbers for clarity"
 )
 
-RESOLUTION_PROMPT = """You are a professional IT Support Specialist at Aditi Consulting's internal help desk.
+RESOLUTION_PROMPT = """Based on the employee's specific issue and the knowledge base articles below,
+provide a focused troubleshooting response.
 
-Your task is to resolve the employee's IT issue using ONLY the verified knowledge base articles provided below.
+Employee's specific issue:
+- Category: {category}
+- Problem: {problem_description}
+- Symptom: {symptom}
+{additional_context}
 
-Communication guidelines:
-- Open with a brief, empathetic acknowledgment of the specific issue (1-2 sentences)
-- Present numbered resolution steps clearly — each step should have an expected outcome
-- Use plain language; avoid jargon unless the employee is clearly technical
-- If confidence is below 80%, proactively offer to escalate to a human specialist
-- Always cite the knowledge article you're drawing from
-- Close with an invitation for follow-up (e.g. "Let me know if that resolves the issue")
-- Escalation path: Freshservice ticket → IT Lead → IT Admin (only if steps don't resolve)
-
-Knowledge base articles (verified Aditi internal documentation):
+Knowledge base articles (use ONLY these as your source):
 {knowledge_articles}
 
-Employee's issue: {user_issue}
-Issue category: {category}
-Severity: {severity}
+RESPONSE GUIDELINES:
+1. Start with a brief acknowledgment (one sentence)
+2. Give the 2-3 most likely resolution steps for THIS specific symptom
+3. End by asking if the steps resolved the issue
+4. Do NOT list every possible solution — just the most relevant ones
+5. Keep the total response under 200 words
+6. If steps require admin access, mention that escalation is available
 
-Provide a clear, professional resolution response with numbered steps."""
+Respond now:"""
 
 
 def _get_steps(article: dict) -> list:
@@ -56,13 +64,13 @@ def _get_steps(article: dict) -> list:
 
 
 async def resolution_node(state: WorkflowState) -> dict:
-    """Generate resolution steps from retrieved knowledge.
+    """Generate focused, progressive resolution from retrieved knowledge.
 
     This node:
-    1. Takes knowledge articles from retrieval
-    2. If LLM available — synthesizes user-friendly guidance via RAG
-    3. Otherwise extracts steps directly from knowledge articles
-    4. Returns formatted resolution with confidence
+    1. Uses diagnostic context for targeted response generation
+    2. Provides 2-3 steps at a time (not full dump)
+    3. Asks whether steps resolved the issue
+    4. Tracks resolution confidence for escalation decisions
     """
     logger.info(
         "resolution_node_start",
@@ -71,96 +79,131 @@ async def resolution_node(state: WorkflowState) -> dict:
     )
 
     knowledge_results = state.get("knowledge_results", [])
+    diag_ctx = DiagnosticContext.from_dict(state.get("diagnostic_context") or {})
 
-    resolution = await _generate_resolution(knowledge_results, state)
-    response_content = _format_resolution_message(resolution, state)
+    resolution = await _generate_resolution(knowledge_results, state, diag_ctx)
+    response_content = resolution["response"]
+
+    # Update diagnostic context
+    diag_ctx.resolution_attempts += 1
+    diag_ctx.resolution_confidence = resolution["confidence"]
+    diag_ctx.phase = DiagnosticPhase.CONFIRMING
 
     audit_entry = {
         "event": "resolution.generated",
         "confidence": resolution["confidence"],
         "steps_count": len(resolution["steps"]),
         "method": resolution.get("method", "direct"),
+        "resolution_attempt": diag_ctx.resolution_attempts,
     }
 
     return {
         "current_node": "resolve",
         "resolution_steps": resolution["steps"],
         "resolution_confidence": resolution["confidence"],
+        "diagnostic_context": diag_ctx.to_dict(),
+        "conversation_phase": diag_ctx.phase.value,
         "messages": [AIMessage(content=response_content)],
         "audit_trail": [audit_entry],
     }
 
 
-async def _generate_resolution(knowledge_results: list[dict], state: WorkflowState) -> dict:
-    """Generate resolution steps from knowledge articles.
-
-    Strategy:
-    1. If LLMService is available — use RAG prompt for natural language generation
-    2. Otherwise — extract steps directly from the best matching article
-    """
+async def _generate_resolution(
+    knowledge_results: list[dict],
+    state: WorkflowState,
+    diag_ctx: DiagnosticContext,
+) -> dict:
+    """Generate focused resolution using LLM or direct extraction."""
     if not knowledge_results:
-        return {"steps": [], "confidence": 0.0, "method": "none"}
+        return {
+            "steps": [],
+            "confidence": 0.0,
+            "method": "none",
+            "response": (
+                "I wasn't able to find a specific solution for this in our knowledge base. "
+                "Would you like me to create a support ticket so our IT team can assist you directly?"
+            ),
+        }
 
     llm = get_llm_service()
     if llm.is_available:
         try:
-            return await _llm_resolution(knowledge_results, state, llm)
+            return await _llm_resolution(knowledge_results, state, diag_ctx, llm)
         except Exception as e:
             logger.warning("resolution_llm_fallback", error=str(e))
 
-    return _direct_resolution(knowledge_results, state)
+    return _direct_resolution(knowledge_results, state, diag_ctx)
 
 
 async def _llm_resolution(
     knowledge_results: list[dict],
     state: WorkflowState,
+    diag_ctx: DiagnosticContext,
     llm: object,
 ) -> dict:
-    """Use LLM to synthesize a natural language resolution."""
+    """Use LLM to generate concise, targeted resolution."""
     from app.services.llm_service import LLMService
 
     assert isinstance(llm, LLMService)
 
-    # Format knowledge articles for the prompt, using correct field names
+    # Format only the most relevant articles (top 2)
     articles_text = "\n\n".join(
         f"Article: {a.get('title', 'Untitled')}\n"
-        f"Category: {a.get('category', 'general')}\n"
-        f"Summary: {a.get('short_summary') or ''}\n"
-        f"Resolution Steps: {_get_steps(a)}\n"
-        f"Content: {(a.get('content') or a.get('snippet') or '')[:1200]}"
-        for a in knowledge_results[:3]
+        f"Steps: {_get_steps(a)}\n"
+        f"Content: {(a.get('content') or a.get('snippet') or '')[:800]}"
+        for a in knowledge_results[:2]
     )
 
-    user_issue = ""
-    for msg in reversed(state.get("messages", [])):
-        if hasattr(msg, "type") and msg.type == "human":
-            user_issue = msg.content
-            break
+    # Build problem description from diagnostic context
+    problem_desc = (
+        diag_ctx.exact_problem_statement
+        or diag_ctx.symptom
+        or "not specified"
+    )
+    symptom = diag_ctx.symptom or diag_ctx.issue_subcategory or "general issue"
+
+    # Additional context from slots
+    additional = []
+    if diag_ctx.platform_os:
+        additional.append(f"- Platform: {diag_ctx.platform_os}")
+    if diag_ctx.device_type:
+        additional.append(f"- Device: {diag_ctx.device_type}")
+    if diag_ctx.error_message:
+        additional.append(f"- Error message: {diag_ctx.error_message}")
+    if diag_ctx.steps_already_tried:
+        additional.append(f"- Already tried: {', '.join(diag_ctx.steps_already_tried)}")
+
+    additional_text = "\n".join(additional) if additional else "None"
 
     prompt = RESOLUTION_PROMPT.format(
-        knowledge_articles=articles_text,
-        user_issue=user_issue,
         category=state.get("issue_category", "other"),
-        severity=state.get("severity", "medium"),
+        problem_description=problem_desc,
+        symptom=symptom,
+        additional_context=additional_text,
+        knowledge_articles=articles_text,
     )
 
     content = await llm.complete(prompt, system_prompt=RESOLUTION_SYSTEM_PROMPT)
 
-    # LLM returns well-structured prose — wrap as a single "step" for consistent format
     steps = [{"step_number": 1, "instruction": content, "details": None}]
     confidence = min(0.95, state.get("knowledge_confidence", 0.5) + 0.15)
 
-    return {"steps": steps, "confidence": confidence, "method": "llm"}
+    return {"steps": steps, "confidence": confidence, "method": "llm", "response": content}
 
 
-def _direct_resolution(knowledge_results: list[dict], state: WorkflowState) -> dict:
+def _direct_resolution(
+    knowledge_results: list[dict],
+    state: WorkflowState,
+    diag_ctx: DiagnosticContext,
+) -> dict:
     """Extract steps directly from the best matching article (no-LLM fallback)."""
     best_article = knowledge_results[0]
     raw_steps = _get_steps(best_article)
     confidence = min(0.9, state.get("knowledge_confidence", 0.5) + 0.1)
 
+    # Only take the first 3 steps for progressive disclosure
     formatted_steps = []
-    for i, step in enumerate(raw_steps, 1):
+    for i, step in enumerate(raw_steps[:3], 1):
         if isinstance(step, dict):
             formatted_steps.append({
                 "step_number": i,
@@ -174,54 +217,51 @@ def _direct_resolution(knowledge_results: list[dict], state: WorkflowState) -> d
                 "details": None,
             })
 
-    return {"steps": formatted_steps, "confidence": confidence, "method": "direct"}
+    # Build concise response
+    response = _format_concise_response(formatted_steps, best_article, confidence, diag_ctx)
+
+    return {
+        "steps": formatted_steps,
+        "confidence": confidence,
+        "method": "direct",
+        "response": response,
+    }
 
 
-def _format_resolution_message(resolution: dict, state: WorkflowState) -> str:
-    """Format resolution into a professional user-facing message."""
-    if not resolution["steps"]:
+def _format_concise_response(
+    steps: list[dict],
+    article: dict,
+    confidence: float,
+    diag_ctx: DiagnosticContext,
+) -> str:
+    """Format a concise, human-like resolution response."""
+    if not steps:
         return (
-            "Thank you for contacting Aditi IT Support. I've reviewed your issue but "
-            "I'm unable to find a matching resolution in our knowledge base. "
-            "I'd recommend raising a Freshservice ticket so our IT team can assist directly.\n\n"
-            "Would you like me to escalate this to our IT support team?"
+            "I couldn't find specific steps for this issue in our knowledge base. "
+            "Would you like me to escalate this to our IT team?"
         )
 
-    confidence = resolution["confidence"]
-    method = resolution.get("method", "direct")
+    lines: list[str] = []
 
-    # LLM method returns fully-formatted prose — return as-is
-    if method == "llm" and len(resolution["steps"]) == 1:
-        return resolution["steps"][0]["instruction"]
+    # Brief acknowledgment
+    symptom = diag_ctx.symptom or diag_ctx.exact_problem_statement or "your issue"
+    lines.append(f"Got it — let me help you with {symptom}. Here's what to try:\n")
 
-    # Direct method — build structured response
-    lines = []
-    if confidence >= 0.8:
-        lines.append(
-            "I've found a resolution for your issue in our knowledge base. "
-            "Please follow these steps:\n"
-        )
-    else:
-        lines.append(
-            "Based on our knowledge base, here are some troubleshooting steps "
-            "that should resolve your issue:\n"
-        )
-
-    for step in resolution["steps"]:
-        lines.append(f"**Step {step['step_number']}**: {step['instruction']}")
+    # Steps (concise)
+    for step in steps:
+        lines.append(f"**{step['step_number']}.** {step['instruction']}")
         if step.get("details"):
             lines.append(f"   _{step['details']}_")
-        lines.append("")
 
+    # Follow-up question
+    lines.append("")
     if confidence >= 0.8:
-        lines.append(
-            "Let me know if these steps resolved your issue, or if you need "
-            "further assistance — I'm here to help."
-        )
+        lines.append("Let me know if that resolves the issue!")
     else:
         lines.append(
-            "If these steps don't fully resolve your issue, I can raise a Freshservice ticket "
-            "to connect you with an IT specialist. Just let me know how it goes."
+            "Try these steps and let me know how it goes. "
+            "If the issue persists, I can escalate to our IT team."
         )
 
     return "\n".join(lines)
+

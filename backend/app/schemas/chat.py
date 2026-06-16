@@ -18,6 +18,13 @@ class ResolutionStepSchema(BaseModel):
     details: str | None = None
 
 
+class QuickReplyOption(BaseModel):
+    """A quick-reply option for disambiguation chips in the frontend."""
+
+    label: str
+    value: str
+
+
 class ChatMessageResponse(BaseModel):
     """AI assistant response with metadata."""
 
@@ -30,6 +37,8 @@ class ChatMessageResponse(BaseModel):
     resolution_steps: list[ResolutionStepSchema] = []
     requires_escalation: bool = False
     follow_up_question: str | None = None
+    quick_replies: list[QuickReplyOption] | None = None
+    conversation_phase: str | None = None
 
 
 class SessionSummary(BaseModel):
@@ -50,3 +59,4 @@ class SessionDetail(BaseModel):
     messages: list[dict] = []
     confidence_score: float = 0.0
     created_at: str
+

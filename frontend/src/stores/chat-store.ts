@@ -54,6 +54,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         steps: response.resolution_steps,
         requiresEscalation: response.requires_escalation,
         followUpQuestion: response.follow_up_question ?? undefined,
+        quickReplies: response.quick_replies ?? undefined,
+        conversationPhase: response.conversation_phase ?? undefined,
         timestamp: new Date(),
       };
 

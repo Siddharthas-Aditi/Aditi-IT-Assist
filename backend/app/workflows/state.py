@@ -1,6 +1,6 @@
 """Workflow state definition for the LangGraph agent system."""
 
-from typing import Annotated, Literal, TypedDict
+from typing import Annotated, Any, Literal, TypedDict
 
 from langchain_core.messages import BaseMessage
 from langgraph.graph import add_messages
@@ -87,6 +87,12 @@ class WorkflowState(TypedDict):
     needs_clarification: bool
     clarification_question: str | None
     audit_trail: list[dict]
+
+    # ── Diagnostic Context (multi-turn conversation state) ───────
+    diagnostic_context: dict[str, Any] | None  # Serialized DiagnosticContext
+    quick_replies: list[dict] | None  # [{label, value}] for frontend chips
+    conversation_phase: str | None  # Current DiagnosticPhase value
+    resolution_confirmed: bool | None  # User confirmed issue is resolved
 
     # ── Enterprise Extensions ────────────────────────────────────
 

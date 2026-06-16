@@ -7,9 +7,9 @@ from langchain_core.messages import HumanMessage
 
 from app.workflows.nodes.resolution import (
     _direct_resolution,
-    _format_resolution_message,
     resolution_node,
 )
+from app.services.agents.diagnostic_state import DiagnosticContext
 
 
 class TestResolutionNode:
@@ -33,6 +33,10 @@ class TestResolutionNode:
                 }
             ],
             "knowledge_confidence": 0.8,
+            "diagnostic_context": DiagnosticContext(
+                issue_category="email/outlook",
+                symptom="not-syncing",
+            ).to_dict(),
         }
 
         with patch("app.workflows.nodes.resolution.get_llm_service") as mock_get_llm:
@@ -57,6 +61,9 @@ class TestResolutionNode:
             "messages": [],
             "knowledge_results": [],
             "knowledge_confidence": 0.0,
+            "diagnostic_context": DiagnosticContext(
+                issue_category="other",
+            ).to_dict(),
         }
 
         with patch("app.workflows.nodes.resolution.get_llm_service") as mock_get_llm:
@@ -80,6 +87,10 @@ class TestResolutionNode:
                 {"id": "art-1", "title": "Camera Fix", "steps": ["Enable camera"]}
             ],
             "knowledge_confidence": 0.7,
+            "diagnostic_context": DiagnosticContext(
+                issue_category="hardware/camera",
+                symptom="camera-not-working",
+            ).to_dict(),
         }
 
         with patch("app.workflows.nodes.resolution.get_llm_service") as mock_get_llm:
@@ -98,6 +109,9 @@ class TestResolutionNode:
 class TestDirectResolution:
     """Tests for _direct_resolution fallback."""
 
+    def _make_diag_ctx(self):
+        return DiagnosticContext(issue_category="email/outlook", symptom="test")
+
     def test_formats_dict_steps(self):
         """Should format dict steps correctly."""
         knowledge = [
@@ -109,7 +123,7 @@ class TestDirectResolution:
             }
         ]
         state = {"knowledge_confidence": 0.7}
-        result = _direct_resolution(knowledge, state)
+        result = _direct_resolution(knowledge, state, self._make_diag_ctx())
 
         assert len(result["steps"]) == 2
         assert result["steps"][0]["step_number"] == 1
@@ -121,7 +135,7 @@ class TestDirectResolution:
         """Should handle string steps."""
         knowledge = [{"steps": ["Step one", "Step two"]}]
         state = {"knowledge_confidence": 0.5}
-        result = _direct_resolution(knowledge, state)
+        result = _direct_resolution(knowledge, state, self._make_diag_ctx())
 
         assert len(result["steps"]) == 2
         assert result["steps"][0]["instruction"] == "Step one"
@@ -131,51 +145,20 @@ class TestDirectResolution:
         """Should calculate confidence from knowledge_confidence + 0.1."""
         knowledge = [{"steps": ["s1"]}]
         state = {"knowledge_confidence": 0.6}
-        result = _direct_resolution(knowledge, state)
+        result = _direct_resolution(knowledge, state, self._make_diag_ctx())
         assert result["confidence"] == 0.7
 
     def test_confidence_capped(self):
         """Should cap confidence at 0.9."""
         knowledge = [{"steps": ["s1"]}]
         state = {"knowledge_confidence": 0.95}
-        result = _direct_resolution(knowledge, state)
+        result = _direct_resolution(knowledge, state, self._make_diag_ctx())
         assert result["confidence"] == 0.9
 
+    def test_progressive_disclosure_limits_steps(self):
+        """Should only return first 3 steps for progressive disclosure."""
+        knowledge = [{"steps": ["s1", "s2", "s3", "s4", "s5"]}]
+        state = {"knowledge_confidence": 0.8}
+        result = _direct_resolution(knowledge, state, self._make_diag_ctx())
+        assert len(result["steps"]) == 3
 
-class TestFormatResolutionMessage:
-    """Tests for _format_resolution_message."""
-
-    def test_high_confidence_message(self):
-        """Should use confident language for high confidence."""
-        resolution = {
-            "steps": [{"step_number": 1, "instruction": "Do this", "details": None}],
-            "confidence": 0.9,
-        }
-        msg = _format_resolution_message(resolution)
-        assert "I can help you with that!" in msg
-        assert "**Step 1**" in msg
-
-    def test_low_confidence_message(self):
-        """Should offer escalation for low confidence."""
-        resolution = {
-            "steps": [{"step_number": 1, "instruction": "Try this", "details": None}],
-            "confidence": 0.6,
-        }
-        msg = _format_resolution_message(resolution)
-        assert "might help" in msg
-        assert "escalate" in msg
-
-    def test_no_steps_message(self):
-        """Should suggest human agent when no steps."""
-        resolution = {"steps": [], "confidence": 0.0}
-        msg = _format_resolution_message(resolution)
-        assert "human IT support agent" in msg
-
-    def test_includes_details(self):
-        """Should include step details in italics."""
-        resolution = {
-            "steps": [{"step_number": 1, "instruction": "Click X", "details": "Located top-right"}],
-            "confidence": 0.85,
-        }
-        msg = _format_resolution_message(resolution)
-        assert "_Located top-right_" in msg
