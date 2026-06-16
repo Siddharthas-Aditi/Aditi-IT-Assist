@@ -8,7 +8,7 @@ from app.workflows.state import WorkflowState
 
 logger = get_logger(__name__)
 
-# Known issue categories for classification
+# Known issue categories for classification — aligned with KB seed taxonomy
 ISSUE_CATEGORIES = [
     "email/outlook",
     "video-conferencing/zoom",
@@ -24,21 +24,33 @@ ISSUE_CATEGORIES = [
 CLASSIFICATION_PROMPT = """You are a professional IT support classification specialist at Aditi Consulting.
 Your role is to accurately categorize employee IT issues to route them to the correct resolution path.
 
-Analyze the user's message carefully and classify their IT issue into one of these categories:
-- email/outlook: Email delivery, sync, Outlook crashes, configuration issues
-- video-conferencing/zoom: Zoom sign-in, audio/video problems, meeting join failures
-- device-management/intune: Intune compliance, device enrollment, MDM sync
-- hardware/camera: Camera not working, permissions, driver issues
-- hardware/other: Keyboards, monitors, docking stations, peripherals
-- software/other: Application installs, crashes, licensing, updates
-- network/connectivity: VPN, WiFi, Ethernet, DNS resolution
-- access/permissions: Login failures, MFA, password resets, access denied
-- other: Issues that don't fit the above categories
+Aditi Consulting uses the following tools and systems internally:
+- Email & calendar: Microsoft Outlook / Microsoft 365
+- Video conferencing: Zoom (primary), Microsoft Teams
+- Device management: Microsoft Intune (MDM), Azure AD / Entra ID
+- HR & payroll: Keka, greytHR
+- IT ticketing: Freshservice
+- Remote support: TeamViewer
+- Activity monitoring: ActivTrak
+- VoIP: 3CX (BLR-3CX, VDR-3CX)
+- Identity & MFA: Microsoft Entra ID / Azure AD, Multi-factor authentication
+- Network: VPN, corporate Wi-Fi, LAN
+
+Analyze the user's message carefully and classify their IT issue into EXACTLY one of these categories:
+- email/outlook: Email delivery, sync, Outlook crashes, calendar issues, Microsoft 365 access
+- video-conferencing/zoom: Zoom sign-in, audio/video problems, meeting join failures, Teams issues
+- device-management/intune: Intune compliance, device enrollment, MDM sync, Azure AD join
+- hardware/camera: Camera not working, permissions, driver issues, webcam
+- hardware/other: Keyboards, monitors, docking stations, peripherals, printers
+- software/other: Application installs, crashes, licensing, updates, Keka, greytHR, Freshservice
+- network/connectivity: VPN, Wi-Fi, Ethernet, DNS resolution, 3CX, internet access
+- access/permissions: Login failures, MFA, password resets, access denied, account lockout
+- other: Issues that don't clearly fit the above categories
 
 Respond ONLY with valid JSON (no markdown, no explanation):
 {
   "category": "<category from list above>",
-  "subcategory": "<specific issue type>",
+  "subcategory": "<specific issue type, e.g. 'zoom-audio' or 'outlook-sync'>",
   "severity": "low|medium|high|critical",
   "urgency": "low|medium|high",
   "needs_clarification": false,
@@ -46,8 +58,13 @@ Respond ONLY with valid JSON (no markdown, no explanation):
   "confidence": 0.85
 }
 
+Set severity=critical for: complete system outage, security breach, data loss, all users affected.
+Set severity=high for: individual cannot work, MFA locked out, VPN down.
+Set severity=medium for: degraded functionality, intermittent issue.
+Set severity=low for: cosmetic issues, minor inconveniences.
+
 If the message is too vague to classify confidently, set needs_clarification=true and provide
-a polite, professional clarification_question that helps narrow the issue.
+a concise, professional clarification_question (1-2 sentences) to narrow the issue.
 
 User message: {user_message}"""
 
@@ -69,18 +86,18 @@ async def triage_node(state: WorkflowState) -> dict:
             "current_node": "triage",
             "needs_clarification": True,
             "clarification_question": (
-                "Welcome to Aditi IT Support. I'm your dedicated IT assistant, "
-                "here to help resolve technical issues quickly and efficiently. "
-                "Please describe the issue you're experiencing, and I'll guide you "
-                "through the resolution process."
+                "Welcome to Aditi IT Support. I'm your dedicated AI assistant, "
+                "here to help resolve your IT issues quickly. "
+                "Please describe the problem you're experiencing — include the affected "
+                "application or device, and when the issue started."
             ),
             "messages": [
                 AIMessage(
                     content=(
-                        "Welcome to Aditi IT Support. I'm your dedicated IT assistant, "
-                        "here to help resolve technical issues quickly and efficiently. "
-                        "Please describe the issue you're experiencing, and I'll guide you "
-                        "through the resolution process."
+                        "Welcome to Aditi IT Support. I'm your dedicated AI assistant, "
+                        "here to help resolve your IT issues quickly. "
+                        "Please describe the problem you're experiencing — include the affected "
+                        "application or device, and when the issue started."
                     )
                 )
             ],
@@ -97,7 +114,7 @@ async def triage_node(state: WorkflowState) -> dict:
         return {
             "current_node": "triage",
             "needs_clarification": True,
-            "clarification_question": "Could you describe your IT issue?",
+            "clarification_question": "Could you describe your IT issue in more detail?",
         }
 
     # Attempt LLM classification, fall back to keyword matching
@@ -124,8 +141,11 @@ async def triage_node(state: WorkflowState) -> dict:
 
 TRIAGE_SYSTEM_PROMPT = (
     "You are a professional IT support triage specialist at Aditi Consulting. "
-    "You must respond ONLY with valid JSON as specified. No explanation, no markdown fences. "
-    "Be precise, accurate, and always provide a classification even for vague messages."
+    "Aditi Consulting is an IT services company with offices in India (Bengaluru, Hyderabad, Chennai) "
+    "and internationally. Employees use Microsoft 365, Zoom, Intune-managed devices, Keka for HR, "
+    "Freshservice for IT ticketing, and 3CX for VoIP. "
+    "Respond ONLY with valid JSON as specified. No explanation, no markdown fences. "
+    "Be precise and always provide a classification even for vague messages."
 )
 
 
@@ -143,6 +163,12 @@ async def _classify_issue(message: str) -> dict:
             prompt = CLASSIFICATION_PROMPT.format(user_message=message)
             result = await llm.complete_json(prompt, system_prompt=TRIAGE_SYSTEM_PROMPT)
             if result and "category" in result:
+                # Validate category is in our known list; fall back if unknown
+                if result["category"] in ISSUE_CATEGORIES:
+                    result["_method"] = "llm"
+                    return result
+                logger.warning("triage_unknown_category", category=result.get("category"))
+                result["category"] = "other"
                 result["_method"] = "llm"
                 return result
         except Exception as e:
@@ -156,7 +182,7 @@ def _keyword_classify(message: str) -> dict:
     """Deterministic keyword-based classification fallback."""
     message_lower = message.lower()
 
-    if any(word in message_lower for word in ["outlook", "email", "mail", "inbox"]):
+    if any(word in message_lower for word in ["outlook", "email", "mail", "inbox", "calendar", "office 365", "microsoft 365"]):
         return {
             "category": "email/outlook",
             "subcategory": "email-delivery",
@@ -166,7 +192,7 @@ def _keyword_classify(message: str) -> dict:
             "confidence": 0.85,
             "_method": "keyword",
         }
-    elif any(word in message_lower for word in ["zoom", "video call", "meeting"]):
+    elif any(word in message_lower for word in ["zoom", "video call", "meeting", "teams", "webinar"]):
         return {
             "category": "video-conferencing/zoom",
             "subcategory": "zoom-general",
@@ -176,7 +202,7 @@ def _keyword_classify(message: str) -> dict:
             "confidence": 0.85,
             "_method": "keyword",
         }
-    elif any(word in message_lower for word in ["intune", "compliance", "non-compliant"]):
+    elif any(word in message_lower for word in ["intune", "compliance", "non-compliant", "mdm", "device enroll"]):
         return {
             "category": "device-management/intune",
             "subcategory": "compliance",
@@ -196,6 +222,36 @@ def _keyword_classify(message: str) -> dict:
             "confidence": 0.85,
             "_method": "keyword",
         }
+    elif any(word in message_lower for word in ["vpn", "wifi", "wi-fi", "internet", "network", "ethernet", "3cx", "voip"]):
+        return {
+            "category": "network/connectivity",
+            "subcategory": "connectivity",
+            "severity": "high",
+            "urgency": "high",
+            "needs_clarification": False,
+            "confidence": 0.85,
+            "_method": "keyword",
+        }
+    elif any(word in message_lower for word in ["password", "login", "mfa", "locked", "access denied", "permission", "authenticat"]):
+        return {
+            "category": "access/permissions",
+            "subcategory": "access-denied",
+            "severity": "high",
+            "urgency": "high",
+            "needs_clarification": False,
+            "confidence": 0.85,
+            "_method": "keyword",
+        }
+    elif any(word in message_lower for word in ["keka", "greyhr", "freshservice", "install", "software", "application", "app crash"]):
+        return {
+            "category": "software/other",
+            "subcategory": "software-general",
+            "severity": "medium",
+            "urgency": "medium",
+            "needs_clarification": False,
+            "confidence": 0.80,
+            "_method": "keyword",
+        }
     else:
         return {
             "category": "other",
@@ -205,7 +261,7 @@ def _keyword_classify(message: str) -> dict:
             "needs_clarification": True,
             "clarification_question": (
                 "I'd like to help you with this. Could you provide a few more details? "
-                "For example, which application, device, or service is affected, "
+                "For example, which application or device is affected, "
                 "and when did the issue first occur?"
             ),
             "confidence": 0.3,

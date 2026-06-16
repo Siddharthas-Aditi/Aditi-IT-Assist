@@ -23,6 +23,7 @@ from __future__ import annotations
 import uuid  # noqa: TC003
 from datetime import UTC, datetime
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     Boolean,
     DateTime,
@@ -313,6 +314,8 @@ class KnowledgeChunk(UUIDPrimaryKeyMixin, Base):
         default="not_indexed",
     )
     index_version: Mapped[int] = mapped_column(Integer, default=0)
+    # Actual embedding vector stored in pgvector (nullable until indexed).
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(3072), nullable=True)
     metadata_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 

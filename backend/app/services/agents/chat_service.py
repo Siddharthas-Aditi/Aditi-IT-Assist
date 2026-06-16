@@ -68,9 +68,22 @@ class ChatService:
             # Append new human message and increment turn count
             state["messages"] = state["messages"] + [HumanMessage(content=user_message)]
             state["turn_count"] = state.get("turn_count", 0) + 1
-            # Reset per-turn flags so the graph re-evaluates
+            # Reset ALL per-turn fields so each message is processed fresh.
+            # Without this, stale knowledge_results from a prior turn bleed into
+            # routing decisions (e.g. old Outlook results returned for a VPN query).
             state["needs_clarification"] = False
             state["clarification_question"] = None
+            state["issue_category"] = None
+            state["issue_subcategory"] = None
+            state["knowledge_results"] = []
+            state["knowledge_confidence"] = 0.0
+            state["knowledge_citations"] = []
+            state["resolution_steps"] = []
+            state["resolution_confidence"] = 0.0
+            state["should_escalate"] = False
+            state["escalation_reason"] = None
+            state["ticket_draft"] = None
+            state["ticket_created"] = False
         else:
             state = {
                 "messages": [HumanMessage(content=user_message)],

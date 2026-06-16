@@ -183,9 +183,15 @@ class KnowledgeIndexingService:
         ]
 
         if new_chunks_to_embed:
-            await self.embedder.embed([c.content for c in new_chunks_to_embed])
-            for chunk in new_chunks_to_embed:
-                chunk.embedding_status = "indexed"
+            vectors = await self.embedder.embed([c.content for c in new_chunks_to_embed])
+            if vectors:
+                for chunk, vector in zip(new_chunks_to_embed, vectors, strict=False):
+                    chunk.embedding = vector
+                    chunk.embedding_status = "indexed"
+            else:
+                # No-op client (dev without API key) — mark indexed without vectors
+                for chunk in new_chunks_to_embed:
+                    chunk.embedding_status = "indexed"
         else:
             logger.info(
                 "knowledge_index_skip_embed",

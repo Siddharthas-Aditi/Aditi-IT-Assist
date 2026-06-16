@@ -8,26 +8,51 @@ from app.workflows.state import WorkflowState
 
 logger = get_logger(__name__)
 
+RESOLUTION_SYSTEM_PROMPT = (
+    "You are a professional IT Support Specialist at Aditi Consulting's internal help desk. "
+    "Aditi Consulting is an IT services company. Employees use Microsoft 365 (Outlook, Teams), "
+    "Zoom, Intune-managed Windows/Mac devices, Azure AD / Entra ID for identity, "
+    "Keka and greytHR for HR, Freshservice for IT tickets, TeamViewer for remote support, "
+    "3CX for VoIP, and ActivTrak for activity monitoring. "
+    "You provide accurate, empathetic, and actionable support grounded exclusively in the "
+    "provided knowledge base articles. "
+    "Never invent steps not found in the knowledge base. "
+    "If the knowledge base does not cover the issue, say so honestly and offer to escalate. "
+    "Maintain a professional, respectful tone. "
+    "Format your response with clear numbered steps and expected outcomes for each step."
+)
+
 RESOLUTION_PROMPT = """You are a professional IT Support Specialist at Aditi Consulting's internal help desk.
-Your role is to provide clear, actionable troubleshooting guidance to employees based on verified internal knowledge base articles.
+
+Your task is to resolve the employee's IT issue using ONLY the verified knowledge base articles provided below.
 
 Communication guidelines:
-- Be professional, empathetic, and concise
-- Address the user respectfully
-- Present steps in a clear numbered format
-- Include expected outcomes for each step
-- If confidence is below 80%, offer to escalate to a human specialist
-- Never guess or invent steps not supported by the knowledge articles
-- Always cite which knowledge source the steps come from
-- End with a supportive closing that invites follow-up questions
+- Open with a brief, empathetic acknowledgment of the specific issue (1-2 sentences)
+- Present numbered resolution steps clearly — each step should have an expected outcome
+- Use plain language; avoid jargon unless the employee is clearly technical
+- If confidence is below 80%, proactively offer to escalate to a human specialist
+- Always cite the knowledge article you're drawing from
+- Close with an invitation for follow-up (e.g. "Let me know if that resolves the issue")
+- Escalation path: Freshservice ticket → IT Lead → IT Admin (only if steps don't resolve)
 
-Knowledge base articles (verified internal documentation):
+Knowledge base articles (verified Aditi internal documentation):
 {knowledge_articles}
 
 Employee's issue: {user_issue}
-Classified category: {category}
+Issue category: {category}
+Severity: {severity}
 
-Provide a professional, helpful resolution response with numbered steps. Start with a brief acknowledgment of the issue, then present the steps, and close with a follow-up offer."""
+Provide a clear, professional resolution response with numbered steps."""
+
+
+def _get_steps(article: dict) -> list:
+    """Extract steps from an article dict, supporting both DB and YAML field names."""
+    return (
+        article.get("resolution_steps")
+        or article.get("troubleshooting_steps")
+        or article.get("steps")
+        or []
+    )
 
 
 async def resolution_node(state: WorkflowState) -> dict:
@@ -47,11 +72,8 @@ async def resolution_node(state: WorkflowState) -> dict:
 
     knowledge_results = state.get("knowledge_results", [])
 
-    # Generate resolution from knowledge
     resolution = await _generate_resolution(knowledge_results, state)
-
-    # Build AI response message
-    response_content = _format_resolution_message(resolution)
+    response_content = _format_resolution_message(resolution, state)
 
     audit_entry = {
         "event": "resolution.generated",
@@ -79,7 +101,6 @@ async def _generate_resolution(knowledge_results: list[dict], state: WorkflowSta
     if not knowledge_results:
         return {"steps": [], "confidence": 0.0, "method": "none"}
 
-    # Attempt LLM-powered resolution synthesis
     llm = get_llm_service()
     if llm.is_available:
         try:
@@ -87,17 +108,7 @@ async def _generate_resolution(knowledge_results: list[dict], state: WorkflowSta
         except Exception as e:
             logger.warning("resolution_llm_fallback", error=str(e))
 
-    # Fallback: extract steps directly from best article
     return _direct_resolution(knowledge_results, state)
-
-
-RESOLUTION_SYSTEM_PROMPT = (
-    "You are a professional IT Support Specialist at Aditi Consulting's internal help desk. "
-    "You provide accurate, empathetic, and actionable support grounded exclusively in the "
-    "provided knowledge base articles. Never invent steps not found in the knowledge base. "
-    "Maintain a professional, respectful tone at all times. "
-    "Format your response with clear numbered steps and expected outcomes."
-)
 
 
 async def _llm_resolution(
@@ -110,12 +121,13 @@ async def _llm_resolution(
 
     assert isinstance(llm, LLMService)
 
-    # Format knowledge articles for the prompt
+    # Format knowledge articles for the prompt, using correct field names
     articles_text = "\n\n".join(
         f"Article: {a.get('title', 'Untitled')}\n"
         f"Category: {a.get('category', 'general')}\n"
-        f"Steps: {a.get('steps', [])}\n"
-        f"Content: {a.get('content', '')[:1000]}"
+        f"Summary: {a.get('short_summary') or ''}\n"
+        f"Resolution Steps: {_get_steps(a)}\n"
+        f"Content: {(a.get('content') or a.get('snippet') or '')[:1200]}"
         for a in knowledge_results[:3]
     )
 
@@ -129,11 +141,12 @@ async def _llm_resolution(
         knowledge_articles=articles_text,
         user_issue=user_issue,
         category=state.get("issue_category", "other"),
+        severity=state.get("severity", "medium"),
     )
 
     content = await llm.complete(prompt, system_prompt=RESOLUTION_SYSTEM_PROMPT)
 
-    # LLM returns prose — wrap as a single "step" for consistent format
+    # LLM returns well-structured prose — wrap as a single "step" for consistent format
     steps = [{"step_number": 1, "instruction": content, "details": None}]
     confidence = min(0.95, state.get("knowledge_confidence", 0.5) + 0.15)
 
@@ -141,18 +154,18 @@ async def _llm_resolution(
 
 
 def _direct_resolution(knowledge_results: list[dict], state: WorkflowState) -> dict:
-    """Extract steps directly from the best matching article (fallback)."""
+    """Extract steps directly from the best matching article (no-LLM fallback)."""
     best_article = knowledge_results[0]
-    steps = best_article.get("steps", [])
+    raw_steps = _get_steps(best_article)
     confidence = min(0.9, state.get("knowledge_confidence", 0.5) + 0.1)
 
     formatted_steps = []
-    for i, step in enumerate(steps, 1):
+    for i, step in enumerate(raw_steps, 1):
         if isinstance(step, dict):
             formatted_steps.append({
                 "step_number": i,
-                "instruction": step.get("instruction", step.get("step", "")),
-                "details": step.get("details"),
+                "instruction": step.get("instruction") or step.get("step") or str(step),
+                "details": step.get("details") or step.get("expected_outcome"),
             })
         elif isinstance(step, str):
             formatted_steps.append({
@@ -164,28 +177,34 @@ def _direct_resolution(knowledge_results: list[dict], state: WorkflowState) -> d
     return {"steps": formatted_steps, "confidence": confidence, "method": "direct"}
 
 
-def _format_resolution_message(resolution: dict) -> str:
-    """Format resolution into a professional user-friendly message."""
+def _format_resolution_message(resolution: dict, state: WorkflowState) -> str:
+    """Format resolution into a professional user-facing message."""
     if not resolution["steps"]:
         return (
             "Thank you for contacting Aditi IT Support. I've reviewed your issue but "
-            "I'm unable to provide a confident resolution based on our current knowledge base. "
-            "I'd recommend connecting you with a specialist who can assist further.\n\n"
+            "I'm unable to find a matching resolution in our knowledge base. "
+            "I'd recommend raising a Freshservice ticket so our IT team can assist directly.\n\n"
             "Would you like me to escalate this to our IT support team?"
         )
 
     confidence = resolution["confidence"]
-    lines = []
+    method = resolution.get("method", "direct")
 
+    # LLM method returns fully-formatted prose — return as-is
+    if method == "llm" and len(resolution["steps"]) == 1:
+        return resolution["steps"][0]["instruction"]
+
+    # Direct method — build structured response
+    lines = []
     if confidence >= 0.8:
         lines.append(
-            "Thank you for reaching out. I've identified a solution for your issue. "
+            "I've found a resolution for your issue in our knowledge base. "
             "Please follow these steps:\n"
         )
     else:
         lines.append(
-            "Thank you for contacting IT Support. Based on our knowledge base, "
-            "here are some troubleshooting steps that may resolve your issue:\n"
+            "Based on our knowledge base, here are some troubleshooting steps "
+            "that should resolve your issue:\n"
         )
 
     for step in resolution["steps"]:
@@ -196,14 +215,13 @@ def _format_resolution_message(resolution: dict) -> str:
 
     if confidence >= 0.8:
         lines.append(
-            "\nPlease let me know if these steps resolved your issue, or if you need "
-            "further assistance. I'm here to help."
+            "Let me know if these steps resolved your issue, or if you need "
+            "further assistance — I'm here to help."
         )
     else:
         lines.append(
-            "\nIf these steps don't fully resolve your issue, I can connect you with "
-            "a specialist from our IT support team for additional assistance. "
-            "Just let me know how it goes."
+            "If these steps don't fully resolve your issue, I can raise a Freshservice ticket "
+            "to connect you with an IT specialist. Just let me know how it goes."
         )
 
     return "\n".join(lines)
