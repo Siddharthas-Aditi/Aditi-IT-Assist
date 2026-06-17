@@ -51,10 +51,13 @@ class WorkflowState(TypedDict):
     # Session identification
     session_id: str
     user_id: str
+    user_name: str | None
+    user_email: str | None
 
     # Classification (set by Triage Agent)
     issue_category: str | None
     issue_subcategory: str | None
+    issue_subtype: str | None  # Specific subtype, e.g. "mailbox-full"
     severity: Literal["low", "medium", "high", "critical"] | None
     urgency: Literal["low", "medium", "high"] | None
     impact: Literal["individual", "team", "department", "organization"] | None
@@ -62,6 +65,8 @@ class WorkflowState(TypedDict):
     # Knowledge retrieval (set by Knowledge Agent)
     knowledge_results: list[dict]
     knowledge_confidence: float
+    # Grounding trace (kept/rejected articles + relevance) for debugging.
+    retrieval_trace: dict | None
     # Source attribution for grounded answers (title + citation label + id).
     knowledge_citations: list[dict]
     # True when retrieval was restricted to published, governed content only.
@@ -70,6 +75,8 @@ class WorkflowState(TypedDict):
     # Resolution (set by Resolution Agent)
     resolution_steps: list[ResolutionStep]
     resolution_confidence: float
+    # Component breakdown behind resolution_confidence (debug/observability).
+    confidence_breakdown: dict | None
     steps_attempted: list[str]
 
     # Escalation (set by Escalation Agent)
@@ -93,6 +100,7 @@ class WorkflowState(TypedDict):
     quick_replies: list[dict] | None  # [{label, value}] for frontend chips
     conversation_phase: str | None  # Current DiagnosticPhase value
     resolution_confirmed: bool | None  # User confirmed issue is resolved
+    issue_resolved: bool | None  # User confirmed the fix worked (closing turn)
 
     # ── Enterprise Extensions ────────────────────────────────────
 

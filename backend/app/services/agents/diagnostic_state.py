@@ -55,6 +55,8 @@ class DiagnosticContext:
     # ── Core Classification ──────────────────────────────────────
     issue_category: str | None = None
     issue_subcategory: str | None = None
+    issue_subtype: str | None = None          # Specific subtype, e.g. "mailbox-full"
+    subtype_confidence: float = 0.0
     symptom: str | None = None
     exact_problem_statement: str | None = None
 
@@ -89,6 +91,34 @@ class DiagnosticContext:
     steps_already_tried: list[str] = field(default_factory=list)
     live_agent_requested: bool = False
 
+    # ── Troubleshooting State & Memory ───────────────────────────
+    # Normalized instruction text the agent has already PRESENTED to the user.
+    suggested_steps: list[str] = field(default_factory=list)
+    # Steps the user explicitly says they tried.
+    attempted_steps: list[str] = field(default_factory=list)
+    # Steps that were presented and then reported as not working.
+    failed_steps: list[str] = field(default_factory=list)
+    # Steps that resolved (partial wins).
+    resolved_steps: list[str] = field(default_factory=list)
+    # Article ids/titles already used as a source (avoid re-grounding on the same chunk).
+    retrieval_sources_used: list[str] = field(default_factory=list)
+    # "clarify" | "confirm" | "resolve" | "escalate" | "resolved"
+    last_response_type: str | None = None
+    # Increments when a round produces no NEW grounded step (stuck-state signal).
+    loop_counter: int = 0
+    # Set by triage when the user reports the last steps did not work.
+    last_resolution_failed: bool = False
+    # Set when the user confirms the issue is fixed.
+    issue_resolved: bool = False
+    escalation_reason: str | None = None
+
+    # ── Understanding confirmation (human-like flow) ──────────────
+    # The agent restates its understanding and waits for the user to confirm
+    # BEFORE giving a solution. awaiting_confirmation = we asked, waiting for
+    # yes/no; understanding_confirmed = the user agreed our understanding is right.
+    awaiting_confirmation: bool = False
+    understanding_confirmed: bool = False
+
     # ── Conversation Meta ────────────────────────────────────────
     phase: DiagnosticPhase = DiagnosticPhase.INTAKE
     clarification_count: int = 0
@@ -111,7 +141,8 @@ class DiagnosticContext:
         """
         has_category = bool(self.issue_category)
         has_specificity = bool(
-            self.symptom
+            self.issue_subtype
+            or self.symptom
             or self.exact_problem_statement
             or self.error_message
             or self.issue_subcategory
@@ -143,11 +174,82 @@ class DiagnosticContext:
             return True
         return False
 
+    def reset_issue_context(self) -> None:
+        """Clear everything specific to the *current* issue.
+
+        Used on a topic shift (the user switches to a different system) so the
+        new issue is diagnosed and confirmed from scratch instead of inheriting
+        stale symptoms/subtypes/tried-steps from the previous problem — that
+        leak was why "I have an issue with outlook" got answered with a stale
+        Sixth-Sense login symptom and the wrong KB article.
+
+        System identity (normalized_system/affected_system/issue_category) is
+        intentionally NOT cleared here — the caller applies the new entity right
+        after calling this.
+        """
+        self.issue_subcategory = None
+        self.issue_subtype = None
+        self.subtype_confidence = 0.0
+        self.symptom = None
+        self.exact_problem_statement = None
+        self.error_message = None
+        self.login_issue_flag = False
+        self.blocked_account_flag = None
+        self.otp_issue_flag = False
+        self.unhandled_message_flag = False
+        self.device_type = None
+        self.platform_os = None
+        self.duration = None
+        self.steps_already_tried = []
+        self.suggested_steps = []
+        self.attempted_steps = []
+        self.failed_steps = []
+        self.resolved_steps = []
+        self.retrieval_sources_used = []
+        self.loop_counter = 0
+        self.resolution_attempts = 0
+        self.clarification_count = 0
+        self.last_resolution_failed = False
+        self.awaiting_confirmation = False
+        self.understanding_confirmed = False
+        self.issue_resolved = False
+        self.escalation_reason = None
+        self.last_response_type = None
+
+    @staticmethod
+    def _norm_step(text: str) -> str:
+        """Normalize a step instruction for de-duplication / memory matching."""
+        return " ".join((text or "").lower().split())
+
+    def record_suggested_steps(self, instructions: list[str]) -> None:
+        """Remember step instructions we have presented this turn."""
+        for ins in instructions:
+            key = self._norm_step(ins)
+            if key and key not in (self._norm_step(s) for s in self.suggested_steps):
+                self.suggested_steps.append(ins)
+
+    def mark_last_batch_failed(self) -> None:
+        """Move the most recently suggested-but-unconfirmed steps to failed."""
+        for ins in self.suggested_steps:
+            key = self._norm_step(ins)
+            if key not in (self._norm_step(s) for s in self.failed_steps):
+                self.failed_steps.append(ins)
+                self.attempted_steps.append(ins)
+
+    def is_step_exhausted_or_seen(self, instruction: str) -> bool:
+        """Whether a step has already been suggested or marked failed."""
+        key = self._norm_step(instruction)
+        seen = {self._norm_step(s) for s in self.suggested_steps}
+        seen |= {self._norm_step(s) for s in self.failed_steps}
+        return key in seen
+
     def get_retrieval_query(self) -> str:
         """Build a focused retrieval query from accumulated context."""
         parts: list[str] = []
         if self.issue_category:
             parts.append(self.issue_category)
+        if self.issue_subtype:
+            parts.append(self.issue_subtype.replace("-", " "))
         if self.issue_subcategory:
             parts.append(self.issue_subcategory)
         if self.symptom:
@@ -171,7 +273,7 @@ class DiagnosticContext:
         """Return all slots that have values."""
         result: dict[str, str] = {}
         for slot_name in [
-            "issue_category", "issue_subcategory", "symptom",
+            "issue_category", "issue_subcategory", "issue_subtype", "symptom",
             "exact_problem_statement", "affected_system", "device_type",
             "platform_os", "error_message", "duration", "urgency",
             "business_impact", "vpn_status", "network_type",
@@ -205,6 +307,8 @@ class DiagnosticContext:
         return {
             "issue_category": self.issue_category,
             "issue_subcategory": self.issue_subcategory,
+            "issue_subtype": self.issue_subtype,
+            "subtype_confidence": self.subtype_confidence,
             "symptom": self.symptom,
             "exact_problem_statement": self.exact_problem_statement,
             "normalized_system": self.normalized_system,
@@ -226,6 +330,18 @@ class DiagnosticContext:
             "network_type": self.network_type,
             "steps_already_tried": self.steps_already_tried,
             "live_agent_requested": self.live_agent_requested,
+            "suggested_steps": self.suggested_steps,
+            "attempted_steps": self.attempted_steps,
+            "failed_steps": self.failed_steps,
+            "resolved_steps": self.resolved_steps,
+            "retrieval_sources_used": self.retrieval_sources_used,
+            "last_response_type": self.last_response_type,
+            "loop_counter": self.loop_counter,
+            "last_resolution_failed": self.last_resolution_failed,
+            "issue_resolved": self.issue_resolved,
+            "escalation_reason": self.escalation_reason,
+            "awaiting_confirmation": self.awaiting_confirmation,
+            "understanding_confirmed": self.understanding_confirmed,
             "phase": self.phase.value,
             "clarification_count": self.clarification_count,
             "resolution_attempts": self.resolution_attempts,

@@ -221,25 +221,15 @@ export function SupportChatPage() {
                   msg.role === 'user' ? 'items-end' : 'items-start'
                 }`}
               >
-                {/* Category + confidence badge (AI messages only) */}
+                {/* Subtle "what I understand" chip (AI messages only).
+                    The raw confidence % is intentionally NOT shown to employees —
+                    it was misleading noise; it's available to IT/admin via the
+                    debug trace instead. */}
                 {msg.role === 'assistant' && msg.category && (
                   <div className="flex items-center gap-2">
                     <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700">
                       {CATEGORY_LABELS[msg.category] ?? msg.category}
                     </span>
-                    {msg.confidence !== undefined && msg.confidence > 0 && (
-                      <span
-                        className={`text-xs font-medium ${
-                          msg.confidence >= 0.8
-                            ? 'text-green-600'
-                            : msg.confidence >= 0.5
-                              ? 'text-amber-600'
-                              : 'text-red-500'
-                        }`}
-                      >
-                        {Math.round(msg.confidence * 100)}% confidence
-                      </span>
-                    )}
                   </div>
                 )}
 

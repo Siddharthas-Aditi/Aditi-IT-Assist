@@ -11,7 +11,10 @@ from app.workflows.state import WorkflowState
 
 
 def route_after_triage(state: WorkflowState) -> str:
-    """Route after triage: clarify, retrieve, or escalate."""
+    """Route after triage: clarify, retrieve, escalate, or end (resolved)."""
+    # User confirmed the issue is fixed — close out, no retrieval.
+    if state.get("issue_resolved"):
+        return END
     if state.get("needs_clarification"):
         return END  # Return clarification question to user
     if state.get("issue_category") is None:
@@ -26,10 +29,14 @@ def route_after_triage(state: WorkflowState) -> str:
 
 
 def route_after_retrieval(state: WorkflowState) -> str:
-    """Route after knowledge retrieval."""
+    """Route after knowledge retrieval.
+
+    Policy: if the knowledge base has ANY relevant (grounded) article, we
+    troubleshoot from it — we do NOT ticket just because confidence is moderate.
+    We only escalate (→ ticket) when grounding found nothing usable, i.e. there
+    is genuinely no solution in the KB for this issue.
+    """
     if not state.get("knowledge_results"):
-        return "escalate"
-    if state.get("knowledge_confidence", 0) < 0.3:
         return "escalate"
     return "resolve"
 
@@ -37,13 +44,25 @@ def route_after_retrieval(state: WorkflowState) -> str:
 def route_after_resolution(state: WorkflowState) -> str:
     """Route after resolution attempt.
 
-    Higher threshold (0.5) to return resolution.
-    The resolution node itself adds "Did this help?" framing.
+    Escalate when:
+    - the resolver exhausted all grounded steps / detected a loop (confidence 0),
+    - or grounding is too weak to stand behind an answer (< 0.35).
+
+    Otherwise return the grounded next-step guidance to the user. A grounded but
+    only moderately-confident answer (0.35–0.5) is still worth showing — it is
+    on-domain and on-subtype — and the resolution node frames it with a
+    "did this help?" so the user can drive escalation if it doesn't.
     """
-    confidence = state.get("resolution_confidence", 0)
-    if confidence >= 0.5:
-        return END  # Provide resolution (with disclaimer if < 0.8)
-    return "escalate"
+    diag = state.get("diagnostic_context") or {}
+    # The resolver sets phase=escalating only when it has exhausted every
+    # grounded step for the issue. That — not a moderate confidence score — is
+    # what warrants a ticket. A grounded answer is shown to the user regardless
+    # of confidence (it's framed with "did this help?" so the user can escalate).
+    if diag.get("phase") == "escalating":
+        return "escalate"
+    if not state.get("resolution_steps"):
+        return "escalate"
+    return END
 
 
 def route_after_escalation(state: WorkflowState) -> str:

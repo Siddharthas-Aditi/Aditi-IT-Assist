@@ -237,13 +237,17 @@ def normalize_entity(text: str) -> EntityMatch | None:
         candidates.append(f"{words[i]}{words[i + 1]}")
 
     for candidate in candidates:
-        if len(candidate) < 3:
+        # Require a reasonably long candidate so short generic words
+        # ("portal", "access", "login") can't fuzzy-match a product alias.
+        if len(candidate) < 4:
             continue
         for alias, entity in _ALIAS_INDEX.items():
-            if len(alias) < 3:
+            if len(alias) < 4:
                 continue
             ratio = SequenceMatcher(None, candidate, alias).ratio()
-            if ratio > 0.75 and ratio > best_ratio:
+            # 0.85 floor: real typos (sixsenses→0.9, naukhri→0.92, zoomm→0.89)
+            # still match, but loose look-alikes (portal→sixth_sense ~0.80) do not.
+            if ratio >= 0.85 and ratio > best_ratio:
                 best_ratio = ratio
                 best_fuzzy = EntityMatch(
                     canonical_name=entity.canonical_name,

@@ -24,10 +24,89 @@ from app.services.agents.entity_normalizer import (
     normalize_entity,
 )
 from app.services.agents.playbooks import get_playbook, get_playbook_for_entity  # noqa: F401
+from app.services.agents.subtype_classifier import classify_subtype
 from app.services.llm_service import get_llm_service
 from app.workflows.state import WorkflowState
 
 logger = get_logger(__name__)
+
+# Phrases that indicate the previously suggested steps did NOT work.
+_NEGATIVE_FEEDBACK = (
+    "didn't work", "did not work", "doesn't work", "does not work",
+    "still not working", "still not", "not resolved", "not fixed",
+    "same problem", "same issue", "no luck", "nope", "tried that",
+    "already tried", "that didn't help", "didn't help", "did not help",
+    "still happening", "still broken", "no it didn't", "no it did not",
+    "not working still", "issue persists", "still having",
+)
+
+# Phrases that indicate the issue is resolved.
+_POSITIVE_FEEDBACK = (
+    "that worked", "it worked", "it's fixed", "its fixed", "resolved",
+    "that fixed it", "fixed now", "all good", "working now", "thanks that worked",
+    "yes that resolved", "problem solved", "sorted now", "that did it",
+)
+
+
+def _is_negative_feedback(text: str) -> bool:
+    t = text.lower()
+    return any(p in t for p in _NEGATIVE_FEEDBACK)
+
+
+def _is_positive_feedback(text: str) -> bool:
+    t = text.lower()
+    return any(p in t for p in _POSITIVE_FEEDBACK)
+
+
+# Greetings / small talk that should be met with a warm welcome, not triage.
+_GREETING_WORDS = {
+    "hi", "hii", "hiii", "hello", "helo", "hey", "hey", "hiya", "yo",
+    "hi there", "hello there", "hey there", "good morning", "good afternoon",
+    "good evening", "greetings", "howdy", "morning", "afternoon", "evening",
+    "namaste", "hola", "sup", "whatsup", "what's up",
+}
+
+# Short affirmations / denials used when confirming our understanding.
+_AFFIRM_WORDS = {
+    "yes", "yep", "yeah", "yup", "ya", "yas", "correct", "right", "exactly",
+    "perfect", "confirmed", "sure", "ok", "okay", "yise", "indeed", "absolutely",
+}
+_AFFIRM_PHRASES = (
+    "that's right", "thats right", "that is correct", "that's correct",
+    "thats correct", "you got it", "spot on", "yes please", "go ahead", "correct",
+)
+_DENY_WORDS = {"no", "nope", "nah", "wrong", "incorrect"}
+_DENY_PHRASES = (
+    "not exactly", "not right", "that's not", "thats not", "not correct",
+    "not quite", "actually no", "that's wrong",
+)
+
+
+def _is_greeting(text: str) -> bool:
+    t = text.strip().lower().rstrip("!.? ")
+    if not t:
+        return False
+    if t in _GREETING_WORDS:
+        return True
+    # Short message that is just a greeting + filler (e.g. "hi there", "hello!!")
+    words = [w for w in t.replace(",", " ").split() if w]
+    return len(words) <= 3 and all(w in _GREETING_WORDS for w in words)
+
+
+def _is_affirmation(text: str) -> bool:
+    t = text.strip().lower().rstrip("!.? ")
+    words = {w for w in t.replace(",", " ").split() if w}
+    if words & _AFFIRM_WORDS:
+        return True
+    return any(p in t for p in _AFFIRM_PHRASES)
+
+
+def _is_denial(text: str) -> bool:
+    t = text.strip().lower().rstrip("!.? ")
+    words = {w for w in t.replace(",", " ").split() if w}
+    if words & _DENY_WORDS:
+        return True
+    return any(p in t for p in _DENY_PHRASES)
 
 ISSUE_CATEGORIES = [
     "email/outlook",
@@ -98,12 +177,47 @@ async def triage_node(state: WorkflowState) -> dict:
 
     diag_ctx = DiagnosticContext.from_dict(state.get("diagnostic_context") or {})
 
+    # ── Step 0: Greeting / small talk (only when no issue is in flight) ──
+    # A real analyst greets back and invites the problem — it does not jump to
+    # "which system is affected?".
+    in_active_issue = bool(
+        diag_ctx.issue_category
+        or diag_ctx.awaiting_confirmation
+        or diag_ctx.suggested_steps
+    )
+    if not in_active_issue and _is_greeting(user_message):
+        return _greeting_message(diag_ctx)
+
     # ── Step 1: Entity Normalization (every turn) ────────────────
     entity_match = normalize_entity(user_message)
+    # Apply when: no system yet, a more confident match, OR a confident match for
+    # a DIFFERENT system (a topic shift — even at equal confidence, e.g. one
+    # 0.9 alias to another).
+    switches_system = bool(
+        entity_match
+        and diag_ctx.normalized_system
+        and entity_match.canonical_name != diag_ctx.normalized_system
+        and entity_match.confidence >= 0.6
+    )
     if entity_match and (
         not diag_ctx.normalized_system
         or entity_match.confidence > diag_ctx.entity_confidence
+        or switches_system
     ):
+        # Topic shift: the user switched to a different system. Drop the stale
+        # issue context so the new problem is clarified and confirmed afresh.
+        if (
+            diag_ctx.normalized_system
+            and entity_match.canonical_name != diag_ctx.normalized_system
+            and entity_match.confidence >= 0.6
+        ):
+            logger.info(
+                "topic_shift",
+                from_system=diag_ctx.normalized_system,
+                to_system=entity_match.canonical_name,
+            )
+            diag_ctx.reset_issue_context()
+            diag_ctx.issue_category = None  # re-derived from the new entity below
         _apply_entity_match(diag_ctx, entity_match)
         logger.info(
             "entity_recognized",
@@ -116,6 +230,51 @@ async def triage_node(state: WorkflowState) -> dict:
     # ── Step 2: Intent Detection (every turn) ────────────────────
     intent_result = detect_issue_intent(user_message)
     _apply_intent(diag_ctx, intent_result)
+
+    # ── Step 2b: Resolution feedback handling ────────────────────
+    # If we previously presented steps, interpret this turn as feedback before
+    # treating it as a new problem. This drives progression and loop control.
+    steps_were_given = bool(diag_ctx.suggested_steps) or (
+        state.get("conversation_phase") == "confirming"
+    )
+    if steps_were_given and _is_positive_feedback(user_message):
+        diag_ctx.issue_resolved = True
+        diag_ctx.last_response_type = "resolved"
+        diag_ctx.resolved_steps.extend(diag_ctx.suggested_steps)
+        return _resolved_message(diag_ctx)
+
+    if steps_were_given and _is_negative_feedback(user_message):
+        diag_ctx.last_resolution_failed = True
+        diag_ctx.mark_last_batch_failed()
+        logger.info(
+            "resolution_marked_failed",
+            failed_count=len(diag_ctx.failed_steps),
+            subtype=diag_ctx.issue_subtype,
+        )
+
+    # ── Step 2c: Understanding-confirmation response ─────────────
+    # If we asked the user to confirm our understanding, interpret this turn as
+    # their answer before treating it as new problem detail.
+    if diag_ctx.awaiting_confirmation:
+        if _is_affirmation(user_message):
+            diag_ctx.awaiting_confirmation = False
+            diag_ctx.understanding_confirmed = True
+            logger.info("understanding_confirmed", subtype=diag_ctx.issue_subtype)
+            # Fall through — we now proceed to retrieval/resolution this turn.
+        elif _is_denial(user_message):
+            # We misunderstood. Drop the assumed specifics and ask openly.
+            diag_ctx.awaiting_confirmation = False
+            diag_ctx.understanding_confirmed = False
+            diag_ctx.symptom = None
+            diag_ctx.issue_subtype = None
+            diag_ctx.subtype_confidence = 0.0
+            diag_ctx.issue_subcategory = None
+            diag_ctx.exact_problem_statement = None
+            return _open_clarification(diag_ctx)
+        else:
+            # The user gave more detail instead of yes/no — fold it in and
+            # re-confirm with the updated understanding (handled below).
+            diag_ctx.awaiting_confirmation = False
 
     # ── Step 3: Classification or Slot Extraction ────────────────
     if diag_ctx.issue_category is None:
@@ -139,10 +298,47 @@ async def triage_node(state: WorkflowState) -> dict:
         if not diag_ctx.symptom and not diag_ctx.exact_problem_statement:
             diag_ctx.exact_problem_statement = user_message
 
+    # ── Step 3b: Subtype classification (deterministic, grounded) ─
+    # Map the symptom onto a concrete subtype (e.g. "mailbox-full") so retrieval
+    # and resolution target the right playbook instead of generic first-N steps.
+    subtype_text = " ".join(
+        p for p in (
+            user_message,
+            diag_ctx.exact_problem_statement or "",
+            diag_ctx.symptom or "",
+            diag_ctx.issue_subcategory or "",
+        ) if p
+    )
+    subtype_match = classify_subtype(subtype_text, diag_ctx.issue_category)
+    if subtype_match and subtype_match.confidence >= diag_ctx.subtype_confidence:
+        subtype_changed = subtype_match.subtype != diag_ctx.issue_subtype
+        diag_ctx.issue_subtype = subtype_match.subtype
+        diag_ctx.subtype_confidence = subtype_match.confidence
+        diag_ctx.issue_subcategory = subtype_match.subtype
+        # Keep symptom aligned with the ACTIVE subtype. Previously symptom was
+        # only set when empty, so it got stuck on the first subtype (e.g. it kept
+        # saying "outlook-crash" after the user moved on to "mailbox full").
+        if subtype_changed or not diag_ctx.symptom:
+            diag_ctx.symptom = subtype_match.subtype
+        # A genuine topic move within the category resets prior tried-step memory
+        # so the new subtype's playbook starts fresh.
+        if subtype_changed and diag_ctx.suggested_steps:
+            diag_ctx.suggested_steps = []
+            diag_ctx.failed_steps = []
+            diag_ctx.loop_counter = 0
+        logger.info(
+            "subtype_classified",
+            subtype=subtype_match.subtype,
+            confidence=subtype_match.confidence,
+            matched=subtype_match.matched_keywords,
+        )
+
     # ── Step 4: Playbook-guided clarification decision ───────────
     decision: ClarifyOrAnswerDecision = evaluate_clarify_or_answer(diag_ctx)
 
-    if decision.should_clarify:
+    # Never re-clarify when the user just told us the prior steps failed —
+    # advance the troubleshooting flow instead of asking the same question.
+    if decision.should_clarify and not diag_ctx.last_resolution_failed:
         diag_ctx.clarification_count += 1
         diag_ctx.phase = DiagnosticPhase.CLARIFYING
 
@@ -163,6 +359,8 @@ async def triage_node(state: WorkflowState) -> dict:
             "current_node": "triage",
             "issue_category": diag_ctx.issue_category,
             "issue_subcategory": diag_ctx.issue_subcategory,
+            "issue_subtype": diag_ctx.issue_subtype,
+            "issue_resolved": False,
             "severity": state.get("severity") or "medium",
             "urgency": state.get("urgency") or "medium",
             "needs_clarification": True,
@@ -174,14 +372,53 @@ async def triage_node(state: WorkflowState) -> dict:
             "audit_trail": [audit_entry],
         }
 
+    # ── Step 5: Confirm understanding BEFORE solving ─────────────
+    # We have enough context. Like a real analyst, restate what we think the
+    # problem is and wait for the user to confirm before giving a solution.
+    # Skipped once confirmed, and skipped while advancing after a failed step.
+    if (
+        not diag_ctx.understanding_confirmed
+        and not diag_ctx.last_resolution_failed
+    ):
+        diag_ctx.awaiting_confirmation = True
+        diag_ctx.last_response_type = "confirm"
+        diag_ctx.phase = DiagnosticPhase.CLARIFYING
+        question = _confirmation_message(diag_ctx)
+        return {
+            "current_node": "triage",
+            "issue_category": diag_ctx.issue_category,
+            "issue_subcategory": diag_ctx.issue_subcategory,
+            "issue_subtype": diag_ctx.issue_subtype,
+            "issue_resolved": False,
+            "severity": state.get("severity") or _infer_severity(diag_ctx),
+            "urgency": state.get("urgency") or _infer_urgency(diag_ctx),
+            "needs_clarification": True,
+            "clarification_question": question,
+            "quick_replies": [
+                {"label": "Yes, that's right", "value": "yes, that's right"},
+                {"label": "No, not quite", "value": "no, not quite"},
+            ],
+            "diagnostic_context": diag_ctx.to_dict(),
+            "conversation_phase": diag_ctx.phase.value,
+            "messages": [AIMessage(content=question)],
+            "audit_trail": [{
+                "event": "triage.confirm_understanding",
+                "category": diag_ctx.issue_category,
+                "subtype": diag_ctx.issue_subtype,
+            }],
+        }
+
     diag_ctx.phase = DiagnosticPhase.DIAGNOSING
 
     audit_entry = {
         "event": "triage.classified",
         "category": diag_ctx.issue_category,
         "subcategory": diag_ctx.issue_subcategory,
+        "subtype": diag_ctx.issue_subtype,
+        "subtype_confidence": diag_ctx.subtype_confidence,
         "entity": diag_ctx.normalized_system,
         "symptom": diag_ctx.symptom,
+        "resolution_failed_feedback": diag_ctx.last_resolution_failed,
         "intent_flags": {
             "login": diag_ctx.login_issue_flag,
             "locked": diag_ctx.blocked_account_flag,
@@ -197,6 +434,8 @@ async def triage_node(state: WorkflowState) -> dict:
         "current_node": "triage",
         "issue_category": diag_ctx.issue_category,
         "issue_subcategory": diag_ctx.issue_subcategory,
+        "issue_subtype": diag_ctx.issue_subtype,
+        "issue_resolved": False,
         "severity": state.get("severity") or _infer_severity(diag_ctx),
         "urgency": state.get("urgency") or _infer_urgency(diag_ctx),
         "needs_clarification": False,
@@ -264,6 +503,130 @@ def _infer_urgency(ctx: DiagnosticContext) -> str:
     if ctx.login_issue_flag or ctx.blocked_account_flag == "yes":
         return "high"
     return "medium"
+
+
+def _resolved_message(diag_ctx: DiagnosticContext) -> dict:
+    """Return a closing message when the user confirms the issue is resolved."""
+    diag_ctx.phase = DiagnosticPhase.CONFIRMING
+    content = (
+        "Great — glad that resolved it! 🎉 "
+        "If anything else comes up, just start a new chat and I'll be happy to help."
+    )
+    return {
+        "current_node": "triage",
+        "issue_category": diag_ctx.issue_category,
+        "issue_subcategory": diag_ctx.issue_subcategory,
+        "issue_subtype": diag_ctx.issue_subtype,
+        "issue_resolved": True,
+        "needs_clarification": False,
+        "clarification_question": None,
+        "quick_replies": None,
+        "diagnostic_context": diag_ctx.to_dict(),
+        "conversation_phase": "resolved",
+        "resolution_confirmed": True,
+        "messages": [AIMessage(content=content)],
+        "audit_trail": [{"event": "triage.resolved", "subtype": diag_ctx.issue_subtype}],
+    }
+
+
+# Natural, system-agnostic fragments describing each subtype, for the
+# "let me confirm I understood" message.
+_CONFIRM_FRAGMENTS: dict[str, str] = {
+    "mailbox-full": "your mailbox is full",
+    "not-receiving-emails": "you're not receiving emails",
+    "sending-failure": "you can't send emails",
+    "outlook-slow": "it's running slowly",
+    "outlook-crash": "it won't open or keeps crashing",
+    "offline-mode": "it's stuck offline",
+    "calendar-sync": "your calendar isn't syncing",
+    "search-not-working": "search isn't working",
+    "sign-in-problem": "you can't sign in",
+    "login-failure": "you're unable to log in",
+    "account-locked": "your account is locked",
+    "password-expired": "you need a password reset",
+    "mfa-not-working": "your multi-factor sign-in isn't working",
+    "otp-issue": "you're not receiving your OTP code",
+    "unhandled-message": "you're seeing an 'Unhandled Message' error",
+    "no-audio": "you can't hear any audio",
+    "no-video": "your camera isn't working",
+    "cant-join-meeting": "you can't join the meeting",
+    "screen-share-issue": "screen sharing isn't working",
+    "poor-quality": "the call quality is poor",
+    # Network
+    "vpn-not-connecting": "your VPN won't connect",
+    "wifi-disconnecting": "your Wi-Fi keeps dropping",
+    "internet-slow": "your internet is slow",
+    "specific-site-unreachable": "you can't reach a particular site or app",
+    "3cx-voip-issue": "you're having a VoIP/3CX issue",
+    # Intune / device
+    "non-compliant": "your device is showing as non-compliant",
+    "enrollment-failure": "you can't enrol your device",
+    # Camera / audio hardware
+    "camera-not-detected": "your camera isn't being detected",
+    "microphone-not-working": "your microphone isn't working",
+}
+
+
+def _confirmation_message(diag_ctx: DiagnosticContext) -> str:
+    """A natural 'let me confirm I understood' question before solving."""
+    system = diag_ctx.affected_system or "IT"
+    subtype = (diag_ctx.issue_subtype or "").replace("_", "-").lower()
+    detail = _CONFIRM_FRAGMENTS.get(subtype) or diag_ctx.exact_problem_statement
+    if detail:
+        return (
+            f"Got it. Just to make sure I've understood your {system} issue correctly — "
+            f"{detail}. Is that right? Once you confirm, I'll walk you through how to fix it."
+        )
+    return (
+        f"Thanks. So I can help with your {system} issue — could you confirm I've "
+        f"got the gist of it, and I'll talk you through the fix?"
+    )
+
+
+def _greeting_message(diag_ctx: DiagnosticContext) -> dict:
+    """Warm greeting that invites the user to describe their issue."""
+    content = (
+        "Hi there! 👋 I'm the Aditi IT Support Assistant. I can help with things "
+        "like Outlook and email, VPN and network, Zoom/Teams, hardware, and account "
+        "or sign-in issues. What can I help you with today?"
+    )
+    return {
+        "current_node": "triage",
+        "needs_clarification": True,
+        "clarification_question": content,
+        "issue_category": None,
+        "issue_subtype": None,
+        "issue_resolved": False,
+        "quick_replies": None,
+        "diagnostic_context": diag_ctx.to_dict(),
+        "conversation_phase": "intake",
+        "messages": [AIMessage(content=content)],
+        "audit_trail": [{"event": "triage.greeting"}],
+    }
+
+
+def _open_clarification(diag_ctx: DiagnosticContext) -> dict:
+    """Ask the user to describe the problem again after we misunderstood."""
+    content = (
+        "No problem — thanks for putting me right. Could you tell me a bit more "
+        "about what's actually happening, so I can point you to the right fix?"
+    )
+    diag_ctx.clarification_count += 1
+    diag_ctx.phase = DiagnosticPhase.CLARIFYING
+    return {
+        "current_node": "triage",
+        "issue_category": diag_ctx.issue_category,
+        "issue_subcategory": diag_ctx.issue_subcategory,
+        "issue_subtype": diag_ctx.issue_subtype,
+        "issue_resolved": False,
+        "needs_clarification": True,
+        "clarification_question": content,
+        "quick_replies": None,
+        "diagnostic_context": diag_ctx.to_dict(),
+        "conversation_phase": diag_ctx.phase.value,
+        "messages": [AIMessage(content=content)],
+        "audit_trail": [{"event": "triage.understanding_rejected"}],
+    }
 
 
 def _welcome_message() -> dict:

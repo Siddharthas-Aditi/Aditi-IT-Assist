@@ -1,4 +1,4 @@
-import { Bot, User, AlertCircle, Shield, ExternalLink, CheckCircle2 } from 'lucide-react';
+import { Bot, User, AlertCircle, ExternalLink, CheckCircle2, Search } from 'lucide-react';
 import { clsx } from 'clsx';
 import type { ChatMessage } from '../../types';
 import { StepTimeline, type TimelineStep } from '../../components/ui/StepTimeline';
@@ -7,6 +7,15 @@ import { Badge } from '../../components/ui/Badge';
 interface ChatBubbleProps {
   message: ChatMessage;
   index: number;
+}
+
+/** Turn a slug like "email/outlook" or "mailbox-full" into readable text. */
+function humanize(value?: string): string {
+  if (!value) return '';
+  const last = value.includes('/') ? value.split('/').pop()! : value;
+  return last
+    .replace(/[-_]/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 /**
@@ -106,17 +115,50 @@ export function ChatBubble({ message, index }: ChatBubbleProps) {
           <ProseContent text={proseSingleStep} />
         )}
 
-        {/* Metadata row — confidence only (removed noisy category badge) */}
-        {!isUser && message.confidence !== undefined && message.confidence > 0 && (
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <Badge
-              variant={message.confidence >= 0.8 ? 'success' : message.confidence >= 0.5 ? 'warning' : 'default'}
-              className="text-[10px]"
-            >
-              <Shield className="mr-1 h-2.5 w-2.5" />
-              {Math.round(message.confidence * 100)}% confidence
+        {/* Understanding chip — subtly shows what the agent thinks the issue is.
+            Replaces the old confidence % badge, which was misleading (it showed
+            high confidence on mismatched answers). Raw confidence now appears
+            only in the internal debug panel below for IT/admin roles. */}
+        {!isUser && (message.subtype || message.category) && (
+          <div className="mt-3 flex flex-wrap items-center gap-1.5">
+            <Badge variant="default" className="text-[10px]">
+              <Search className="mr-1 h-2.5 w-2.5" />
+              Understanding: {humanize(message.category)}
+              {message.subtype ? ` · ${humanize(message.subtype)}` : ''}
             </Badge>
           </div>
+        )}
+
+        {/* Internal developer trace — only present for IT/admin roles. */}
+        {!isUser && message.debug && (
+          <details className="mt-2 rounded-lg border border-dashed border-border/60 bg-muted/40 px-3 py-2 text-[11px] text-muted-foreground">
+            <summary className="cursor-pointer select-none font-medium">
+              Debug trace (internal)
+            </summary>
+            <div className="mt-2 space-y-1">
+              <div>System: {message.debug.normalized_system ?? '—'}</div>
+              <div>
+                Subtype: {message.debug.issue_subtype ?? '—'} (
+                {Math.round((message.debug.subtype_confidence ?? 0) * 100)}%)
+              </div>
+              <div>Phase: {message.debug.conversation_phase ?? '—'}</div>
+              <div>Loop counter: {message.debug.loop_counter ?? 0}</div>
+              {message.confidence !== undefined && (
+                <div>Resolution confidence: {Math.round(message.confidence * 100)}%</div>
+              )}
+              {message.debug.failed_steps && message.debug.failed_steps.length > 0 && (
+                <div>Already tried: {message.debug.failed_steps.join('; ')}</div>
+              )}
+              {message.debug.escalation_reason && (
+                <div>Escalation: {message.debug.escalation_reason}</div>
+              )}
+              {message.debug.confidence_breakdown && (
+                <pre className="mt-1 overflow-x-auto whitespace-pre-wrap break-words text-[10px]">
+                  {JSON.stringify(message.debug.confidence_breakdown, null, 2)}
+                </pre>
+              )}
+            </div>
+          </details>
         )}
 
         {/* Multi-step timeline (direct/fallback path) */}

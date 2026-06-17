@@ -216,13 +216,27 @@ class KnowledgeRetrievalService:
 
 
 class _DictArticle:
-    """Adapter exposing a YAML article dict via the attributes citations expect."""
+    """Adapter exposing a YAML article dict via the attributes downstream needs.
+
+    Critically this carries through ``steps``/``subcategory``/``tags``/
+    ``keywords`` so the YAML dev fallback produces the same grounded, step-rich
+    results as the published-DB path (previously these were dropped, leaving the
+    resolver with no steps to work from).
+    """
 
     def __init__(self, data: dict) -> None:
         self.id = data.get("id", "yaml")
         self.title = data.get("title", "")
         self.category = data.get("category", "")
+        self.subcategory = data.get("subcategory")
+        self.issue_type = data.get("issue_type") or data.get("subcategory")
         self.slug = data.get("id")
         self.citation_label = data.get("title", "")
         self.retrieval_text = data.get("content", "")
-        self.short_summary = None
+        self.content = data.get("content", "")
+        self.short_summary = data.get("short_summary")
+        self.tags = data.get("tags") or []
+        self.keywords = data.get("keywords") or []
+        self.resolution_steps = data.get("resolution_steps") or []
+        self.steps = data.get("steps") or []
+        self.troubleshooting_steps = data.get("troubleshooting_steps") or []

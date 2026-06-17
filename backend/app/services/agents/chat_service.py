@@ -5,7 +5,12 @@ from uuid import uuid4
 from langchain_core.messages import AIMessage, HumanMessage
 
 from app.core.logging import get_logger
-from app.schemas.chat import ChatMessageResponse, QuickReplyOption, ResolutionStepSchema
+from app.schemas.chat import (
+    ChatDebugInfo,
+    ChatMessageResponse,
+    QuickReplyOption,
+    ResolutionStepSchema,
+)
 
 logger = get_logger(__name__)
 
@@ -25,6 +30,10 @@ class ChatService:
         session_id: str,
         user_message: str,
         user_id: str = "dev-user",
+        *,
+        user_name: str | None = None,
+        user_email: str | None = None,
+        include_debug: bool = False,
     ) -> ChatMessageResponse:
         """Process a user message through the agent workflow.
 
@@ -32,6 +41,7 @@ class ChatService:
             session_id: Support session identifier
             user_message: The user's message text
             user_id: The authenticated user's ID
+            include_debug: Attach the developer trace (IT/admin roles only).
 
         Returns:
             ChatMessageResponse with AI response and metadata
@@ -43,8 +53,11 @@ class ChatService:
         )
 
         try:
-            result = await self._invoke_workflow(session_id, user_message, user_id)
-            return self._format_response(session_id, result)
+            result = await self._invoke_workflow(
+                session_id, user_message, user_id,
+                user_name=user_name, user_email=user_email,
+            )
+            return self._format_response(session_id, result, include_debug=include_debug)
         except Exception as e:
             logger.error("process_message_error", error=str(e), session_id=session_id)
             return self._error_response(session_id)
@@ -54,6 +67,9 @@ class ChatService:
         session_id: str,
         user_message: str,
         user_id: str,
+        *,
+        user_name: str | None = None,
+        user_email: str | None = None,
     ) -> dict:
         """Invoke the LangGraph workflow with session continuity.
 
@@ -86,10 +102,13 @@ class ChatService:
             state["knowledge_results"] = []
             state["knowledge_confidence"] = 0.0
             state["knowledge_citations"] = []
+            state["retrieval_trace"] = None
             state["resolution_steps"] = []
             state["resolution_confidence"] = 0.0
+            state["confidence_breakdown"] = None
             state["should_escalate"] = False
             state["escalation_reason"] = None
+            state["issue_resolved"] = False
             state["ticket_draft"] = None
             state["ticket_created"] = False
         else:
@@ -97,8 +116,11 @@ class ChatService:
                 "messages": [HumanMessage(content=user_message)],
                 "session_id": session_id,
                 "user_id": user_id,
+                "user_name": user_name,
+                "user_email": user_email,
                 "issue_category": None,
                 "issue_subcategory": None,
+                "issue_subtype": None,
                 "severity": None,
                 "urgency": None,
                 "impact": None,
@@ -106,8 +128,10 @@ class ChatService:
                 "knowledge_confidence": 0.0,
                 "knowledge_citations": [],
                 "knowledge_published_only": True,
+                "retrieval_trace": None,
                 "resolution_steps": [],
                 "resolution_confidence": 0.0,
+                "confidence_breakdown": None,
                 "steps_attempted": [],
                 "should_escalate": False,
                 "escalation_reason": None,
@@ -133,7 +157,9 @@ class ChatService:
 
         return result
 
-    def _format_response(self, session_id: str, result: dict) -> ChatMessageResponse:
+    def _format_response(
+        self, session_id: str, result: dict, *, include_debug: bool = False
+    ) -> ChatMessageResponse:
         """Format workflow result into API response."""
         messages = result.get("messages", [])
         content = (
@@ -163,17 +189,39 @@ class ChatService:
                 for r in raw_replies
             ]
 
+        debug = self._build_debug(result) if include_debug else None
+
         return ChatMessageResponse(
             session_id=session_id,
             message_id=str(uuid4()),
             content=content,
-            confidence_score=result.get("resolution_confidence", 0),
+            confidence_score=result.get("resolution_confidence", 0) or 0.0,
             issue_category=result.get("issue_category"),
+            issue_subtype=result.get("issue_subtype"),
             resolution_steps=steps,
             requires_escalation=result.get("should_escalate", False),
             follow_up_question=result.get("clarification_question"),
             quick_replies=quick_replies,
             conversation_phase=result.get("conversation_phase"),
+            resolved=bool(result.get("issue_resolved")),
+            debug=debug,
+        )
+
+    @staticmethod
+    def _build_debug(result: dict) -> ChatDebugInfo:
+        """Assemble the developer trace from workflow state (IT/admin only)."""
+        diag = result.get("diagnostic_context") or {}
+        return ChatDebugInfo(
+            normalized_system=diag.get("normalized_system"),
+            issue_subtype=result.get("issue_subtype") or diag.get("issue_subtype"),
+            subtype_confidence=diag.get("subtype_confidence", 0.0) or 0.0,
+            conversation_phase=result.get("conversation_phase"),
+            loop_counter=diag.get("loop_counter", 0) or 0,
+            suggested_steps=diag.get("suggested_steps", []) or [],
+            failed_steps=diag.get("failed_steps", []) or [],
+            confidence_breakdown=result.get("confidence_breakdown"),
+            retrieval_trace=result.get("retrieval_trace"),
+            escalation_reason=result.get("escalation_reason") or diag.get("escalation_reason"),
         )
 
     def _error_response(self, session_id: str) -> ChatMessageResponse:

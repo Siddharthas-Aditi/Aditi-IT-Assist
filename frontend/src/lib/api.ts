@@ -85,6 +85,19 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 // and the remote-assist page. Knowledge management uses React Query hooks in
 // `features/knowledge/api.ts` instead.
 
+export interface ChatDebugInfo {
+  normalized_system?: string | null;
+  issue_subtype?: string | null;
+  subtype_confidence?: number;
+  conversation_phase?: string | null;
+  loop_counter?: number;
+  suggested_steps?: string[];
+  failed_steps?: string[];
+  confidence_breakdown?: Record<string, number> | null;
+  retrieval_trace?: Record<string, unknown> | null;
+  escalation_reason?: string | null;
+}
+
 export interface ChatMessageResponse {
   session_id: string;
   message_id: string;
@@ -92,11 +105,14 @@ export interface ChatMessageResponse {
   role: string;
   confidence_score: number;
   issue_category: string | null;
+  issue_subtype: string | null;
   resolution_steps: { step_number: number; instruction: string; details?: string }[];
   requires_escalation: boolean;
   follow_up_question: string | null;
   quick_replies: { label: string; value: string }[] | null;
   conversation_phase: string | null;
+  resolved: boolean;
+  debug: ChatDebugInfo | null;
 }
 
 export const chatApi = {

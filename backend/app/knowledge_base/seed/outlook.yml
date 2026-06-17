@@ -1,45 +1,181 @@
 category: "email/outlook"
 description: "Troubleshooting playbooks for Microsoft Outlook email issues"
 
+# Each article is scoped to a single Outlook SUBTYPE so the retriever and
+# resolver can ground on the right problem. The `subcategory` value must match a
+# subtype produced by app.services.agents.subtype_classifier so the grounding
+# guardrail can do an exact subtype match. Keep steps focused — do NOT mix
+# unrelated fixes (password reset, Windows Update, account lock) into these.
+
 articles:
-  - id: "outlook-001"
-    title: "Outlook Emails Not Receiving / Running Slow"
+  - id: "outlook-mailbox-full"
+    title: "Outlook Mailbox Full / Storage Quota Exceeded"
     category: "email/outlook"
-    subcategory: "email-delivery"
-    tags: ["outlook", "email", "slow", "not receiving", "sync"]
+    subcategory: "mailbox-full"
+    tags: ["outlook", "mailbox", "inbox", "full", "storage", "quota", "space"]
+    keywords:
+      ["inbox full", "mailbox full", "mailbox storage", "out of space",
+       "over quota", "quota exceeded", "free up space", "reduce mailbox size"]
     content: |
-      This playbook addresses common Outlook issues including emails not being
-      received, slow performance, and synchronization problems.
+      The mailbox has reached or is approaching its storage quota. When the
+      mailbox is full, Outlook can stop sending and receiving mail and shows
+      "mailbox is full" / "over quota" warnings. The fix is to reduce mailbox
+      size by clearing unnecessary mail — starting with the folders that hold
+      the most reclaimable space (Deleted Items, Junk Email, Sent Items) — and,
+      if needed, archiving older mail. This is NOT a password, account-lock, or
+      Windows Update problem.
+    short_summary: |
+      Mailbox is at/over its storage quota. Clear Deleted Items and Junk Email
+      first, empty large attachments, then archive old mail to free space.
     steps:
       - step_number: 1
-        instruction: "Check if Work Offline mode is enabled"
-        details: "Go to Send/Receive tab and ensure 'Work Offline' is NOT highlighted/active"
+        instruction: "Check your current mailbox size and quota"
+        details: "Outlook: File > Tools > Mailbox Cleanup > View Mailbox Size. Outlook on the web: Settings > General > Storage."
       - step_number: 2
-        instruction: "Check internet connectivity"
-        details: "Verify you can access other websites. Try opening a browser."
+        instruction: "Empty the Deleted Items folder"
+        details: "Right-click 'Deleted Items' > Empty Folder. Deleted mail still counts against your quota until this is emptied."
       - step_number: 3
-        instruction: "Ensure VPN is connected (if required)"
-        details: "Some email features require VPN connection to the corporate network"
+        instruction: "Empty the Junk Email folder"
+        details: "Right-click 'Junk Email' > Empty Folder to remove spam that is consuming space."
       - step_number: 4
-        instruction: "Check if mail rules are filtering messages"
-        details: "Go to File > Manage Rules & Alerts. Look for rules that move or delete mail"
+        instruction: "Delete or clean up large attachments"
+        details: "Use File > Tools > Mailbox Cleanup > Find items larger than 5 MB, then delete or save-and-remove the largest ones."
       - step_number: 5
-        instruction: "Check mailbox storage"
-        details: "Go to File > Account Settings > Data Files. Check if mailbox is near capacity"
+        instruction: "Empty the Sent Items folder of old large messages"
+        details: "Sort Sent Items by Size and remove large/old outgoing mail you no longer need."
       - step_number: 6
-        instruction: "Clear Junk and Deleted Items folders"
-        details: "Right-click Junk Email and Deleted Items > Empty Folder to free space"
+        instruction: "Archive older email to free up live mailbox space"
+        details: "Use File > Tools > Clean Up Old Items (Archive), or enable Online Archive if your account has it. This keeps the mail but moves it out of the primary quota."
       - step_number: 7
-        instruction: "Disable unnecessary add-ins"
-        details: "Go to File > Options > Add-ins > Manage COM Add-ins > Disable non-essential ones"
-      - step_number: 8
-        instruction: "Restart Outlook application"
-        details: "Close Outlook completely and reopen. Check if issue persists."
-      - step_number: 9
-        instruction: "Restart your computer"
-        details: "A full restart can resolve many background process issues"
-      - step_number: 10
-        instruction: "Check for Outlook updates"
-        details: "Go to File > Office Account > Update Options > Update Now"
-    escalation_trigger: "If none of the above steps resolve the issue after attempting all"
-    resolution_rate: 0.75
+        instruction: "Empty Deleted Items again and confirm space recovered"
+        details: "Recheck mailbox size (step 1). It can take a few minutes for the quota to update after a large cleanup."
+    escalation_trigger: "If the mailbox is still over quota after clearing Deleted/Junk/large items and archiving, or if you have no Online Archive and need a quota increase, escalate to IT."
+    resolution_rate: 0.82
+
+  - id: "outlook-not-receiving"
+    title: "Outlook Not Receiving Emails"
+    category: "email/outlook"
+    subcategory: "not-receiving-emails"
+    tags: ["outlook", "email", "not receiving", "missing", "incoming", "sync"]
+    keywords:
+      ["not receiving", "no new emails", "missing emails", "emails not arriving",
+       "stopped receiving"]
+    content: |
+      New mail is not arriving in the inbox even though the account is otherwise
+      working. Common causes are Work Offline mode, a mail rule moving messages,
+      or a sync hiccup.
+    short_summary: |
+      Check Work Offline is off, force a Send/Receive, and check rules aren't
+      moving incoming mail before escalating.
+    steps:
+      - step_number: 1
+        instruction: "Make sure Work Offline is turned off"
+        details: "Send/Receive tab — if 'Work Offline' is highlighted, click it to go back online."
+      - step_number: 2
+        instruction: "Force a manual Send/Receive"
+        details: "Press F9 or click Send/Receive All Folders and watch for new mail."
+      - step_number: 3
+        instruction: "Check Inbox rules aren't moving or deleting mail"
+        details: "File > Manage Rules & Alerts. Disable any rule that moves matching mail to another folder or deletes it."
+      - step_number: 4
+        instruction: "Check the Junk Email and other folders"
+        details: "Incoming mail may be filtered into Junk Email. Mark legitimate senders as 'Not Junk'."
+    escalation_trigger: "If mail still doesn't arrive after these steps, or others on your team also stopped receiving mail, escalate (possible Exchange/M365 issue)."
+    resolution_rate: 0.78
+
+  - id: "outlook-sending-failure"
+    title: "Outlook Cannot Send Emails / Stuck in Outbox"
+    category: "email/outlook"
+    subcategory: "sending-failure"
+    tags: ["outlook", "email", "send", "outbox", "stuck", "sending"]
+    keywords: ["can't send", "cannot send", "stuck in outbox", "not sending", "send failed"]
+    content: |
+      Outgoing messages will not leave the Outbox. Usually caused by offline
+      mode, a too-large attachment, or a connection problem.
+    short_summary: |
+      Confirm you are online, check the Outbox for oversized messages, and force
+      a Send/Receive.
+    steps:
+      - step_number: 1
+        instruction: "Confirm Outlook is online (Work Offline is off)"
+        details: "Send/Receive tab — ensure 'Work Offline' is not highlighted."
+      - step_number: 2
+        instruction: "Open the Outbox and check for an oversized message"
+        details: "A message with a very large attachment can block the queue. Remove or shrink the attachment."
+      - step_number: 3
+        instruction: "Force a Send/Receive"
+        details: "Press F9 to retry sending the queued messages."
+    escalation_trigger: "If messages remain stuck after these steps, escalate to IT."
+    resolution_rate: 0.76
+
+  - id: "outlook-slow"
+    title: "Outlook Running Slow or Freezing"
+    category: "email/outlook"
+    subcategory: "outlook-slow"
+    tags: ["outlook", "slow", "freezing", "performance", "lagging", "hangs"]
+    keywords: ["slow", "freezing", "lagging", "not responding", "hangs"]
+    content: |
+      Outlook is sluggish, freezes, or stops responding. Often caused by heavy
+      add-ins, a very large local data file, or pending updates.
+    short_summary: |
+      Disable non-essential add-ins, restart Outlook, and apply Office updates.
+    steps:
+      - step_number: 1
+        instruction: "Disable non-essential COM add-ins"
+        details: "File > Options > Add-ins > Manage: COM Add-ins > Go. Untick add-ins you don't need, then restart Outlook."
+      - step_number: 2
+        instruction: "Restart Outlook (and the PC if needed)"
+        details: "Fully close Outlook and reopen. A reboot clears background processes that can slow it down."
+      - step_number: 3
+        instruction: "Apply pending Office updates"
+        details: "File > Office Account > Update Options > Update Now."
+    escalation_trigger: "If Outlook stays slow after disabling add-ins and updating, escalate — the local data file may need a repair."
+    resolution_rate: 0.74
+
+  - id: "outlook-offline"
+    title: "Outlook Stuck in Offline Mode / Disconnected"
+    category: "email/outlook"
+    subcategory: "offline-mode"
+    tags: ["outlook", "offline", "disconnected", "work offline"]
+    keywords: ["work offline", "offline mode", "shows offline", "disconnected"]
+    content: |
+      Outlook shows "Working Offline" or "Disconnected" in the status bar and
+      will not sync.
+    short_summary: |
+      Turn off Work Offline and confirm network/VPN connectivity.
+    steps:
+      - step_number: 1
+        instruction: "Turn off Work Offline"
+        details: "Send/Receive tab > click 'Work Offline' so it is no longer highlighted."
+      - step_number: 2
+        instruction: "Confirm you have network connectivity"
+        details: "Open a browser and load any internal site. Connect VPN if your mail requires it."
+      - step_number: 3
+        instruction: "Restart Outlook"
+        details: "Close and reopen Outlook; the status bar should show 'Connected'."
+    escalation_trigger: "If Outlook stays disconnected with working network/VPN, escalate to IT."
+    resolution_rate: 0.80
+
+  - id: "outlook-general"
+    title: "General Outlook Troubleshooting"
+    category: "email/outlook"
+    subcategory: "other"
+    tags: ["outlook", "email", "general"]
+    keywords: ["outlook issue", "email issue", "outlook problem"]
+    content: |
+      General-purpose Outlook checks used only when the specific symptom is not
+      yet known. Prefer a subtype-specific article when the symptom is clear.
+    short_summary: |
+      Generic Outlook checks — restart, confirm connectivity, apply updates.
+    steps:
+      - step_number: 1
+        instruction: "Restart Outlook"
+        details: "Fully close and reopen the app."
+      - step_number: 2
+        instruction: "Confirm you are online and connected to VPN if required"
+        details: "Check the status bar shows 'Connected'."
+      - step_number: 3
+        instruction: "Apply pending Office updates"
+        details: "File > Office Account > Update Options > Update Now."
+    escalation_trigger: "If the issue is unclear or persists, escalate for hands-on support."
+    resolution_rate: 0.6

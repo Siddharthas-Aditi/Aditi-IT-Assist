@@ -497,6 +497,41 @@ class WorkflowState(TypedDict):
 
 ---
 
+## Running Locally (Docker Compose)
+
+The full agent stack runs inside Docker. No local Python/Node setup is required.
+
+```bash
+# 1. Create .env (gitignored — must exist before compose up)
+cp .env.example .env
+# LLM_API_KEY can stay empty; app falls back to keyword-based triage/resolution
+
+# 2. Build + start all services
+docker compose up --build -d
+
+# 3. Seed dev users + knowledge base (first time only)
+docker compose exec backend uv run python -m scripts.seed_enterprise
+
+# 4. Verify services
+docker compose ps
+```
+
+**Service endpoints:**
+| Service | URL |
+|---------|-----|
+| Frontend | http://localhost:5173 |
+| Backend API | http://localhost:8000 |
+| Swagger UI | http://localhost:8000/docs |
+| Health | http://localhost:8000/api/v1/health |
+
+**Teardown:**
+```bash
+docker compose down       # stop (keep data)
+docker compose down -v    # stop + wipe all volumes
+```
+
+---
+
 ## Adding a New Agent
 
 1. **Spec**: Create `agents/new-agent.md` (follow existing format)
@@ -643,3 +678,61 @@ Docs: `docs/product/feedback-workflow.md`,
 `docs/architecture/conversation-feedback-model.md`,
 `docs/architecture/knowledge-feedback-loop.md`,
 `docs/security/feedback-access-and-privacy.md`.
+
+---
+
+## Grounded Troubleshooting (Subtype + Guardrails + Loop Control)
+
+> The chat agent must behave like a real IT analyst: identify the **subtype**,
+> retrieve only relevant knowledge, track what's been tried, advance on failure,
+> and escalate when grounded help is exhausted. Never mix unrelated KB content.
+
+This subsystem fixed the "inbox full → password reset / Windows Update / repeated
+steps" failure. Read these before touching triage/retrieval/resolution:
+
+- `docs/architecture/chat-grounding-rules.md` — the grounding contract
+- `docs/architecture/retrieval-guardrails.md` — domain guard + subtype rerank
+- `docs/architecture/troubleshooting-state-machine.md` — state + transitions
+- `docs/development/chat-debugging-guide.md` — how to debug a wrong answer
+- `docs/development/golden-conversations.md` — Scenarios 11–13 (regressions)
+
+### The three enforcement points (NOT prompt-only)
+
+1. **Subtype classification** —
+   `app/services/agents/subtype_classifier.py`. Deterministic keyword rules map a
+   symptom to a concrete subtype (e.g. `mailbox-full`). Vague input → `None`
+   (ask, don't guess). Triage sets `DiagnosticContext.issue_subtype`.
+2. **Retrieval grounding** —
+   `app/services/agents/grounding.py` (`ground_results`), wired into
+   `nodes/retrieval.py`. **Rejects cross-family articles** (e.g. `access/*`,
+   `device-management/*` for an `email/*` issue) and **reranks the
+   subtype-matching article to the top**. Returns a trace (kept/rejected).
+3. **Composite confidence** —
+   `app/services/agents/confidence.py`. Confidence CANNOT be high without real
+   grounding; loop/unresolved penalties apply. No more "95% confident & wrong".
+
+### Troubleshooting state & loop control
+
+- State lives in `DiagnosticContext` (`diagnostic_state.py`) and is **persisted
+  across turns** by `ChatService` (never reset mid-session).
+- `suggested_steps` / `failed_steps` give tried-step memory.
+  `nodes/resolution.py` `_build_progression` presents only NEW steps, so the
+  agent **advances on "it didn't work"** and never repeats a failed batch.
+- When grounded steps are exhausted → escalate with a summary
+  (`escalation_reason`). When the user confirms a fix → close out
+  (`issue_resolved`).
+
+### KB authoring rule
+
+Each article's `subcategory` MUST equal a real subtype from
+`subtype_classifier.known_subtypes(category)`, and its steps must be scoped to
+that subtype only. Do **not** create monolithic "all issues" articles — that is
+what made "first N steps" answer the wrong question.
+
+### When changing this subsystem
+- Add/adjust subtype rules + a subtype-scoped KB article + playbook `subtypes`.
+- Add a golden conversation and tests (`test_subtype_classifier.py`,
+  `test_grounding.py`, `test_confidence.py`,
+  `test_outlook_mailbox_full_flow.py`).
+- The IT/admin-only `debug` field on the chat response exposes the full trace;
+  employees never receive it (`api/v1/chat.py`).

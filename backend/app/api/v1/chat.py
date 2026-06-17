@@ -33,10 +33,18 @@ async def send_message(
     """
     session_id = data.session_id or str(uuid4())
 
+    # Developer trace is attached only for IT/admin roles — never for employees,
+    # preserving data isolation (internal grounding/debug stays internal).
+    staff_roles = {"it_agent", "it_lead", "it_admin", "security_auditor"}
+    include_debug = bool(staff_roles.intersection(getattr(current_user, "role_names", []) or []))
+
     return await service.process_message(
         session_id=session_id,
         user_message=data.message,
         user_id=str(current_user.id),
+        user_name=getattr(current_user, "full_name", None),
+        user_email=getattr(current_user, "email", None),
+        include_debug=include_debug,
     )
 
 

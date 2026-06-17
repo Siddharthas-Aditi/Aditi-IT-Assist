@@ -59,6 +59,17 @@ retrieve relevant knowledge, guide troubleshooting, and escalate when needed.
 - Publish triggers indexing; archive removes from the index; both snapshot a version
 - Docs: `docs/architecture/knowledge-management.md`, `docs/architecture/retrieval-and-indexing.md`, `docs/product/knowledge-workflow.md`, `docs/security/knowledge-access-control.md`
 
+### Grounded Troubleshooting (chat agent)
+- The chat agent must behave like a real IT analyst: identify the **issue subtype**, retrieve **only relevant** knowledge, track tried steps, **advance on failure**, and escalate when grounded help is exhausted. It must **never mix unrelated KB content** (this fixed the "inbox full → password reset / Windows Update / repeated steps" bug).
+- Three non-prompt enforcement points:
+  - **Subtype classification**: `app/services/agents/subtype_classifier.py` (deterministic; sets `DiagnosticContext.issue_subtype`, e.g. `mailbox-full`; vague → `None` → ask).
+  - **Retrieval guardrail**: `app/services/agents/grounding.py` `ground_results` (wired in `workflows/nodes/retrieval.py`) — rejects cross-family articles, reranks the subtype match first, returns a kept/rejected trace.
+  - **Composite confidence**: `app/services/agents/confidence.py` — confidence can't be high without grounding; loop/unresolved penalties apply.
+- Loop control / tried-step memory: `DiagnosticContext.suggested_steps`/`failed_steps` + `workflows/nodes/resolution.py` `_build_progression` (present only NEW steps; never repeat a failed batch; escalate when exhausted). Context is persisted across turns by `ChatService`.
+- KB rule: each article's `subcategory` MUST equal a real subtype from `subtype_classifier.known_subtypes(category)`; keep steps scoped to that subtype. No monolithic "all issues" articles.
+- IT/admin-only `debug` trace on the chat response (employees never get it).
+- Docs: `docs/architecture/chat-grounding-rules.md`, `docs/architecture/retrieval-guardrails.md`, `docs/architecture/troubleshooting-state-machine.md`, `docs/development/chat-debugging-guide.md`, `docs/development/golden-conversations.md`
+
 ## Build Order (When Implementing Features)
 
 1. Define data models and schemas first
@@ -313,19 +324,79 @@ User Message
 
 ## Environment Setup
 
+### Local Container (Docker Compose) — Recommended
+
 ```bash
-# Quick start (Docker — recommended)
-make dev              # Full stack with hot-reload
+# 1. Copy and configure environment (required — file is gitignored)
+cp .env.example .env
+# Edit .env if needed — defaults work for local dev without LLM
 
-# Local development (no Docker for app, only infra)
-make dev-infra        # Start Postgres + Redis only
-make dev-backend      # Backend with uvicorn --reload
-make dev-frontend     # Frontend with Vite HMR
+# 2. Build images and start all 4 services (postgres, redis, backend, frontend)
+docker compose up --build
 
-# First-time setup
-cp .env.example .env  # Configure environment
-make bootstrap        # Install all deps
+# Or in detached mode:
+docker compose up --build -d
+
+# 3. Seed dev users + knowledge base (first time only)
+docker compose exec backend uv run python -m scripts.seed_enterprise
+
+# 4. Verify everything is running
+docker compose ps
+# Expected: all services STATUS=Up (healthy)
 ```
+
+**Service URLs once running:**
+| Service | URL |
+|---------|-----|
+| Frontend (React/Vite) | http://localhost:5173 |
+| Backend API (FastAPI) | http://localhost:8000 |
+| API Docs (Swagger UI) | http://localhost:8000/docs |
+| API Docs (ReDoc) | http://localhost:8000/redoc |
+| Health check | http://localhost:8000/api/v1/health |
+
+**Dev users (seeded by `seed_enterprise.py`):**
+| Email | Password | Role |
+|-------|----------|------|
+| `employee@aditi.com` | `employee123` | employee |
+| `agent@aditi.com` | `agent123` | it_agent |
+| `lead@aditi.com` | `lead123` | it_lead |
+| `admin@aditi.com` | `admin123` | it_admin |
+| `auditor@aditi.com` | `auditor123` | security_auditor |
+
+**Key `.env` notes for local container setup:**
+- `LLM_API_KEY` can be left empty — the app falls back to keyword-based triage/resolution
+- `POSTGRES_HOST`/`REDIS_HOST` in `.env` stay as `localhost`; docker-compose.yml overrides them to `postgres`/`redis` for the backend container
+- `RATE_LIMIT_ENABLED=false` is recommended for local dev to avoid hitting limits during testing
+- `SECRET_KEY` in `.env` only needs to be cryptographically strong in production
+
+**Stop / clean up:**
+```bash
+docker compose down          # Stop containers (data volumes preserved)
+docker compose down -v       # Stop + delete all data volumes (full reset)
+```
+
+### Local Development (no Docker for app)
+
+```bash
+# Infrastructure only (Postgres + Redis in Docker)
+make dev-infra        # Starts postgres + redis containers
+
+# Then run app locally
+make dev-backend      # Backend with uvicorn --reload (requires uv installed)
+make dev-frontend     # Frontend with Vite HMR (requires Node 20+)
+```
+
+### First-time setup (local, non-Docker)
+
+```bash
+cp .env.example .env  # Configure environment
+make bootstrap        # Install all deps (uv sync + npm install)
+make db-migrate       # Run Alembic migrations
+```
+
+### Windows-specific notes
+- The `Makefile` uses `/bin/zsh` as shell; on Windows use `docker compose` commands directly or Git Bash/WSL
+- Hot-reload source volumes (`./backend/app`, `./frontend/src`) work on Windows with Docker Desktop WSL2 backend enabled
 
 ---
 

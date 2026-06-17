@@ -47,25 +47,38 @@ class TestOrchestrator:
         state = {"knowledge_results": [], "knowledge_confidence": 0.0}
         assert route_after_retrieval(state) == "escalate"
 
-    def test_route_after_retrieval_escalates_with_low_confidence(self):
+    def test_route_after_retrieval_resolves_even_at_low_confidence(self):
+        """Policy: if the KB returned any grounded article, troubleshoot from it
+        (don't ticket just because confidence is moderate)."""
         state = {"knowledge_results": [{"id": "1"}], "knowledge_confidence": 0.2}
-        assert route_after_retrieval(state) == "escalate"
+        assert route_after_retrieval(state) == "resolve"
 
     def test_route_after_retrieval_resolves_with_good_results(self):
         state = {"knowledge_results": [{"id": "1"}], "knowledge_confidence": 0.7}
         assert route_after_retrieval(state) == "resolve"
 
-    def test_route_after_resolution_ends_with_high_confidence(self):
-        state = {"resolution_confidence": 0.9}
+    def test_route_after_resolution_ends_with_grounded_steps(self):
+        state = {
+            "resolution_confidence": 0.9,
+            "resolution_steps": [{"step_number": 1, "instruction": "x"}],
+        }
         assert route_after_resolution(state) == END
 
-    def test_route_after_resolution_ends_with_medium_confidence(self):
-        """Medium confidence (>= 0.5) still resolves — with disclaimer in message."""
-        state = {"resolution_confidence": 0.6}
+    def test_route_after_resolution_ends_with_moderate_confidence_steps(self):
+        """Grounded steps are shown regardless of a moderate confidence score."""
+        state = {
+            "resolution_confidence": 0.4,
+            "resolution_steps": [{"step_number": 1, "instruction": "x"}],
+        }
         assert route_after_resolution(state) == END
 
-    def test_route_after_resolution_escalates_with_low_confidence(self):
-        state = {"resolution_confidence": 0.3}
+    def test_route_after_resolution_escalates_when_exhausted(self):
+        """Escalate (→ ticket) only when the resolver exhausted grounded steps."""
+        state = {
+            "resolution_confidence": 0.0,
+            "resolution_steps": [],
+            "diagnostic_context": {"phase": "escalating"},
+        }
         assert route_after_resolution(state) == "escalate"
 
     def test_route_after_escalation_drafts_ticket_when_escalated(self):

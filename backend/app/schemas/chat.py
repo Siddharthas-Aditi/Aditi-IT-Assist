@@ -25,6 +25,26 @@ class QuickReplyOption(BaseModel):
     value: str
 
 
+class ChatDebugInfo(BaseModel):
+    """Developer-facing trace of how a response was produced.
+
+    Only populated when the caller is an IT/admin role (see ChatService). Lets
+    the admin debug view explain detected system/subtype, grounding decisions,
+    confidence components, and loop/escalation triggers.
+    """
+
+    normalized_system: str | None = None
+    issue_subtype: str | None = None
+    subtype_confidence: float = 0.0
+    conversation_phase: str | None = None
+    loop_counter: int = 0
+    suggested_steps: list[str] = []
+    failed_steps: list[str] = []
+    confidence_breakdown: dict | None = None
+    retrieval_trace: dict | None = None
+    escalation_reason: str | None = None
+
+
 class ChatMessageResponse(BaseModel):
     """AI assistant response with metadata."""
 
@@ -34,11 +54,14 @@ class ChatMessageResponse(BaseModel):
     role: str = "assistant"
     confidence_score: float = Field(default=0.0, ge=0.0, le=1.0)
     issue_category: str | None = None
+    issue_subtype: str | None = None
     resolution_steps: list[ResolutionStepSchema] = []
     requires_escalation: bool = False
     follow_up_question: str | None = None
     quick_replies: list[QuickReplyOption] | None = None
     conversation_phase: str | None = None
+    resolved: bool = False
+    debug: ChatDebugInfo | None = None
 
 
 class SessionSummary(BaseModel):

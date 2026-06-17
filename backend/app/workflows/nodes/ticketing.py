@@ -19,6 +19,13 @@ async def ticket_node(state: WorkflowState) -> dict:
     logger.info("ticket_node_start", session_id=state.get("session_id"))
 
     handoff = state.get("handoff_summary") or {}
+    diag = state.get("diagnostic_context") or {}
+    steps_tried = (
+        state.get("steps_attempted")
+        or diag.get("failed_steps")
+        or diag.get("attempted_steps")
+        or []
+    )
 
     # Build ticket draft
     ticket_draft = {
@@ -26,7 +33,13 @@ async def ticket_node(state: WorkflowState) -> dict:
         "description": _generate_ticket_description(state, handoff),
         "category": state.get("issue_category", "other"),
         "priority": _map_severity_to_priority(state.get("severity", "medium")),
-        "steps_attempted": state.get("steps_attempted", []),
+        "requested_by": {
+            "name": state.get("user_name"),
+            "email": state.get("user_email"),
+            "user_id": state.get("user_id"),
+        },
+        "problem_statement": diag.get("exact_problem_statement") or handoff.get("issue_description", ""),
+        "steps_attempted": steps_tried,
         "conversation_summary": handoff.get("issue_description", ""),
     }
 
@@ -77,21 +90,40 @@ def _generate_ticket_title(state: WorkflowState) -> str:
 
 
 def _generate_ticket_description(state: WorkflowState, handoff: dict) -> str:
-    """Generate detailed ticket description."""
+    """Generate detailed ticket description including user, problem, and steps tried."""
+    diag = state.get("diagnostic_context") or {}
+    problem = (
+        diag.get("exact_problem_statement")
+        or handoff.get("issue_description")
+        or "No description available"
+    )
+
     lines = [
+        "## Requested By",
+        f"Name: {state.get('user_name') or 'Unknown'}",
+        f"Email: {state.get('user_email') or 'Unknown'}",
+        f"User ID: {state.get('user_id', 'Unknown')}",
+        "",
         "## Issue Summary",
         f"Category: {state.get('issue_category', 'Unknown')}",
+        f"Subtype: {state.get('issue_subtype') or diag.get('issue_subtype') or 'Unknown'}",
+        f"Affected system: {diag.get('affected_system') or 'Unknown'}",
         f"Severity: {state.get('severity', 'medium')}",
         f"Urgency: {state.get('urgency', 'medium')}",
-        f"AI Confidence: {state.get('resolution_confidence', 0):.0%}",
         "",
-        "## Description",
-        handoff.get("issue_description", "No description available"),
+        "## Problem Statement",
+        problem,
         "",
-        "## Steps Already Attempted",
+        "## Troubleshooting Already Tried",
     ]
 
-    steps = state.get("steps_attempted", [])
+    # Prefer the actual steps the agent walked the user through.
+    steps = (
+        state.get("steps_attempted")
+        or diag.get("failed_steps")
+        or diag.get("attempted_steps")
+        or []
+    )
     if steps:
         for step in steps:
             lines.append(f"- {step}")

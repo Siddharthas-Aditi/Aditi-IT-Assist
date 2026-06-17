@@ -355,6 +355,52 @@ ARTICLES = [
         "escalation_target_team": "Endpoint & Productivity",
     },
     {
+        "slug": "outlook-mailbox-full",
+        "title": "Outlook Mailbox Full / Storage Quota Exceeded",
+        "short_summary": (
+            "Mailbox is at/over its storage quota. Clear Deleted Items and Junk "
+            "Email first, remove large attachments, then archive old mail to free space."
+        ),
+        "article_type": "troubleshooting",
+        "audience": "employee",
+        "category": "email/outlook",
+        "subcategory": "mailbox-full",
+        "product_or_system": "microsoft_outlook",
+        "platform": "windows",
+        "issue_type": "storage_quota",
+        "severity_hint": "medium",
+        "tags": ["outlook", "mailbox", "inbox", "full", "storage", "quota", "space"],
+        "keywords": [
+            "inbox full", "mailbox full", "mailbox storage", "out of space",
+            "over quota", "quota exceeded", "free up space", "reduce mailbox size",
+        ],
+        "ownership_group": "endpoint-productivity",
+        "symptoms": [
+            "Outlook says the mailbox is full or over quota",
+            "Cannot send or receive because the mailbox is full",
+            "Storage warning banner at the top of Outlook",
+        ],
+        "probable_causes": [
+            "Mailbox has reached its storage quota",
+            "Large attachments and old Sent/Deleted items consuming space",
+            "Online Archive not enabled or not connected",
+        ],
+        "prerequisites": ["Outlook desktop or Outlook on the web access"],
+        "resolution_steps": [
+            {"step_number": 1, "instruction": "Check your current mailbox size and quota", "details": "Outlook: File -> Tools -> Mailbox Cleanup -> View Mailbox Size. Outlook on the web: Settings -> General -> Storage."},
+            {"step_number": 2, "instruction": "Empty the Deleted Items folder", "details": "Right-click 'Deleted Items' -> Empty Folder. Deleted mail still counts against your quota until this is emptied."},
+            {"step_number": 3, "instruction": "Empty the Junk Email folder", "details": "Right-click 'Junk Email' -> Empty Folder to remove spam consuming space."},
+            {"step_number": 4, "instruction": "Delete or clean up large attachments", "details": "File -> Tools -> Mailbox Cleanup -> Find items larger than 5 MB, then delete or save-and-remove the largest ones."},
+            {"step_number": 5, "instruction": "Empty the Sent Items folder of old large messages", "details": "Sort Sent Items by Size and remove large/old outgoing mail you no longer need."},
+            {"step_number": 6, "instruction": "Archive older email to free up live mailbox space", "details": "File -> Tools -> Clean Up Old Items (Archive), or enable Online Archive if your account has it."},
+        ],
+        "validation_steps": [
+            {"step_number": 1, "instruction": "Recheck mailbox size (step 1). Send a test email to yourself and confirm it sends and arrives."},
+        ],
+        "escalation_criteria": "Mailbox still over quota after clearing Deleted/Junk/large items and archiving, or a quota increase is needed.",
+        "escalation_target_team": "Endpoint & Productivity",
+    },
+    {
         "slug": "email-alias-shared-mailbox",
         "title": "Request an Email Alias or Shared Mailbox at Aditi",
         "short_summary": "How to raise a Freshservice ticket to get a new email alias or shared mailbox created for your team.",

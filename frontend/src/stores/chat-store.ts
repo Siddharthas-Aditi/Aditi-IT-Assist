@@ -29,6 +29,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
   error: null,
 
   sendMessage: async (content: string) => {
+    // Guard: ignore empty input or a send already in flight. This prevents the
+    // double-submit that caused duplicate user/assistant bubbles in the transcript.
+    if (!content.trim() || get().isLoading) return;
+
     const userMessage: ChatMessage = {
       id: `user-${Date.now()}`,
       role: 'user',
@@ -46,24 +50,35 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const response = await chatApi.sendMessage(content, get().sessionId ?? undefined);
 
       const assistantMessage: ChatMessage = {
-        id: response.message_id,
+        // message_id is unique per backend response; fall back defensively.
+        id: response.message_id || `assistant-${Date.now()}`,
         role: 'assistant',
         content: response.content,
         confidence: response.confidence_score,
         category: response.issue_category ?? undefined,
+        subtype: response.issue_subtype ?? undefined,
         steps: response.resolution_steps,
         requiresEscalation: response.requires_escalation,
         followUpQuestion: response.follow_up_question ?? undefined,
         quickReplies: response.quick_replies ?? undefined,
         conversationPhase: response.conversation_phase ?? undefined,
+        resolved: response.resolved ?? undefined,
+        debug: (response.debug as ChatMessage['debug']) ?? undefined,
         timestamp: new Date(),
       };
 
-      set((state) => ({
-        messages: [...state.messages, assistantMessage],
-        sessionId: response.session_id,
-        isLoading: false,
-      }));
+      set((state) => {
+        // Idempotency guard: never append an assistant message whose id already
+        // exists in the transcript (e.g. a retried request echoing the same id).
+        if (state.messages.some((m) => m.id === assistantMessage.id)) {
+          return { sessionId: response.session_id, isLoading: false };
+        }
+        return {
+          messages: [...state.messages, assistantMessage],
+          sessionId: response.session_id,
+          isLoading: false,
+        };
+      });
     } catch (err) {
       const errorMessage: ChatMessage = {
         id: `error-${Date.now()}`,

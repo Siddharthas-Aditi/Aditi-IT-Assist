@@ -62,6 +62,11 @@ def _determine_escalation_reason(state: WorkflowState, diag_ctx: DiagnosticConte
     if diag_ctx.live_agent_requested:
         return "User requested human assistance"
 
+    # Prefer the precise reason the resolver recorded (e.g. all grounded steps
+    # for the subtype were exhausted), if any.
+    if diag_ctx.escalation_reason:
+        return diag_ctx.escalation_reason
+
     if not knowledge_results:
         system = diag_ctx.affected_system or diag_ctx.normalized_system or "this issue type"
         return f"No knowledge base articles found for {system}"
@@ -148,7 +153,11 @@ def _build_handoff_summary(
         "employee_name": "Employee",
         "issue_category": state.get("issue_category", "unknown"),
         "issue_description": issue_description,
-        "steps_attempted": state.get("steps_attempted", []),
+        "steps_attempted": (
+            state.get("steps_attempted")
+            or diag_ctx.failed_steps
+            or diag_ctx.attempted_steps
+        ),
         "ai_confidence": state.get("resolution_confidence", 0),
         "recommended_actions": _suggest_actions(diag_ctx),
         "severity": state.get("severity", "medium"),

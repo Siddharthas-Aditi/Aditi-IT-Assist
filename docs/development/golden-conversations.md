@@ -167,3 +167,82 @@ For each scenario, measure:
 - **Step count**: Were responses concise (2-4 steps)?
 - **Resolution relevance**: Were steps specific to the actual issue?
 - **Escalation appropriateness**: Was escalation offered at the right time?
+
+---
+
+## Scenario 11: Outlook Mailbox Full → Storage Cleanup → Progression → Escalation (regression)
+
+This is the canonical regression for the "inbox full → password reset / Windows
+Update / repeated steps" bug. Automated as
+`backend/tests/unit/test_outlook_mailbox_full_flow.py`.
+
+```
+Turn 1:
+  User: "I have an issue with outlook"
+  Expected: Clarification question + quick-reply chips (incl. "Mailbox / inbox full")
+  Detected: system=outlook, subtype=None
+  Must NOT: dump steps; ask a generic "what system?" question
+
+Turn 2:
+  User: "my inbox is full"
+  Detected: issue_category=email/outlook, issue_subtype=mailbox-full (high conf)
+  Grounding: keeps outlook-mailbox-full FIRST; rejects any access/* or
+             device-management/* articles (logged in retrieval_trace.rejected)
+  Expected steps (in order, storage cleanup):
+    1. Check current mailbox size / quota
+    2. Empty the Deleted Items folder
+    3. Empty the Junk Email folder
+  Must NOT contain: "change/reset password", "Windows Update", "wait 15 minutes",
+                    account-lock / auto-unlock language
+  Confidence: high (grounded subtype match)
+
+Turn 3:
+  User: "it did not work"
+  Behavior: marks the prior 3 steps as failed; ADVANCES — does not repeat
+  Expected NEXT steps (disjoint from turn 2):
+    4. Delete/clean up large attachments
+    5. Empty Sent Items of old large messages
+    6. Archive older email
+
+Turn 4+:
+  User: keeps saying "still not working"
+  Behavior: continues advancing through remaining grounded steps, then, when the
+            mailbox-full playbook is exhausted, ESCALATES with a summary of what
+            was tried (escalation_reason set; offers a ticket).
+  Must NOT: loop on the same steps or invent new ungrounded steps.
+```
+
+### Pass/fail assertions (mirrors the test)
+- Turn 1: `needs_clarification == True`, `issue_category == "email/outlook"`,
+  `issue_subtype` empty.
+- Turn 2: `issue_subtype == "mailbox-full"`; response/steps mention
+  Deleted/Junk/mailbox; response contains **none** of
+  {password, windows update, wait 15, auto-unlock}; `resolution_confidence ≥ 0.6`.
+- Turn 3: second step set is **disjoint** from the first.
+- Exhaustion: `resolution_steps == []` and `resolution_confidence == 0.0`
+  (routes to escalation).
+
+---
+
+## Scenario 12: Cross-topic contamination guard
+
+```
+Context: issue_category=email/outlook, subtype=mailbox-full
+Retriever returns (by raw score): [password-reset (0.95), windows-update (0.9),
+                                   outlook-mailbox-full (0.5)]
+Expected after grounding:
+  kept    = [outlook-mailbox-full, ...other email/* ]
+  rejected= [password-reset (cross-domain: access), windows-update (device-management)]
+```
+Automated in `backend/tests/unit/test_grounding.py`.
+
+---
+
+## Scenario 13: Confidence calibration
+
+```
+Grounded subtype answer (mailbox-full + matching article) → final >= 0.7
+Ungrounded / cross-domain answer                          → final <= 0.25
+Repeated failures (loop_counter, failed_attempts > 0)     → final reduced
+```
+Automated in `backend/tests/unit/test_confidence.py`.
