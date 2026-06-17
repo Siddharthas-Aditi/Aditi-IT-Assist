@@ -77,6 +77,7 @@ services:
       - ./backend/app:/app/app:cached
       - ./backend/tests:/app/tests:cached
       - backend_cache:/app/.venv
+      - uploads_data:/tmp/aditi_uploads
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
       interval: 5s
@@ -121,3 +122,4 @@ volumes:
   postgres_data:
   redis_data:
   backend_cache:
+  uploads_data:

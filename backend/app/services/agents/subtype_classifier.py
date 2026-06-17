@@ -54,9 +54,9 @@ class SubtypeMatch:
     score: float = 0.0
 
 
-# ══════════════════════════════════════════════════════════════════════
+# ======================================================================
 #  RULE TABLES (per category)
-# ══════════════════════════════════════════════════════════════════════
+# ======================================================================
 #
 # Order matters only for tie-breaking — the scorer prefers the highest score,
 # then the earliest rule. Put the most specific / highest-signal subtypes first.
@@ -196,6 +196,58 @@ _ACCESS_RULES: tuple[SubtypeRule, ...] = (
             "sign-in", "login", "log in",
         ),
     ),
+    # -- Ruddr ----------------------------------------------------------
+    SubtypeRule(
+        subtype="ruddr-account-missing",
+        keywords=(
+            "ruddr account missing", "no ruddr account", "ruddr not set up",
+            "ruddr not created", "ruddr access", "no access to ruddr",
+            "ruddr not working", "ruddr account not",
+        ),
+    ),
+    SubtypeRule(
+        subtype="ruddr-account-locked",
+        keywords=(
+            "ruddr locked", "ruddr disabled", "ruddr account locked",
+            "ruddr account disabled", "ruddr blocked", "ruddr suspended",
+        ),
+    ),
+    # -- New Joiner -----------------------------------------------------
+    SubtypeRule(
+        subtype="new-joiner-setup",
+        keywords=(
+            "new joiner", "just joined", "first day", "joining today",
+            "email not created", "account not set up", "not provisioned",
+            "onboarding", "new employee", "laptop not received",
+            "tools not provisioned", "access on day one", "day 1",
+        ),
+    ),
+    # -- License / Tool Access ------------------------------------------
+    SubtypeRule(
+        subtype="license-request",
+        keywords=(
+            "need license", "request license", "license request",
+            "need access to", "requesting access", "tool access",
+            "software license", "need copilot", "need github",
+            "need linkedin recruiter", "need keeper", "need tool",
+            "requesting tool", "software request",
+        ),
+    ),
+    # -- Alias / Shared Mailbox -----------------------------------------
+    SubtypeRule(
+        subtype="shared-mailbox-access",
+        keywords=(
+            "shared mailbox", "shared inbox", "group mailbox", "can't access mailbox",
+            "shared email", "functional mailbox", "team mailbox",
+        ),
+    ),
+    SubtypeRule(
+        subtype="alias-update",
+        keywords=(
+            "alias", "email alias", "add alias", "remove alias",
+            "create alias", "secondary email", "smtp alias",
+        ),
+    ),
 )
 
 _ZOOM_RULES: tuple[SubtypeRule, ...] = (
@@ -233,8 +285,26 @@ _NETWORK_RULES: tuple[SubtypeRule, ...] = (
 )
 
 _AUDIO_RULES: tuple[SubtypeRule, ...] = (
-    SubtypeRule(subtype="no-audio-output", keywords=("no sound", "no audio", "can't hear")),
-    SubtypeRule(subtype="microphone-not-working", keywords=("mic not working", "microphone not", "mic isn't")),
+    SubtypeRule(
+        subtype="voice-breaks-during-call",
+        keywords=(
+            "voice breaks", "voice breaking", "audio cutting", "cutting out",
+            "audio drops", "voice drops", "choppy audio", "breaking up",
+            "robotic voice", "voice is breaking", "breaks during call",
+            "audio breaking", "sound cutting", "voice cutting",
+        ),
+    ),
+    SubtypeRule(
+        subtype="candidate-cannot-hear",
+        keywords=(
+            "candidate cannot hear", "candidate can't hear", "they can't hear me",
+            "no one can hear", "they can't hear", "other person can't hear",
+            "interviewer can't hear", "candidate cannot hear me",
+            "can't hear me", "cannot hear me",
+        ),
+    ),
+    SubtypeRule(subtype="no-audio-output", keywords=("no sound", "no audio", "can't hear anything", "speakers not")),
+    SubtypeRule(subtype="microphone-not-working", keywords=("mic not working", "microphone not", "mic isn't", "mic not detected")),
     SubtypeRule(subtype="headset-not-detected", keywords=("headset not detected", "headset not", "headphones not")),
     SubtypeRule(subtype="audio-crackling", keywords=("crackling", "static", "distorted")),
     SubtypeRule(subtype="bluetooth-audio-issue", keywords=("bluetooth", "won't pair")),
@@ -245,11 +315,15 @@ _CATEGORY_RULES: dict[str, tuple[SubtypeRule, ...]] = {
     "email/outlook": _OUTLOOK_RULES,
     "access/permissions": _ACCESS_RULES,
     "access/sixth_sense": _ACCESS_RULES,
+    "access/ruddr": _ACCESS_RULES,
     "video-conferencing/zoom": _ZOOM_RULES,
+    "video-conferencing/teams": _ZOOM_RULES,
     "device-management/intune": _INTUNE_RULES,
     "hardware/camera": _CAMERA_RULES,
     "hardware/audio": _AUDIO_RULES,
+    "hardware/other": _AUDIO_RULES,
     "network/connectivity": _NETWORK_RULES,
+    "software/other": _ACCESS_RULES,
 }
 
 
@@ -270,7 +344,7 @@ def classify_subtype(text: str, category: str | None) -> SubtypeMatch | None:
 
     Returns:
         The best ``SubtypeMatch`` or ``None`` if nothing matched / no rules
-        exist for the category. ``None`` means "stay generic" — the caller
+        exist for the category. ``None`` means "stay generic" -- the caller
         should then ask a clarifying question rather than guess.
     """
     if not category:
@@ -300,7 +374,7 @@ def classify_subtype(text: str, category: str | None) -> SubtypeMatch | None:
         if not matched:
             continue
 
-        # Confidence grows with evidence strength but is capped — a single
+        # Confidence grows with evidence strength but is capped -- a single
         # generic word should stay in the "medium" band, while a specific
         # multi-word phrase reaches "high".
         confidence = min(0.95, 0.55 + 0.18 * score)

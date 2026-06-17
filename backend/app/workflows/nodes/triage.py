@@ -119,6 +119,8 @@ ISSUE_CATEGORIES = [
     "network/connectivity",
     "access/permissions",
     "access/sixth_sense",
+    "access/ruddr",
+    "video-conferencing/teams",
     "other",
 ]
 
@@ -126,9 +128,9 @@ CLASSIFICATION_PROMPT = """You are a professional IT support classification spec
 Analyze the user's message and classify their IT issue.
 
 Categories:
-- email/outlook, video-conferencing/zoom, device-management/intune
+- email/outlook, video-conferencing/zoom, video-conferencing/teams, device-management/intune
 - hardware/camera, hardware/audio, hardware/other, software/other
-- network/connectivity, access/permissions, access/sixth_sense, other
+- network/connectivity, access/permissions, access/sixth_sense, access/ruddr, hardware/audio, other
 
 {entity_hint}
 
@@ -823,6 +825,39 @@ def _keyword_classify(message: str, diag_ctx: DiagnosticContext | None = None) -
             "has_specific_symptom": has_symptom,
             "symptom": message if has_symptom else None,
             "confidence": 0.85 if has_symptom else 0.6,
+            "_method": "keyword",
+        }
+    elif any(w in message_lower for w in ["ruddr", "rudder", "timesheet tool"]):
+        return {
+            "category": "access/ruddr",
+            "subcategory": None,
+            "severity": "medium",
+            "urgency": "medium",
+            "has_specific_symptom": has_symptom,
+            "symptom": message if has_symptom else None,
+            "confidence": 0.90,
+            "_method": "keyword",
+        }
+    elif any(w in message_lower for w in ["audio", "headset", "microphone", "mic", "speaker", "voice breaks", "can't hear"]):
+        return {
+            "category": "hardware/audio",
+            "subcategory": None,
+            "severity": "medium",
+            "urgency": "medium",
+            "has_specific_symptom": has_symptom,
+            "symptom": message if has_symptom else None,
+            "confidence": 0.82 if has_symptom else 0.55,
+            "_method": "keyword",
+        }
+    elif any(w in message_lower for w in ["github", "copilot", "linkedin", "keeper", "license", "tool access"]):
+        return {
+            "category": "access/permissions",
+            "subcategory": "license-request",
+            "severity": "low",
+            "urgency": "low",
+            "has_specific_symptom": has_symptom,
+            "symptom": message if has_symptom else None,
+            "confidence": 0.80,
             "_method": "keyword",
         }
     elif any(w in message_lower for w in ["keka", "freshservice", "install", "software", "app"]):

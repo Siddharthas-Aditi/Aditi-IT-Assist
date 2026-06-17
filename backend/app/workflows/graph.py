@@ -3,15 +3,23 @@
 from langgraph.graph import END, StateGraph
 
 from app.workflows.nodes.escalation import escalation_node
+from app.workflows.nodes.policy import policy_enforcement_node
 from app.workflows.nodes.resolution import resolution_node
 from app.workflows.nodes.retrieval import retrieval_node
 from app.workflows.nodes.ticketing import ticket_node
 from app.workflows.nodes.triage import triage_node
 from app.workflows.state import WorkflowState
 
+# Maximum dialogue turns before the bot auto-escalates to a human agent.
+_MAX_TURNS = 10
+
 
 def route_after_triage(state: WorkflowState) -> str:
     """Route after triage: clarify, retrieve, escalate, or end (resolved)."""
+    # Safety: if the conversation has gone too long without resolution, escalate.
+    if (state.get("turn_count") or 0) >= _MAX_TURNS:
+        return "escalate"
+
     # User confirmed the issue is fixed — close out, no retrieval.
     if state.get("issue_resolved"):
         return END
@@ -25,6 +33,16 @@ def route_after_triage(state: WorkflowState) -> str:
     if diag.get("live_agent_requested"):
         return "escalate"
 
+    return "policy"  # Run policy checks before retrieval
+
+
+def route_after_policy(state: WorkflowState) -> str:
+    """Route after policy enforcement: retrieve or escalate if policy blocked."""
+    violations = state.get("policy_violations") or []
+    if violations:
+        return "escalate"
+    if state.get("requires_consent") and not state.get("consent_granted"):
+        return END  # Wait for consent before proceeding
     return "retrieve"
 
 
@@ -49,7 +67,7 @@ def route_after_resolution(state: WorkflowState) -> str:
     - or grounding is too weak to stand behind an answer (< 0.35).
 
     Otherwise return the grounded next-step guidance to the user. A grounded but
-    only moderately-confident answer (0.35–0.5) is still worth showing — it is
+    only moderately-confident answer (0.35-0.5) is still worth showing — it is
     on-domain and on-subtype — and the resolution node frames it with a
     "did this help?" so the user can drive escalation if it doesn't.
     """
@@ -75,13 +93,17 @@ def route_after_escalation(state: WorkflowState) -> str:
 def build_support_workflow() -> StateGraph:
     """Build and compile the support workflow graph.
 
-    Returns:
-        Compiled LangGraph StateGraph ready for invocation.
+    Graph topology:
+        triage -> policy -> retrieve -> resolve -> escalate -> draft_ticket -> END
+
+    The policy node runs between triage and retrieval on every productive turn.
+    It enforces RBAC, consent requirements, and the max-turn safety limit.
     """
     workflow = StateGraph(WorkflowState)
 
     # Add nodes
     workflow.add_node("triage", triage_node)
+    workflow.add_node("policy", policy_enforcement_node)
     workflow.add_node("retrieve", retrieval_node)
     workflow.add_node("resolve", resolution_node)
     workflow.add_node("escalate", escalation_node)
@@ -92,6 +114,7 @@ def build_support_workflow() -> StateGraph:
 
     # Define edges with conditional routing
     workflow.add_conditional_edges("triage", route_after_triage)
+    workflow.add_conditional_edges("policy", route_after_policy)
     workflow.add_conditional_edges("retrieve", route_after_retrieval)
     workflow.add_conditional_edges("resolve", route_after_resolution)
     workflow.add_conditional_edges("escalate", route_after_escalation)

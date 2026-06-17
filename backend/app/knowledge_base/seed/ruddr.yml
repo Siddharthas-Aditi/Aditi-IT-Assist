@@ -1,0 +1,86 @@
+category: "access/permissions"
+description: "Troubleshooting playbooks for Ruddr account issues"
+
+articles:
+  - id: "ruddr-account-missing"
+    title: "Ruddr Account Missing / Not Created After Joining"
+    category: "access/permissions"
+    subcategory: "ruddr-account-missing"
+    tags: ["ruddr", "account missing", "not created", "new joiner", "timesheet", "project tracking"]
+    keywords:
+      ["ruddr", "ruddr account", "ruddr not working", "no ruddr access",
+       "ruddr account missing", "ruddr not set up", "cannot access ruddr",
+       "ruddr login", "ruddr timesheet"]
+    content: |
+      Ruddr accounts at Aditi are fully managed by IT. They are automatically
+      created when IT receives the New Joiner Request Form. Employees cannot
+      self-provision or recover Ruddr accounts — all issues must be raised
+      as IT tickets.
+    short_summary: |
+      Ruddr accounts are IT-managed only. You cannot self-resolve Ruddr issues.
+      Raise an IT ticket with your full name, employee ID, manager, and start date.
+      IT will action within 1 business day.
+    resolution_steps:
+      - step_number: 1
+        instruction: "Raise an IT support ticket immediately"
+        details: >
+          Go to the IT portal (Freshservice) or email IT support and raise a
+          ticket titled: 'Ruddr Account Missing — [Your Full Name]'.
+      - step_number: 2
+        instruction: "Include your full name, employee ID, manager name, and start date in the ticket"
+        details: >
+          IT needs these details to locate your record in the system and create
+          or restore your Ruddr account. Missing details will delay resolution.
+      - step_number: 3
+        instruction: "CC your manager on the ticket"
+        details: >
+          Ruddr access is linked to your project assignment. Your manager must
+          be aware so they can confirm the project code and details.
+      - step_number: 4
+        instruction: "Wait up to 1 business day for IT to action the ticket"
+        details: >
+          Once IT receives the ticket with all required information, your Ruddr
+          account will be created or restored within 1 business day.
+    escalation_trigger: >
+      If the account is still missing after 1 business day from ticket submission,
+      reply to the ticket to escalate — or contact your manager to follow up
+      with IT directly.
+    resolution_rate: 0.95
+
+  - id: "ruddr-account-locked"
+    title: "Ruddr Account Disabled or Locked"
+    category: "access/permissions"
+    subcategory: "ruddr-account-locked"
+    tags: ["ruddr", "account locked", "account disabled", "blocked", "cannot login"]
+    keywords:
+      ["ruddr account locked", "ruddr account disabled", "ruddr blocked",
+       "ruddr login not working", "ruddr access denied", "ruddr suspended"]
+    content: |
+      Ruddr accounts may be disabled when an employee goes on extended leave,
+      is between projects, or as part of a system audit. Re-enabling is done
+      by IT only — there is no self-service option.
+    short_summary: |
+      A disabled Ruddr account must be re-enabled by IT. Raise a ticket with
+      your full name, employee ID, and manager CC'd. IT will action within
+      1 business day.
+    resolution_steps:
+      - step_number: 1
+        instruction: "Do not attempt repeated logins — raise an IT ticket instead"
+        details: >
+          Multiple failed login attempts will not help. This issue requires
+          IT intervention to re-enable the account in the Ruddr admin panel.
+      - step_number: 2
+        instruction: "Raise a ticket: 'Ruddr Account Disabled — [Your Full Name]'"
+        details: >
+          Include your full name, employee ID, your manager's name, and
+          the date you last had access. This helps IT trace the disable event.
+      - step_number: 3
+        instruction: "CC your manager on the ticket"
+        details: >
+          Your manager's confirmation is required before IT re-enables access.
+          This is a security control to prevent unauthorised account reactivation.
+    escalation_trigger: >
+      If IT has not responded within 1 business day, reply to the ticket
+      with URGENT in the subject. For business-critical access, ask your
+      manager to escalate directly to IT leadership.
+    resolution_rate: 0.92

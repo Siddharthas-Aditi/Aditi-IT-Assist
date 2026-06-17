@@ -1,0 +1,50 @@
+category: "access/permissions"
+description: "Troubleshooting playbooks for new joiner onboarding and provisioning issues"
+
+articles:
+  - id: "new-joiner-setup"
+    title: "New Joiner — Email, Laptop or Tool Access Not Provisioned"
+    category: "access/permissions"
+    subcategory: "new-joiner-setup"
+    tags: ["new joiner", "onboarding", "email not created", "laptop", "tools", "provisioning", "access"]
+    keywords:
+      ["new joiner", "new employee", "just joined", "email not created",
+       "account not set up", "laptop not received", "tools not provisioned",
+       "onboarding", "first day", "not set up", "no access on joining"]
+    content: |
+      New joiner provisioning at Aditi requires the New Joiner Request Form to be
+      submitted via IT Global Workflow before the start date. IT provisions email,
+      Ruddr, Intune enrollment, and core tools within the agreed SLA from form receipt.
+      Laptop shipment is a separate linked request.
+    short_summary: |
+      New joiner access is triggered by the IT New Joiner Request Form.
+      If access is missing on day 1, raise an urgent IT ticket with start date,
+      location, manager name, and employee ID. IT will prioritise same-day.
+    resolution_steps:
+      - step_number: 1
+        instruction: "Confirm the New Joiner Request Form was submitted before your start date"
+        details: >
+          Your manager or HR should have submitted the IT New Joiner Request Form
+          at least 3 business days before your start date. If this was not done,
+          it is the primary reason access is missing.
+      - step_number: 2
+        instruction: "Raise an urgent IT ticket: 'New Joiner Access Missing — [Your Full Name]'"
+        details: >
+          Include: full name, employee ID, start date, location (Bangalore / US / Latam),
+          manager name and email, and the list of missing access (email / Ruddr / laptop / tools).
+          Mark the ticket as High priority.
+      - step_number: 3
+        instruction: "Ask your manager to CC themselves on the ticket"
+        details: >
+          Manager confirmation speeds up provisioning. Your manager should also
+          follow up directly with IT if day-1 access is critically needed.
+      - step_number: 4
+        instruction: "IT will provision email, Ruddr, and core tools within the agreed SLA"
+        details: >
+          Once IT receives the complete ticket, email, Ruddr, and M365 access
+          are provisioned within 1 business day. Laptop shipment follows a
+          separate timeline — raise a separate linked ticket if not received.
+    escalation_trigger: >
+      If email access is not provisioned within 1 business day of ticket submission,
+      reply to the ticket and mark URGENT. Ask your manager to escalate to IT leadership.
+    resolution_rate: 0.90

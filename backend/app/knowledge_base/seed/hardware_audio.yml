@@ -1,0 +1,146 @@
+category: "hardware/audio"
+description: "Troubleshooting playbooks for audio issues during calls and on the laptop"
+
+articles:
+  - id: "audio-voice-breaks-calls"
+    title: "Voice Breaks / Audio Cutting Out During Interview Calls"
+    category: "hardware/audio"
+    subcategory: "voice-breaks-during-call"
+    tags: ["audio", "voice breaks", "cutting out", "interview", "call quality", "teams", "zoom"]
+    keywords:
+      ["voice breaks", "audio cutting", "cutting out", "breaking up", "choppy audio",
+       "voice is breaking", "audio drops", "voice drops", "robotic voice",
+       "voice breaking during call", "voice breaks during calls"]
+    content: |
+      Audio breaking up during calls is usually caused by bandwidth issues,
+      incorrect audio device selection, or the microphone picking up noise/feedback.
+      Closing unused apps frees up bandwidth and CPU that Teams/Zoom need.
+    short_summary: |
+      Close unused apps and browser tabs, select the correct headset in Teams/Zoom
+      audio settings, and unplug/replug the headset. If on Wi-Fi, move closer
+      to the router.
+    resolution_steps:
+      - step_number: 1
+        instruction: "Close all unused browser tabs and background applications"
+        details: >
+          Each open tab and app consumes bandwidth and CPU. Close everything
+          not needed for the call — this is the single most common fix for
+          choppy audio.
+      - step_number: 2
+        instruction: "In Teams/Zoom, go to Settings > Audio and select your headset as both mic and speaker"
+        details: >
+          Teams: click '...' > Settings > Devices. Zoom: Settings > Audio.
+          Explicitly select your headset or headphones from the dropdown — do
+          not leave it on 'Default'. Apply and rejoin the call.
+      - step_number: 3
+        instruction: "Unplug and firmly replug your headset; try a different USB port"
+        details: >
+          A loose connection causes intermittent audio. Unplug the headset,
+          wait 5 seconds, and reconnect it. If USB, try a different port.
+      - step_number: 4
+        instruction: "Mute and unmute yourself to reset the audio stream"
+        details: >
+          Click the mute button in Teams/Zoom and wait 2 seconds, then unmute.
+          This resets the audio capture pipeline which often clears the glitch.
+      - step_number: 5
+        instruction: "Rejoin the call if the issue continues"
+        details: >
+          Leave the meeting, close Teams/Zoom fully (system tray), reopen,
+          and rejoin. A fresh session clears any corrupted audio state.
+    escalation_trigger: >
+      If audio breaks on every call regardless of app or device, and the above
+      steps do not help, contact IT — the audio driver may need updating or
+      the headset may need replacing.
+    resolution_rate: 0.75
+
+  - id: "audio-candidate-cannot-hear"
+    title: "Candidate Cannot Hear Me / Microphone Not Detected"
+    category: "hardware/audio"
+    subcategory: "candidate-cannot-hear"
+    tags: ["microphone", "mic", "cannot hear", "candidate", "no audio output", "interview"]
+    keywords:
+      ["candidate cannot hear", "candidate can't hear", "they can't hear me",
+       "no one can hear", "mic not working", "microphone not detected",
+       "microphone not working", "no microphone", "muted by default"]
+    content: |
+      If the other person cannot hear you, your microphone is either muted,
+      set to the wrong device, or not permitted by Windows/macOS privacy settings.
+    short_summary: |
+      Unmute yourself, check Teams/Zoom audio settings to select your mic,
+      and verify Windows microphone privacy allows the app. Rejoin if needed.
+    resolution_steps:
+      - step_number: 1
+        instruction: "Check you are not muted in Teams/Zoom"
+        details: >
+          Look for the microphone icon in the call toolbar — a red slash means
+          you are muted. Click it to unmute. Also check the physical mute button
+          on your headset if it has one.
+      - step_number: 2
+        instruction: "Select the correct microphone in Teams/Zoom settings"
+        details: >
+          Teams: '...' > Settings > Devices > Microphone — pick your headset
+          microphone from the list. Zoom: Settings > Audio > Microphone.
+          Do not use 'Default' if multiple devices are listed.
+      - step_number: 3
+        instruction: "Check Windows microphone privacy settings"
+        details: >
+          Settings > Privacy & Security > Microphone. Ensure 'Microphone access'
+          is ON and that the app (Teams, Zoom, Chrome) is allowed.
+      - step_number: 4
+        instruction: "Close other apps that may have captured the microphone"
+        details: >
+          If Zoom and Teams are both open, one may have locked the microphone.
+          Close whichever app you are NOT using for this call.
+      - step_number: 5
+        instruction: "Update audio drivers via Device Manager"
+        details: >
+          Right-click Start > Device Manager > Sound, video and game controllers >
+          right-click your audio device > Update driver > Search automatically.
+          Restart after updating.
+    escalation_trigger: >
+      If the microphone is not listed at all in Device Manager, or after updating
+      drivers the problem persists, contact IT — a driver reinstall or hardware
+      replacement may be needed.
+    resolution_rate: 0.78
+
+  - id: "audio-no-sound-output"
+    title: "No Sound / Speakers Not Working on Laptop"
+    category: "hardware/audio"
+    subcategory: "no-audio-output"
+    tags: ["no sound", "no audio", "speakers", "muted", "audio output", "volume"]
+    keywords:
+      ["no sound", "no audio", "speakers not working", "can't hear anything",
+       "sound not working", "laptop sound", "volume not working", "muted"]
+    content: |
+      No sound from a laptop is usually caused by the volume being muted,
+      the wrong output device selected, or a driver issue.
+    short_summary: |
+      Check Windows volume isn't muted, right-click the speaker icon and set
+      the correct output device, then run the audio troubleshooter.
+    resolution_steps:
+      - step_number: 1
+        instruction: "Check volume level and ensure the laptop is not muted"
+        details: >
+          Click the speaker icon in the taskbar. Make sure the slider is not
+          at zero and the icon doesn't show a red X. Also check any physical
+          volume/mute keys on your keyboard (Fn + mute key).
+      - step_number: 2
+        instruction: "Right-click the speaker icon and select the correct output device"
+        details: >
+          Right-click the speaker icon > Sound settings. Under Output, change
+          the device to your speakers or headset. If a headset is plugged in,
+          make sure Windows switched to it.
+      - step_number: 3
+        instruction: "Run the Windows Audio Troubleshooter"
+        details: >
+          Settings > System > Troubleshoot > Other troubleshooters > Playing Audio > Run.
+          Apply any recommendations.
+      - step_number: 4
+        instruction: "Restart the Windows Audio service"
+        details: >
+          Press Win+R, type services.msc, find 'Windows Audio', right-click >
+          Restart. Also restart 'Windows Audio Endpoint Builder'.
+    escalation_trigger: >
+      If no audio device appears in Sound settings, or the audio troubleshooter
+      reports a hardware fault, contact IT support.
+    resolution_rate: 0.80

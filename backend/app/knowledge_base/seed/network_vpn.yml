@@ -1,0 +1,103 @@
+category: "network/connectivity"
+description: "Troubleshooting playbooks for VPN, Wi-Fi, and general connectivity issues"
+
+articles:
+  - id: "network-vpn-not-connecting"
+    title: "VPN Not Connecting (GlobalProtect / Cisco)"
+    category: "network/connectivity"
+    subcategory: "vpn-not-connecting"
+    tags: ["vpn", "globalprotect", "cisco", "not connecting", "network", "remote"]
+    keywords:
+      ["vpn not connecting", "vpn won't connect", "can't connect to vpn",
+       "vpn failed", "globalprotect", "cisco vpn", "vpn error", "vpn disconnected"]
+    content: |
+      VPN allows remote access to Aditi internal resources. Common issues include
+      authentication failures, stale sessions, and DNS mismatches after a network
+      change. Most VPN issues are fixed by disconnecting, restarting the client,
+      and re-authenticating.
+    short_summary: |
+      Disconnect VPN fully, restart the VPN client, then reconnect and authenticate
+      with your Aditi credentials + MFA. If on Wi-Fi, try a wired connection.
+    resolution_steps:
+      - step_number: 1
+        instruction: "Disconnect from VPN completely and close the client"
+        details: >
+          Right-click the VPN icon in the system tray and choose Disconnect.
+          Then right-click again and Exit/Quit the application entirely.
+      - step_number: 2
+        instruction: "Restart your Wi-Fi or switch to a wired connection"
+        details: >
+          Turn Wi-Fi off and on again on your laptop, or plug in an Ethernet
+          cable if available. A fresh network connection resolves many VPN
+          authentication failures.
+      - step_number: 3
+        instruction: "Reopen the VPN client and connect to the Aditi gateway"
+        details: >
+          Open GlobalProtect or Cisco AnyConnect. Ensure the gateway address
+          is set to the Aditi VPN endpoint (check your IT onboarding email
+          if unsure). Click Connect.
+      - step_number: 4
+        instruction: "Authenticate with your Aditi email and password + MFA"
+        details: >
+          Enter your @aditiconsulting.com email and current password when prompted.
+          Approve the MFA push notification on your phone, or enter the 6-digit
+          Authenticator code.
+      - step_number: 5
+        instruction: "Restart your laptop if VPN still won't connect"
+        details: >
+          A full restart clears stale network sessions. After reboot, try
+          connecting to VPN before opening any other applications.
+    escalation_trigger: >
+      If VPN fails after restart and reconnect, or if you receive a 'certificate
+      error' or 'gateway unreachable' message, contact IT — your VPN profile
+      may need to be re-provisioned.
+    resolution_rate: 0.78
+
+  - id: "network-wifi-dropping"
+    title: "Wi-Fi Keeps Dropping / Slow Internet"
+    category: "network/connectivity"
+    subcategory: "wifi-disconnecting"
+    tags: ["wifi", "wi-fi", "dropping", "slow", "internet", "connectivity", "unstable"]
+    keywords:
+      ["wifi keeps dropping", "wi-fi disconnecting", "slow internet",
+       "internet slow", "keeps disconnecting", "unstable connection", "no internet"]
+    content: |
+      Intermittent Wi-Fi on Aditi laptops is often caused by power management
+      settings switching off the Wi-Fi adapter, driver issues, or being too far
+      from the access point.
+    short_summary: |
+      Disable Wi-Fi power management in Device Manager, forget and re-join the
+      network, and update the Wi-Fi driver if the issue persists.
+    resolution_steps:
+      - step_number: 1
+        instruction: "Disable Wi-Fi adapter power management"
+        details: >
+          Right-click Start > Device Manager > Network Adapters > right-click
+          your Wi-Fi adapter > Properties > Power Management tab > uncheck
+          'Allow the computer to turn off this device to save power'. Click OK.
+      - step_number: 2
+        instruction: "Forget and rejoin the Wi-Fi network"
+        details: >
+          Click the Wi-Fi icon in the taskbar > click the network name >
+          Forget. Then reconnect and enter the password. This clears stale
+          connection state.
+      - step_number: 3
+        instruction: "Run the Windows Network Troubleshooter"
+        details: >
+          Settings > System > Troubleshoot > Other troubleshooters >
+          Internet Connections > Run. Apply any fixes it suggests.
+      - step_number: 4
+        instruction: "Update the Wi-Fi driver"
+        details: >
+          Device Manager > Network Adapters > right-click Wi-Fi adapter >
+          Update driver > Search automatically. Restart after updating.
+      - step_number: 5
+        instruction: "Move closer to the Wi-Fi access point or switch to 5 GHz band"
+        details: >
+          If the router broadcasts both 2.4 GHz and 5 GHz, connect to the
+          5 GHz network (usually labelled with '_5G') for faster, more stable
+          connection when in range.
+    escalation_trigger: >
+      If the issue persists at the office (not a home network), contact IT —
+      the access point or DHCP configuration may need attention.
+    resolution_rate: 0.72

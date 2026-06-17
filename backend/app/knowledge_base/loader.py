@@ -32,12 +32,16 @@ def load_all_knowledge() -> dict[str, list[dict]]:
 
             if data and "articles" in data:
                 category = data.get("category", yaml_file.stem)
-                _knowledge_cache[category] = data["articles"]
+                # Merge articles if multiple YAML files share the same category
+                if category not in _knowledge_cache:
+                    _knowledge_cache[category] = []
+                _knowledge_cache[category].extend(data["articles"])
                 logger.info(
                     "knowledge_loaded",
                     file=yaml_file.name,
                     category=category,
                     articles=len(data["articles"]),
+                    total_for_category=len(_knowledge_cache[category]),
                 )
         except Exception as e:
             logger.error("knowledge_load_error", file=yaml_file.name, error=str(e))

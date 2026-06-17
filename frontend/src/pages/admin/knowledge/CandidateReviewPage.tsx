@@ -152,6 +152,19 @@ export function CandidateReviewPage() {
         </div>
       )}
 
+      {/* Pipeline failure details */}
+      {job.parse_status === 'failed' && job.error_details && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-950/30">
+          <p className="mb-2 text-sm font-semibold text-red-700 dark:text-red-400">Pipeline Error</p>
+          <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-all rounded bg-red-100 p-3 text-xs text-red-800 dark:bg-red-900/40 dark:text-red-300">
+            {job.error_details}
+          </pre>
+          <p className="mt-2 text-xs text-red-600 dark:text-red-400">
+            Fix the issue then click <strong>Retry Pipeline</strong> above.
+          </p>
+        </div>
+      )}
+
       {/* Status tabs + bulk actions */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex gap-1">

@@ -1,0 +1,97 @@
+category: "email/outlook"
+description: "Troubleshooting playbooks for shared mailbox and alias/distribution list access"
+
+articles:
+  - id: "alias-shared-mailbox-access"
+    title: "Cannot Access Shared Mailbox / Alias Not Working"
+    category: "email/outlook"
+    subcategory: "shared-mailbox-access"
+    tags: ["shared mailbox", "alias", "distribution list", "mailbox access", "delegate", "send as"]
+    keywords:
+      ["shared mailbox", "can't access shared mailbox", "alias not working",
+       "distribution list", "send as", "mailbox not showing", "shared inbox",
+       "group mailbox", "functional mailbox"]
+    content: |
+      Shared mailboxes and aliases in Aditi are provisioned and managed by IT.
+      Access is granted by IT upon request with manager approval. If a shared
+      mailbox is not showing in Outlook or you cannot send from an alias,
+      the issue is usually a permission not yet propagated or a profile refresh needed.
+    short_summary: |
+      Remove and re-add the shared mailbox in Outlook account settings. If access
+      was just granted, allow up to 1 hour for propagation. If not granted yet,
+      raise an IT ticket with manager CC.
+    resolution_steps:
+      - step_number: 1
+        instruction: "Close Outlook and reopen it to force a permissions refresh"
+        details: >
+          M365 permissions can take up to 60 minutes to propagate after IT grants
+          access. Closing and reopening Outlook triggers a fresh check.
+      - step_number: 2
+        instruction: "Remove and re-add the shared mailbox in Outlook"
+        details: >
+          Go to File > Account Settings > Account Settings > select your main
+          account > Change > More Settings > Advanced tab. Remove the shared
+          mailbox from the list, click OK, then close and reopen Outlook. Go
+          back in and add the mailbox again using its full email address.
+      - step_number: 3
+        instruction: "Open the shared mailbox via Outlook on the Web"
+        details: >
+          In a browser, go to outlook.office.com. Click your profile picture
+          (top right) > Open another mailbox. Type the shared mailbox address
+          and click Open. This confirms whether access has been granted at all.
+      - step_number: 4
+        instruction: "If you do not have access, raise an IT ticket with manager approval"
+        details: >
+          Shared mailbox and alias access is only provisioned on manager request.
+          Raise a ticket titled 'Shared Mailbox Access — [mailbox name] — [your name]'
+          and CC your manager. IT will action within 1 business day.
+    escalation_trigger: >
+      If Outlook on the Web also shows no access, and your manager has already
+      approved the request, escalate the existing IT ticket for immediate action.
+    resolution_rate: 0.80
+
+  - id: "alias-update-add-remove"
+    title: "Alias / Email Alias Add, Remove or Create Request"
+    category: "email/outlook"
+    subcategory: "alias-update"
+    tags: ["alias", "email alias", "add alias", "remove alias", "create alias", "smtp alias"]
+    keywords:
+      ["alias", "email alias", "add alias", "create alias", "remove alias",
+       "secondary email", "smtp", "alias not working", "alias request",
+       "update alias"]
+    content: |
+      Email aliases in Aditi (secondary addresses that deliver to your primary mailbox)
+      can only be added, removed, or created by IT. The standard format is
+      firstname.lastname@aditiconsulting.com. Any alias changes require a ticket.
+    short_summary: |
+      Alias changes (add/remove/create) must be raised as an IT ticket. They cannot
+      be self-managed. IT will implement within 1 business day.
+    resolution_steps:
+      - step_number: 1
+        instruction: "Raise an IT ticket for the alias change"
+        details: >
+          Go to the IT portal (Freshservice) and raise a ticket titled:
+          'Alias Request — [Add/Remove/Create] — [your name]'.
+          Include the exact alias email address required.
+      - step_number: 2
+        instruction: "Specify the alias format: firstname.lastname@aditiconsulting.com"
+        details: >
+          The standard alias format is firstname.lastname@aditiconsulting.com.
+          If you need a non-standard alias (e.g. a team or role alias), include
+          the business justification and manager approval in the ticket.
+      - step_number: 3
+        instruction: "Wait up to 1 business day for IT to implement the change"
+        details: >
+          Once the ticket is raised, IT will process alias changes within
+          1 business day. You will receive a confirmation email when done.
+      - step_number: 4
+        instruction: "Test the new alias by sending a test email to it"
+        details: >
+          After IT confirms the change, ask a colleague to send a test email
+          to your new alias. It should arrive in your primary inbox. To send
+          FROM the alias, you will also need 'Send As' permission — mention this
+          in the original ticket if required.
+    escalation_trigger: >
+      If the alias is not working 24 hours after IT confirmed the change,
+      reply to the original ticket to escalate.
+    resolution_rate: 0.90

@@ -157,6 +157,77 @@ _SYSTEM_REGISTRY: list[SystemEntity] = [
         category="network/connectivity",
         common_issues=["3cx-voip-issue", "no-audio", "cant-make-calls"],
     ),
+    # ── Ruddr ───────────────────────────────────────────────────────
+    SystemEntity(
+        canonical_name="ruddr",
+        display_name="Ruddr",
+        aliases=[
+            "ruddr", "rudder", "rudr", "ruddr app", "ruddr portal",
+            "ruddr account", "ruddr timesheet", "ruddr login",
+            "project tracking", "timesheet tool",
+        ],
+        category="access/permissions",
+        common_issues=["ruddr-account-missing", "ruddr-account-locked"],
+    ),
+    # ── GitHub / GitHub Copilot ──────────────────────────────────────
+    SystemEntity(
+        canonical_name="github",
+        display_name="GitHub",
+        aliases=[
+            "github", "git hub", "github copilot", "copilot", "gh",
+            "github repo", "github access", "aditi github",
+            "git repository", "github organisation", "github org",
+        ],
+        category="access/permissions",
+        common_issues=["license-request", "access-denied-app"],
+    ),
+    # ── Microsoft Copilot ────────────────────────────────────────────
+    SystemEntity(
+        canonical_name="microsoft_copilot",
+        display_name="Microsoft Copilot",
+        aliases=[
+            "microsoft copilot", "m365 copilot", "office copilot",
+            "copilot for microsoft 365", "bing copilot", "copilot ai",
+        ],
+        category="access/permissions",
+        common_issues=["license-request", "access-denied-app"],
+    ),
+    # ── LinkedIn Recruiter ───────────────────────────────────────────
+    SystemEntity(
+        canonical_name="linkedin_recruiter",
+        display_name="LinkedIn Recruiter",
+        aliases=[
+            "linkedin recruiter", "linkedin", "li recruiter",
+            "recruiter lite", "linkedin license", "linkedin access",
+        ],
+        category="access/permissions",
+        common_issues=["license-request", "access-denied-app"],
+    ),
+    # ── Keeper (Password Manager) ────────────────────────────────────
+    SystemEntity(
+        canonical_name="keeper",
+        display_name="Keeper",
+        aliases=[
+            "keeper", "keeper security", "keeper password",
+            "keeper app", "password manager", "keeper vault",
+        ],
+        category="access/permissions",
+        common_issues=["license-request", "access-denied-app"],
+    ),
+    # ── Aditi IT Portal / Freshservice ───────────────────────────────
+    # (freshservice already exists — this adds common user-facing aliases)
+    # ── Hardware Audio (generic mentions) ───────────────────────────
+    SystemEntity(
+        canonical_name="headset",
+        display_name="Headset / Audio Device",
+        aliases=[
+            "headset", "headphones", "earphones", "earbuds",
+            "microphone", "mic", "speaker", "audio device",
+            "usb headset", "wireless headset",
+        ],
+        category="hardware/audio",
+        common_issues=["microphone-not-working", "no-audio-output", "voice-breaks-during-call"],
+    ),
 ]
 
 # Pre-build lookup indexes for fast matching

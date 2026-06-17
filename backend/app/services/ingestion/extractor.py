@@ -88,7 +88,7 @@ def _extract_docx(path: Path) -> ExtractionResult:
         if not text:
             continue
         # Capture heading level for structural metadata
-        if para.style.name.startswith("Heading"):
+        if para.style and para.style.name and para.style.name.startswith("Heading"):
             heading_styles.append(para.style.name)
         paragraphs.append(text)
 

@@ -1,0 +1,97 @@
+category: "access/permissions"
+description: "Troubleshooting playbooks for software license requests and tool access"
+
+articles:
+  - id: "license-request"
+    title: "Software License / Tool Access Request (Copilot, GitHub, LinkedIn, Keeper)"
+    category: "access/permissions"
+    subcategory: "license-request"
+    tags: ["license", "tool access", "copilot", "github", "linkedin recruiter", "keeper", "software"]
+    keywords:
+      ["license request", "need access to", "software license", "tool access",
+       "copilot license", "github access", "linkedin recruiter", "keeper",
+       "microsoft copilot", "github copilot", "requesting license",
+       "access not provisioned", "software access"]
+    content: |
+      Software licenses at Aditi (GitHub, GitHub Copilot, Microsoft Copilot,
+      LinkedIn Recruiter, Keeper, and other paid tools) are subject to budget
+      and manager approval. Licenses cannot be self-provisioned — IT raises
+      the request to procurement after receiving manager approval.
+    short_summary: |
+      Raise a ticket titled 'License Request — [Tool Name] — [Your Name]' with
+      manager approval and business justification. IT will coordinate procurement.
+      Subject to approval, provisioning takes 1-3 business days.
+    resolution_steps:
+      - step_number: 1
+        instruction: "Get verbal or written approval from your manager before raising a ticket"
+        details: >
+          All tool licenses require manager sign-off. Ask your manager to confirm
+          the business need before you raise the IT ticket — this prevents delays.
+      - step_number: 2
+        instruction: "Raise an IT ticket: 'License Request — [Tool Name] — [Your Name]'"
+        details: >
+          In Freshservice, raise a ticket with the following info:
+          - Tool/software name (e.g. GitHub Copilot, LinkedIn Recruiter, Keeper)
+          - Business justification (why do you need it for your role?)
+          - Project name (if applicable)
+          - Manager name (confirm they have approved)
+      - step_number: 3
+        instruction: "IT will confirm with procurement and provision within 1-3 business days"
+        details: >
+          Once the ticket is approved and procurement confirms license availability,
+          IT will provision access. You will receive an email with login instructions.
+      - step_number: 4
+        instruction: "For GitHub repository access specifically — include the repo name"
+        details: >
+          If you need access to a specific Aditi GitHub organisation or repository,
+          include the exact repo URL or organisation name in the ticket.
+          IT adds your GitHub username to the org after manager confirmation.
+    escalation_trigger: >
+      If no response after 3 business days, reply to the ticket and CC your manager.
+      For urgent project needs, ask your manager to escalate directly to IT leadership.
+    resolution_rate: 0.88
+
+  - id: "license-not-working"
+    title: "Licensed Tool Not Working / Access Denied After Provisioning"
+    category: "access/permissions"
+    subcategory: "access-denied-app"
+    tags: ["license not working", "access denied", "tool not working", "software error", "provisioned but blocked"]
+    keywords:
+      ["access denied", "license not working", "tool not working after provisioning",
+       "already have license", "can't open", "error accessing", "blocked",
+       "not authorized", "licence expired", "subscription"]
+    content: |
+      If a tool was recently provisioned but still shows 'Access Denied' or 'Not
+      Authorized', the permissions may not have propagated yet. Sign out and back
+      in, clear cache, and allow up to 1 hour for changes to apply.
+    short_summary: |
+      Sign out of the tool completely and sign back in. Clear browser cache/cookies.
+      Allow 1 hour for permission changes to propagate. If still blocked, reply to
+      your original IT ticket.
+    resolution_steps:
+      - step_number: 1
+        instruction: "Sign out of the tool completely and sign back in"
+        details: >
+          Many tools cache your old permissions. Sign out from all instances
+          (browser, desktop app, mobile) and sign back in with your Aditi SSO
+          credentials to pick up the new license.
+      - step_number: 2
+        instruction: "Clear browser cache and cookies for the tool's domain"
+        details: >
+          In Chrome: Ctrl+Shift+Delete > Cached images and files + Cookies >
+          Clear data. Then reopen the tool's website and sign in fresh.
+      - step_number: 3
+        instruction: "Wait up to 1 hour for the license assignment to propagate"
+        details: >
+          M365 and most SaaS tools take up to 60 minutes for new license
+          assignments to become active across all systems.
+      - step_number: 4
+        instruction: "Try accessing from a private/incognito browser window"
+        details: >
+          Open an incognito window (Ctrl+Shift+N) and visit the tool. If it
+          works in incognito but not your regular browser, the issue is a
+          cached session — clearing cookies (step 2) will fix it permanently.
+    escalation_trigger: >
+      If access is still denied 2 hours after IT confirmed provisioning,
+      reply to the original IT ticket with a screenshot of the error.
+    resolution_rate: 0.82
