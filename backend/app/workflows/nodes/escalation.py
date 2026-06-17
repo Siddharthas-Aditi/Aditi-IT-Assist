@@ -23,6 +23,7 @@ async def escalation_node(state: WorkflowState) -> dict:
     1. Evaluates whether escalation is truly warranted
     2. Prepares a rich handoff summary with diagnostic context
     3. Generates an empathetic, context-aware escalation message
+    4. NEW: Detects if user is confirming prior escalation offer (avoid duplicate)
     """
     logger.info(
         "escalation_node_start",
@@ -31,9 +32,30 @@ async def escalation_node(state: WorkflowState) -> dict:
     )
 
     diag_ctx = DiagnosticContext.from_dict(state.get("diagnostic_context") or {})
-    reason = _determine_escalation_reason(state, diag_ctx)
-    handoff_summary = _build_handoff_summary(state, reason, diag_ctx)
-    message = _build_escalation_message(diag_ctx, reason)
+
+    # NEW: Check if user is confirming escalation (to avoid duplicate message)
+    messages = state.get("messages", [])
+    latest_message = messages[-1].content if messages else ""
+    is_confirming_escalation = _is_user_confirming_escalation(latest_message)
+
+    if is_confirming_escalation and diag_ctx.resolution_attempts > 0:
+        # User already said yes to escalation → skip asking again, proceed to handoff
+        logger.info(
+            "escalation_confirmed",
+            session_id=state.get("session_id"),
+            is_confirmation=True,
+        )
+        reason = _determine_escalation_reason(state, diag_ctx)
+        handoff_summary = _build_handoff_summary(state, reason, diag_ctx)
+        message = (
+            "Perfect! I'm connecting you with our IT team now. "
+            "I've included everything from our conversation so they can help you right away."
+        )
+    else:
+        # New escalation request → offer with explanation
+        reason = _determine_escalation_reason(state, diag_ctx)
+        handoff_summary = _build_handoff_summary(state, reason, diag_ctx)
+        message = _build_escalation_message(diag_ctx, reason)
 
     audit_entry = {
         "event": "escalation.triggered",
@@ -42,6 +64,7 @@ async def escalation_node(state: WorkflowState) -> dict:
         "entity": diag_ctx.normalized_system,
         "resolution_attempts": diag_ctx.resolution_attempts,
         "clarification_rounds": diag_ctx.clarification_count,
+        "is_confirmation": is_confirming_escalation,
     }
 
     return {
@@ -99,8 +122,22 @@ def _build_escalation_message(diag_ctx: DiagnosticContext, reason: str) -> str:
         return (
             "Absolutely — I'll connect you with our IT team right away. "
             "I've prepared a summary of everything we've discussed so they "
-            "can pick up where we left off. Would you like me to create "
-            "a support ticket?"
+            "can pick up where we left off."
+        )
+
+    # NEW: Check if user asked for simpler explanation but it didn't help
+    if diag_ctx.last_response_type == "resolve_simplified" and diag_ctx.resolution_attempts >= 2:
+        return (
+            f"I understand these steps are complicated. "
+            f"Let me connect you with our IT team — they can walk you through "
+            f"this step-by-step and answer any questions you have."
+        )
+
+    if diag_ctx.resolution_attempts >= 2:
+        return (
+            f"I've tried multiple approaches to help with your {system_name} issue, "
+            f"but I think our IT team is best suited to help you from here. "
+            f"They'll have access to your system details and can troubleshoot more directly."
         )
 
     if diag_ctx.resolution_attempts > 0:
@@ -108,14 +145,13 @@ def _build_escalation_message(diag_ctx: DiagnosticContext, reason: str) -> str:
             f"I've tried to help troubleshoot the {system_name} issue, "
             f"but it looks like this needs a closer look from our IT team. "
             f"I'll include all the details from our conversation so they "
-            f"can help you quickly. Would you like me to create a support ticket?"
+            f"can help you quickly."
         )
 
     return (
         f"I wasn't able to find a strong match in our knowledge base for "
-        f"this {system_name} issue. Let me connect you with our IT support "
-        f"team — they'll be able to help. Would you like me to create "
-        f"a support ticket?"
+        f"this {system_name} issue. Our IT team will be able to help you better. "
+        f"Let me connect you with them."
     )
 
 
@@ -197,3 +233,20 @@ def _suggest_actions(diag_ctx: DiagnosticContext) -> list[str]:
         actions.append("Check system-specific logs")
 
     return actions
+
+
+def _is_user_confirming_escalation(message: str) -> bool:
+    """Check if user is confirming/accepting escalation offer.
+
+    Keywords: yes, connect, talk to, agent, specialist, human, etc.
+    This avoids repeating the escalation question when user already said yes.
+    """
+    keywords = {
+        "yes", "yeah", "yep", "ok", "okay", "sure", "go ahead",
+        "connect", "connect me", "talk to", "talk to someone",
+        "agent", "specialist", "human", "person", "it team",
+        "create ticket", "raise ticket", "ticket", "escalate",
+        "help", "please help",
+    }
+    msg_lower = message.lower().strip()
+    return any(kw in msg_lower for kw in keywords)

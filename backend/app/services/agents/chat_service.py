@@ -11,6 +11,8 @@ from app.schemas.chat import (
     QuickReplyOption,
     ResolutionStepSchema,
 )
+from app.services.agents.context_summarizer import ContextSummarizerService
+from app.services.llm_service import get_llm_service
 
 logger = get_logger(__name__)
 
@@ -151,6 +153,27 @@ class ChatService:
 
         graph = build_support_workflow()
         result = await graph.ainvoke(state)
+
+        # NEW: Compress context every 10 turns to prevent LLM prompt bloat
+        turn_count = result.get("turn_count", 0)
+        summarizer = ContextSummarizerService(get_llm_service())
+        if summarizer.should_summarize(turn_count):
+            diagnostic_context = result.get("diagnostic_context")
+            if diagnostic_context:
+                try:
+                    summary = await summarizer.summarize(diagnostic_context)
+                    diagnostic_context["conversation_summary"] = summary.issue_one_liner
+                    logger.info(
+                        "context_summarized",
+                        turn_count=turn_count,
+                        summary_preview=summary.issue_one_liner[:80],
+                    )
+                except Exception as e:
+                    logger.warning(
+                        "context_summarization_failed",
+                        error=str(e),
+                        turn_count=turn_count,
+                    )
 
         # Persist session state for future turns
         _sessions[session_id] = result

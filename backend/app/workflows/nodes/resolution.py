@@ -34,7 +34,9 @@ RESOLUTION_SYSTEM_PROMPT = (
     "- End by asking, warmly, whether that helped.\n"
     "- If unsure, say so and offer to bring in the IT team.\n"
     "- The precise click-by-click steps are shown to the user separately, so you don't need\n"
-    "  to repeat them verbatim — summarise the gist naturally and point to them."
+    "  to repeat them verbatim — summarise the gist naturally and point to them.\n"
+    "- TONE ADAPTATION: If the user is frustrated, lead with empathy. If urgent, prioritize speed over detail.\n"
+    "  If confused, simplify and clarify."
 )
 
 RESOLUTION_PROMPT = """An employee needs help. Reply to them directly in natural, conversational language.
@@ -131,6 +133,7 @@ async def resolution_node(state: WorkflowState) -> dict:
     3. Presents the NEXT 2-3 steps (never repeats a failed batch)
     4. Detects exhaustion/loops and routes to escalation when nothing is left
     5. Computes a calibrated, multi-component resolution confidence
+    6. NEW: If user asks for simpler explanation, simplify first before escalating
     """
     logger.info(
         "resolution_node_start",
@@ -142,9 +145,62 @@ async def resolution_node(state: WorkflowState) -> dict:
     diag_ctx = DiagnosticContext.from_dict(state.get("diagnostic_context") or {})
     trace = state.get("retrieval_trace") or {}
 
-    # ── No grounded knowledge at all → offer escalation ──────────
+    # NEW: Check if user asked for simpler explanation (before escalating)
+    messages = state.get("messages", [])
+    latest_message = messages[-1].content if messages else ""
+    asks_for_simpler = _asks_for_simpler_explanation(latest_message)
+
+    if asks_for_simpler and diag_ctx.resolution_attempts >= 2:
+        # User tried steps and is confused → simplify instead of escalating
+        logger.info(
+            "simplification_requested",
+            session_id=state.get("session_id"),
+            attempts=diag_ctx.resolution_attempts,
+        )
+        return await _handle_simplification_request(
+            state, diag_ctx, knowledge_results, trace
+        )
+
+    # ── No grounded knowledge at all → try web search fallback (NEW) ──
     if not knowledge_results:
+        from app.services.web_search_service import WebSearchService
+
         diag_ctx.resolution_attempts += 1
+
+        web_service = WebSearchService()
+        web_results = await web_service.search(
+            query=diag_ctx.exact_problem_statement or "",
+            category=diag_ctx.issue_subtype or diag_ctx.issue_category or "",
+            system=diag_ctx.normalized_system or "",
+        )
+
+        # If web search found results, offer them
+        if web_results:
+            web_response = _format_web_results_for_user(web_results)
+            diag_ctx.resolution_confidence = 0.3  # Low confidence for external sources
+            diag_ctx.phase = DiagnosticPhase.CONFIRMING
+            diag_ctx.last_response_type = "resolve"
+            logger.info(
+                "web_search_fallback_used",
+                results_count=len(web_results),
+                top_trust=web_results[0].trust_level.value,
+            )
+            return {
+                "current_node": "resolve",
+                "resolution_steps": [],
+                "resolution_confidence": 0.3,
+                "diagnostic_context": diag_ctx.to_dict(),
+                "conversation_phase": diag_ctx.phase.value,
+                "messages": [AIMessage(content=web_response)],
+                "audit_trail": [{
+                    "event": "resolution.web_search_fallback",
+                    "confidence": 0.3,
+                    "results_count": len(web_results),
+                    "resolution_attempt": diag_ctx.resolution_attempts,
+                }],
+            }
+
+        # No KB, no web search results → escalate
         diag_ctx.resolution_confidence = 0.0
         diag_ctx.phase = DiagnosticPhase.CONFIRMING
         diag_ctx.last_response_type = "resolve"
@@ -156,7 +212,7 @@ async def resolution_node(state: WorkflowState) -> dict:
             "conversation_phase": diag_ctx.phase.value,
             "messages": [AIMessage(content=(
                 "I wasn't able to find a specific solution for this in our knowledge "
-                "base. Would you like me to create a support ticket so our IT team can "
+                "base or online. Would you like me to create a support ticket so our IT team can "
                 "assist you directly?"
             ))],
             "audit_trail": [{
@@ -320,6 +376,18 @@ async def _llm_resolution(
         additional.append(f"- Error message: {diag_ctx.error_message}")
     if diag_ctx.failed_steps:
         additional.append(f"- Already tried (do NOT repeat): {', '.join(diag_ctx.failed_steps)}")
+
+    # NEW: Include conversation summary if available (turn > 10)
+    conversation_summary = diag_ctx.conversation_summary or None
+    if conversation_summary:
+        additional.append(f"- Conversation so far: {conversation_summary}")
+
+    # NEW: Include urgency/sentiment context for tone adjustment
+    if diag_ctx.urgency:
+        additional.append(f"- User urgency level: {diag_ctx.urgency}")
+    if diag_ctx.business_impact:
+        additional.append(f"- Business impact: {diag_ctx.business_impact}")
+
     additional_text = "\n".join(additional) if additional else "None"
 
     prompt = RESOLUTION_PROMPT.format(
@@ -459,4 +527,194 @@ def _format_concise_response(
         )
 
     return " ".join(parts)
+
+
+def _format_web_results_for_user(results: list) -> str:
+    """Format web search results for display to user.
+
+    Results include external sources when internal KB has no guidance.
+    Always include a disclaimer that these are external sources.
+    """
+    if not results:
+        return (
+            "I wasn't able to find guidance in our knowledge base. "
+            "Let me connect you with our IT team instead."
+        )
+
+    trust_badge = {
+        "official": "✓ Official",
+        "vendor": "✓ Vendor",
+        "trusted_community": "Community",
+        "general_blog": "Blog",
+    }
+
+    formatted_results = []
+    for i, result in enumerate(results, 1):
+        badge = trust_badge.get(result.trust_level.value, "External")
+        formatted_results.append(
+            f"**{i}. {result.title}** [{badge}]\n"
+            f"{result.snippet}\n"
+            f"[Read more]({result.url})"
+        )
+
+    return (
+        "I couldn't find this in our internal knowledge base, but I found some external resources "
+        "that might help:\n\n"
+        + "\n\n".join(formatted_results) + "\n\n"
+        "You're welcome to try one of these solutions. Let me know if it helps, "
+        "or I can escalate this to our IT team if you'd prefer."
+    )
+
+
+def _asks_for_simpler_explanation(message: str) -> bool:
+    """Check if user is asking for simpler/clearer explanation.
+
+    Keywords: simpler, explain, understand, confusing, easier, break down, etc.
+    """
+    keywords = {
+        "simpler", "simple", "easier", "explain", "understand", "confusing",
+        "confused", "don't understand", "not clear", "unclear", "break down",
+        "step by step", "more detail", "more clearly", "plain english",
+    }
+    msg_lower = message.lower()
+    return any(kw in msg_lower for kw in keywords)
+
+
+async def _handle_simplification_request(
+    state: WorkflowState,
+    diag_ctx: DiagnosticContext,
+    knowledge_results: list[dict],
+    trace: dict,
+) -> dict:
+    """Handle user request for simpler explanation.
+
+    Instead of escalating, provide ultra-simple guidance with minimal steps.
+    """
+    if not knowledge_results:
+        # No KB, can't simplify → escalate
+        return {
+            "current_node": "resolve",
+            "resolution_steps": [],
+            "resolution_confidence": 0.0,
+            "diagnostic_context": diag_ctx.to_dict(),
+            "conversation_phase": diag_ctx.phase.value,
+            "messages": [AIMessage(content=(
+                "I understand this is getting complicated. Let me have our IT team "
+                "take a closer look so they can walk you through this step by step. "
+                "Is that okay?"
+            ))],
+            "audit_trail": [{
+                "event": "resolution.escalation_offered_for_simplification",
+                "reason": "No KB articles to simplify further",
+                "attempts": diag_ctx.resolution_attempts,
+            }],
+        }
+
+    # Get the best article (most relevant)
+    best_article = knowledge_results[0]
+    ordered, remaining = _build_progression(knowledge_results, diag_ctx)
+
+    # NEW: Create ULTRA-simplified version with 1-2 steps maximum
+    if remaining:
+        # Take only the first step, make it extremely simple
+        simple_batch = [remaining[0]]  # Just 1 step
+    elif ordered:
+        # If no remaining, take first from ordered
+        simple_batch = [ordered[0]]
+    else:
+        # Can't simplify further → offer escalation
+        return {
+            "current_node": "resolve",
+            "resolution_steps": [],
+            "resolution_confidence": 0.0,
+            "diagnostic_context": diag_ctx.to_dict(),
+            "conversation_phase": diag_ctx.phase.value,
+            "messages": [AIMessage(content=(
+                "I understand these steps are getting complicated. "
+                "Let me connect you with our IT team so they can help you directly. "
+                "Is that okay?"
+            ))],
+            "audit_trail": [{
+                "event": "resolution.escalation_offered",
+                "reason": "Steps too complex to simplify further",
+                "attempts": diag_ctx.resolution_attempts,
+            }],
+        }
+
+    # Render ultra-simple response
+    confidence_bd = _score_confidence(state, diag_ctx, trace)
+    resolution = await _render_simple_resolution(simple_batch, best_article, diag_ctx)
+
+    # Log simplification attempt
+    diag_ctx.record_suggested_steps([s["instruction"] for s in simple_batch])
+    diag_ctx.resolution_attempts += 1
+    diag_ctx.last_response_type = "resolve_simplified"
+    diag_ctx.phase = DiagnosticPhase.CONFIRMING
+
+    logger.info(
+        "resolution_simplified",
+        session_id=state.get("session_id"),
+        steps_count=1,
+        attempt=diag_ctx.resolution_attempts,
+    )
+
+    return {
+        "current_node": "resolve",
+        "resolution_steps": resolution["steps"],
+        "resolution_confidence": 0.6,  # Lower confidence for simplified guidance
+        "diagnostic_context": diag_ctx.to_dict(),
+        "conversation_phase": diag_ctx.phase.value,
+        "messages": [AIMessage(content=resolution["response"])],
+        "audit_trail": [{
+            "event": "resolution.simplified",
+            "confidence": 0.6,
+            "steps_count": 1,
+            "attempt": diag_ctx.resolution_attempts,
+        }],
+    }
+
+
+async def _render_simple_resolution(
+    batch: list[dict],
+    article: dict,
+    diag_ctx: DiagnosticContext,
+) -> dict:
+    """Render ultra-simple resolution with plain English, minimal jargon."""
+    from app.services.llm_service import LLMService
+
+    llm = get_llm_service()
+
+    # Take only the first (most important) step
+    step = batch[0] if batch else {}
+    instruction = step.get("instruction", "")
+    details = step.get("details", "")
+
+    if not instruction:
+        return {
+            "steps": [],
+            "confidence": 0.0,
+            "method": "error",
+            "response": "I'm sorry, I'm having trouble simplifying these steps. Let me connect you with our IT team.",
+        }
+
+    # Build ultra-simple response with step-by-step language
+    simple_response = (
+        f"Let me break this down into just one simple step:\n\n"
+        f"**{instruction}**\n"
+        f"{details if details else ''}\n\n"
+        f"That's really all you need to do! "
+        f"Try this step and let me know if it helps. "
+        f"If it doesn't, I can get our IT team involved."
+    )
+
+    steps = [
+        {"step_number": 1, "instruction": instruction, "details": details}
+    ]
+
+    return {
+        "steps": steps,
+        "confidence": 0.6,
+        "method": "simplified",
+        "response": simple_response,
+    }
 

@@ -24,6 +24,7 @@ from app.services.agents.entity_normalizer import (
     normalize_entity,
 )
 from app.services.agents.playbooks import get_playbook, get_playbook_for_entity  # noqa: F401
+from app.services.agents.sentiment_analyzer import SentimentAnalyzerService
 from app.services.agents.subtype_classifier import classify_subtype
 from app.services.llm_service import get_llm_service
 from app.workflows.state import WorkflowState
@@ -119,8 +120,6 @@ ISSUE_CATEGORIES = [
     "network/connectivity",
     "access/permissions",
     "access/sixth_sense",
-    "access/ruddr",
-    "video-conferencing/teams",
     "other",
 ]
 
@@ -128,9 +127,9 @@ CLASSIFICATION_PROMPT = """You are a professional IT support classification spec
 Analyze the user's message and classify their IT issue.
 
 Categories:
-- email/outlook, video-conferencing/zoom, video-conferencing/teams, device-management/intune
+- email/outlook, video-conferencing/zoom, device-management/intune
 - hardware/camera, hardware/audio, hardware/other, software/other
-- network/connectivity, access/permissions, access/sixth_sense, access/ruddr, hardware/audio, other
+- network/connectivity, access/permissions, access/sixth_sense, other
 
 {entity_hint}
 
@@ -228,6 +227,26 @@ async def triage_node(state: WorkflowState) -> dict:
             confidence=entity_match.confidence,
             method=entity_match.method,
         )
+
+    # ── Step 1b: Sentiment Detection (NEW - every turn) ─────────────
+    # Detect urgency, frustration, and confusion to tailor responses
+    sentiment_analyzer = SentimentAnalyzerService(get_llm_service())
+    sentiment = await sentiment_analyzer.analyze(user_message)
+    diag_ctx.urgency = sentiment.urgency.value
+    diag_ctx.business_impact = (
+        "critical"
+        if sentiment.urgency.value == "critical"
+        else "high"
+        if sentiment.urgency.value == "high"
+        else "medium"
+    )
+    logger.info(
+        "sentiment_detected",
+        urgency=sentiment.urgency.value,
+        frustration=sentiment.frustration.value,
+        confusion=sentiment.confusion.value,
+        confidence=sentiment.confidence,
+    )
 
     # ── Step 2: Intent Detection (every turn) ────────────────────
     intent_result = detect_issue_intent(user_message)
@@ -825,39 +844,6 @@ def _keyword_classify(message: str, diag_ctx: DiagnosticContext | None = None) -
             "has_specific_symptom": has_symptom,
             "symptom": message if has_symptom else None,
             "confidence": 0.85 if has_symptom else 0.6,
-            "_method": "keyword",
-        }
-    elif any(w in message_lower for w in ["ruddr", "rudder", "timesheet tool"]):
-        return {
-            "category": "access/ruddr",
-            "subcategory": None,
-            "severity": "medium",
-            "urgency": "medium",
-            "has_specific_symptom": has_symptom,
-            "symptom": message if has_symptom else None,
-            "confidence": 0.90,
-            "_method": "keyword",
-        }
-    elif any(w in message_lower for w in ["audio", "headset", "microphone", "mic", "speaker", "voice breaks", "can't hear"]):
-        return {
-            "category": "hardware/audio",
-            "subcategory": None,
-            "severity": "medium",
-            "urgency": "medium",
-            "has_specific_symptom": has_symptom,
-            "symptom": message if has_symptom else None,
-            "confidence": 0.82 if has_symptom else 0.55,
-            "_method": "keyword",
-        }
-    elif any(w in message_lower for w in ["github", "copilot", "linkedin", "keeper", "license", "tool access"]):
-        return {
-            "category": "access/permissions",
-            "subcategory": "license-request",
-            "severity": "low",
-            "urgency": "low",
-            "has_specific_symptom": has_symptom,
-            "symptom": message if has_symptom else None,
-            "confidence": 0.80,
             "_method": "keyword",
         }
     elif any(w in message_lower for w in ["keka", "freshservice", "install", "software", "app"]):
