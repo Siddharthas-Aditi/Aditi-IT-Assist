@@ -4,8 +4,8 @@ import logging
 from dataclasses import dataclass
 from typing import Optional
 
-from backend.app.services.agents.diagnostic_state import DiagnosticContext
-from backend.app.services.llm_service import LLMService
+from app.services.agents.diagnostic_state import DiagnosticContext
+from app.services.llm_service import LLMService
 
 logger = logging.getLogger(__name__)
 
@@ -60,8 +60,8 @@ Be concise. Focus on what matters for next troubleshooting step.
 
         try:
             summary_text = await self.llm.complete(
-                system="You are a support ticket analyst. Summarize conversations concisely for internal handoff.",
-                user_prompt=summary_prompt,
+                prompt=summary_prompt,
+                system_prompt="You are a support ticket analyst. Summarize conversations concisely for internal handoff.",
                 temperature=0.3,  # Deterministic
             )
 

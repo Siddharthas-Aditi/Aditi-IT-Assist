@@ -101,3 +101,64 @@ articles:
       If the issue persists at the office (not a home network), contact IT —
       the access point or DHCP configuration may need attention.
     resolution_rate: 0.72
+
+  - id: "network-no-internet"
+    title: "No Internet Connection / Can't Connect to Internet"
+    category: "network/connectivity"
+    subcategory: "internet"
+    tags: ["internet", "no internet", "can't connect", "connectivity", "offline", "disconnected", "network down"]
+    keywords:
+      ["can't connect to internet", "no internet", "internet not working", "no network",
+       "can't access internet", "connection lost", "offline", "disconnected from internet",
+       "unable to connect", "internet is down"]
+    content: |
+      Total loss of internet connectivity can be caused by network adapter failure,
+      DHCP issues, DNS misconfiguration, or gateway/router problems. The first
+      step is always to verify physical connectivity and restart the network
+      adapter or switch networks.
+    short_summary: |
+      Restart your network adapter, check that cables are connected (if wired),
+      try another Wi-Fi network or wired connection, and run Windows troubleshooter.
+      If still disconnected, restart your laptop.
+    resolution_steps:
+      - step_number: 1
+        instruction: "Check if you're connected to a network"
+        details: >
+          Look at the Wi-Fi or Ethernet icon in the taskbar (bottom right).
+          If using Wi-Fi, ensure the icon shows you're connected to a network.
+          If using a wired connection, make sure the Ethernet cable is plugged in
+          to both your laptop and the network jack.
+      - step_number: 2
+        instruction: "Disconnect and reconnect your network adapter"
+        details: >
+          Right-click the Wi-Fi icon > Wi-Fi > turn Off. Wait 5 seconds, then
+          turn it On again. Or, if wired, unplug the Ethernet cable for 10 seconds
+          and plug it back in.
+      - step_number: 3
+        instruction: "Forget and rejoin the Wi-Fi network (if on Wi-Fi)"
+        details: >
+          Click the Wi-Fi icon > click the network name > Forget. Then click the
+          Wi-Fi icon again and select the same network. Re-enter the password
+          (usually on a sticker under the router).
+      - step_number: 4
+        instruction: "Try a different network to isolate the issue"
+        details: >
+          If possible, connect to a phone hotspot, mobile tether, or ask a
+          colleague for their Wi-Fi network. If that works, the problem is
+          your primary network, not your laptop.
+      - step_number: 5
+        instruction: "Run the Windows Network Troubleshooter"
+        details: >
+          Settings > System > Troubleshoot > Other troubleshooters >
+          Internet Connections > Run. Apply any fixes suggested.
+      - step_number: 6
+        instruction: "Restart your laptop"
+        details: >
+          A full reboot clears network adapter drivers and DHCP lease issues.
+          Click Start > Power > Restart. When it boots up, wait 30 seconds for
+          network services to start, then check internet again.
+    escalation_trigger: >
+      If internet is still unavailable after restarting, your network adapter
+      may be disabled in BIOS, or your laptop may need a network driver update.
+      Contact IT — they can check network settings and update drivers if needed.
+    resolution_rate: 0.68

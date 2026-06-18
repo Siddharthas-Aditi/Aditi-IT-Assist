@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
 
-from backend.app.services.llm_service import LLMService
+from app.services.llm_service import LLMService
 
 logger = logging.getLogger(__name__)
 
@@ -182,9 +182,8 @@ All values must be lowercase.
 
         try:
             result = await self.llm.complete_json(
-                system="You are analyzing customer support message tone. Be precise and consistent.",
-                user_prompt=analysis_prompt,
-                temperature=0.3,  # Deterministic
+                prompt=analysis_prompt,
+                system_prompt="You are analyzing customer support message tone. Be precise and consistent.",
             )
 
             return SentimentAnalysis(

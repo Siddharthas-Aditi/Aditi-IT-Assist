@@ -145,6 +145,19 @@ async def resolution_node(state: WorkflowState) -> dict:
     diag_ctx = DiagnosticContext.from_dict(state.get("diagnostic_context") or {})
     trace = state.get("retrieval_trace") or {}
 
+    # ── NEW: Check if KB articles actually match the diagnosed issue ──
+    # This enables agent collaboration: if retrieval found same-category articles
+    # but wrong subtype, we should try web search instead.
+    from app.services.agents.retrieval_quality import RetrievalQualityAnalyzer
+    quality = RetrievalQualityAnalyzer(knowledge_results, diag_ctx).analyze()
+    logger.info(
+        "retrieval_quality_check",
+        is_relevant=quality.is_relevant,
+        confidence=quality.confidence,
+        should_try_web_search=quality.should_try_web_search,
+        subtype_matches=quality.matched_subtype_count,
+    )
+
     # NEW: Check if user asked for simpler explanation (before escalating)
     messages = state.get("messages", [])
     latest_message = messages[-1].content if messages else ""
@@ -161,12 +174,18 @@ async def resolution_node(state: WorkflowState) -> dict:
             state, diag_ctx, knowledge_results, trace
         )
 
-    # ── No grounded knowledge at all → try web search fallback (NEW) ──
-    if not knowledge_results:
+    # ── Mismatch detected: KB has wrong articles for this issue → try web search ──
+    if quality.should_try_web_search and knowledge_results:
         from app.services.web_search_service import WebSearchService
 
-        diag_ctx.resolution_attempts += 1
+        logger.info(
+            "retrieval_mismatch_detected",
+            session_id=state.get("session_id"),
+            kb_count=len(knowledge_results),
+            reason=quality.mismatch_reason,
+        )
 
+        diag_ctx.resolution_attempts += 1
         web_service = WebSearchService()
         web_results = await web_service.search(
             query=diag_ctx.exact_problem_statement or "",
@@ -174,33 +193,43 @@ async def resolution_node(state: WorkflowState) -> dict:
             system=diag_ctx.normalized_system or "",
         )
 
-        # If web search found results, offer them
+        # If web search found better results, use them
         if web_results:
             web_response = _format_web_results_for_user(web_results)
-            diag_ctx.resolution_confidence = 0.3  # Low confidence for external sources
+            diag_ctx.resolution_confidence = 0.4  # Slightly higher for mismatch recovery
             diag_ctx.phase = DiagnosticPhase.CONFIRMING
             diag_ctx.last_response_type = "resolve"
             logger.info(
-                "web_search_fallback_used",
+                "web_search_used_for_mismatch",
                 results_count=len(web_results),
-                top_trust=web_results[0].trust_level.value,
+                kb_mismatch_reason=quality.mismatch_reason,
             )
             return {
                 "current_node": "resolve",
                 "resolution_steps": [],
-                "resolution_confidence": 0.3,
+                "resolution_confidence": 0.4,
                 "diagnostic_context": diag_ctx.to_dict(),
                 "conversation_phase": diag_ctx.phase.value,
                 "messages": [AIMessage(content=web_response)],
                 "audit_trail": [{
-                    "event": "resolution.web_search_fallback",
-                    "confidence": 0.3,
-                    "results_count": len(web_results),
+                    "event": "resolution.web_search_mismatch_recovery",
+                    "confidence": 0.4,
+                    "kb_mismatch": quality.mismatch_reason,
+                    "web_results": len(web_results),
                     "resolution_attempt": diag_ctx.resolution_attempts,
                 }],
             }
 
-        # No KB, no web search results → escalate
+        # Web search also failed after mismatch → escalate with context
+        logger.info(
+            "mismatch_without_web_recovery",
+            kb_mismatch=quality.mismatch_reason,
+        )
+        diag_ctx.escalation_reason = (
+            f"I found some KB articles, but they don't seem to match your specific issue "
+            f"({quality.mismatch_reason}). Let me connect you with our IT team so they can "
+            f"help you directly."
+        )
         diag_ctx.resolution_confidence = 0.0
         diag_ctx.phase = DiagnosticPhase.CONFIRMING
         diag_ctx.last_response_type = "resolve"

@@ -4,18 +4,14 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Aditi Consulting brand-inspired palette
+        // Aditi Consulting Official Brand Palette
         brand: {
-          50: '#eff6ff',
-          100: '#dbeafe',
-          200: '#bfdbfe',
-          300: '#93c5fd',
-          400: '#60a5fa',
-          500: '#2563eb', // Primary blue
-          600: '#1d4ed8',
-          700: '#1e40af',
-          800: '#1e3a8a',
-          900: '#172554',
+          'dark-blue': '#052239',    // Primary
+          'navy-blue': '#182D82',    // Primary
+          'light-gray': '#EDEDED',   // Primary
+          'sky-blue': '#00B9F1',     // Secondary
+          'teal': '#00C48C',         // Secondary
+          'gold': '#FFA300',         // Secondary
         },
         background: 'hsl(var(--background))',
         foreground: 'hsl(var(--foreground))',
@@ -32,14 +28,18 @@ export default {
         destructive: 'hsl(var(--destructive))',
         border: 'hsl(var(--border))',
         ring: 'hsl(var(--ring))',
+        teal: 'hsl(var(--teal))',
+        gold: 'hsl(var(--gold))',
       },
       borderRadius: {
         lg: 'var(--radius)',
-        md: 'calc(var(--radius) - 2px)',
-        sm: 'calc(var(--radius) - 4px)',
+        md: 'var(--radius)',
+        sm: 'var(--radius)',
+        none: '0',
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
+        sans: ['Lato', 'Roboto', 'system-ui', 'sans-serif'],
+        heading: ['Lato', 'system-ui', 'sans-serif'],
       },
       keyframes: {
         'fade-in': {

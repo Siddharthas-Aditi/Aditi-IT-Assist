@@ -4,50 +4,64 @@
 
 @layer base {
   :root {
-    --background: 210 20% 98%;
-    --foreground: 222 47% 11%;
+    /* Aditi Consulting Brand Colors */
+    /* Light Mode (default) */
+    --background: 0 0% 100%;
+    --foreground: 211 84% 12%;
     --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
-    --primary: 221 83% 53%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 222 47% 11%;
-    --muted: 210 40% 96%;
+    --card-foreground: 211 84% 12%;
+    /* Primary: Dark Blue (#052239) */
+    --primary: 211 84% 12%;
+    --primary-foreground: 0 0% 100%;
+    /* Secondary: Navy Blue (#182D82) */
+    --secondary: 235 68% 30%;
+    --secondary-foreground: 0 0% 100%;
+    /* Muted: Light Gray (#EDEDED) */
+    --muted: 0 0% 93%;
     --muted-foreground: 215 16% 47%;
-    --accent: 210 40% 96%;
-    --accent-foreground: 222 47% 11%;
+    /* Accent: Sky Blue (#00B9F1) */
+    --accent: 195 100% 47%;
+    --accent-foreground: 211 84% 12%;
     --destructive: 0 84% 60%;
-    --success: 142 71% 45%;
-    --warning: 38 92% 50%;
-    --border: 214 32% 91%;
-    --ring: 221 83% 53%;
-    --radius: 0.625rem;
-    --sidebar: 222 47% 11%;
-    --sidebar-foreground: 210 40% 96%;
-    --gradient-start: 221 83% 53%;
-    --gradient-end: 262 83% 58%;
+    --success: 163 100% 38%;
+    --warning: 38 100% 50%;
+    --border: 0 0% 93%;
+    --ring: 211 84% 12%;
+    --radius: 0px;
+    /* Sidebar: Dark Blue */
+    --sidebar: 211 84% 12%;
+    --sidebar-foreground: 0 0% 100%;
+    /* Gradients: Dark Blue → Navy Blue */
+    --gradient-start: 211 84% 12%;
+    --gradient-end: 235 68% 30%;
+    /* Secondary Accent Colors */
+    --teal: 163 100% 38%;
+    --gold: 38 100% 50%;
   }
 
   .dark {
-    --background: 222 47% 6%;
-    --foreground: 210 40% 96%;
-    --card: 222 47% 9%;
-    --card-foreground: 210 40% 96%;
-    --primary: 217 91% 60%;
-    --primary-foreground: 222 47% 6%;
-    --secondary: 222 47% 14%;
-    --secondary-foreground: 210 40% 96%;
-    --muted: 222 47% 14%;
-    --muted-foreground: 215 16% 57%;
-    --accent: 222 47% 14%;
-    --accent-foreground: 210 40% 96%;
+    /* Dark Mode */
+    --background: 211 84% 12%;
+    --foreground: 0 0% 100%;
+    --card: 235 68% 30%;
+    --card-foreground: 0 0% 100%;
+    --primary: 195 100% 47%;
+    --primary-foreground: 211 84% 12%;
+    --secondary: 0 0% 93%;
+    --secondary-foreground: 211 84% 12%;
+    --muted: 235 68% 25%;
+    --muted-foreground: 215 16% 70%;
+    --accent: 195 100% 47%;
+    --accent-foreground: 211 84% 12%;
     --destructive: 0 72% 51%;
-    --success: 142 71% 45%;
-    --warning: 38 92% 50%;
-    --border: 222 47% 18%;
-    --ring: 217 91% 60%;
-    --sidebar: 222 47% 6%;
-    --sidebar-foreground: 210 40% 96%;
+    --success: 163 100% 38%;
+    --warning: 38 100% 50%;
+    --border: 235 68% 35%;
+    --ring: 195 100% 47%;
+    --sidebar: 211 84% 12%;
+    --sidebar-foreground: 0 0% 100%;
+    --teal: 163 100% 38%;
+    --gold: 38 100% 50%;
   }
 }
 
