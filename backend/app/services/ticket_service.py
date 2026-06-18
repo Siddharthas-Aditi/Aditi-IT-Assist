@@ -72,6 +72,42 @@ class TicketService:
         logger.info("ticket_created", ticket_number=ticket_number, requester=requester.email)
         return ticket
 
+    async def request_live_agent(self, ticket_id: uuid.UUID, actor: User) -> Ticket:
+        """Queue an existing ticket for a live IT agent (human handoff).
+
+        Surfaces the ticket in the IT operations queue: moves it out of the raw
+        "new" state into "triaged" (ready for pickup), records a live-agent
+        request event + an internal note, and guarantees at least `high`
+        priority so it is picked up promptly. Idempotent-friendly: calling it on
+        an already-queued ticket simply re-records the request.
+        """
+        ticket = await self._get_ticket(ticket_id)
+        if not ticket:
+            raise ValueError("Ticket not found")
+
+        if ticket.status == "new":
+            ticket.status = "triaged"
+        if ticket.priority in ("low", "medium"):
+            ticket.priority = "high"
+
+        await self._add_event(
+            ticket_id, actor.id, "live_agent_requested",
+            f"Live agent requested by {actor.full_name} from chat handoff",
+        )
+        await self.add_comment(
+            ticket_id, actor,
+            "Employee requested a live IT specialist from the support chat. "
+            "Conversation context and attempted steps are captured in this ticket.",
+            is_internal=True, comment_type="system",
+        )
+
+        logger.info(
+            "live_agent_requested",
+            ticket_number=ticket.ticket_number,
+            requester=actor.email,
+        )
+        return ticket
+
     async def update_status(
         self, ticket_id: uuid.UUID, new_status: str, actor: User,
         comment: str | None = None,

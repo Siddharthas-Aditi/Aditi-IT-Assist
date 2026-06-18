@@ -3,21 +3,30 @@
 from uuid import uuid4
 
 from langchain_core.messages import AIMessage, HumanMessage
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
+from app.models.auth import User
 from app.schemas.chat import (
     ChatDebugInfo,
     ChatMessageResponse,
     QuickReplyOption,
     ResolutionStepSchema,
+    TicketRef,
 )
 from app.services.agents.context_summarizer import ContextSummarizerService
 from app.services.llm_service import get_llm_service
+from app.services.ticket_service import TicketService
 
 logger = get_logger(__name__)
 
 # In-memory session store (dev/single-server; production → Redis or DB)
 _sessions: dict[str, dict] = {}
+
+# Idempotency map: session_id → created ticket reference (dict form of TicketRef).
+# Ensures multi-turn escalation / repeated "Connect" clicks reuse one ticket
+# instead of spawning duplicates. Production: persist alongside the session.
+_session_tickets: dict[str, dict] = {}
 
 
 class ChatService:
@@ -25,7 +34,16 @@ class ChatService:
 
     Orchestrates the LangGraph workflow invocation, maintains session
     continuity across multiple turns, and formats responses for the API layer.
+
+    Ticket persistence and live-agent handoff happen HERE (the service layer),
+    not in the workflow nodes — nodes stay side-effect free and only prepare a
+    ticket *draft*. A real ticket is created only on explicit user confirmation.
     """
+
+    def __init__(self, ticket_service: TicketService | None = None) -> None:
+        # Optional so workflow-only/unit contexts can run without a DB; ticket
+        # creation simply degrades to "offer only" when no ticket_service.
+        self.ticket_service = ticket_service
 
     async def process_message(
         self,
@@ -35,6 +53,7 @@ class ChatService:
         *,
         user_name: str | None = None,
         user_email: str | None = None,
+        requester: User | None = None,
         include_debug: bool = False,
     ) -> ChatMessageResponse:
         """Process a user message through the agent workflow.
@@ -59,7 +78,10 @@ class ChatService:
                 session_id, user_message, user_id,
                 user_name=user_name, user_email=user_email,
             )
-            return self._format_response(session_id, result, include_debug=include_debug)
+            ticket_ref = await self._handle_ticketing(session_id, result, requester)
+            return self._format_response(
+                session_id, result, ticket_ref=ticket_ref, include_debug=include_debug
+            )
         except Exception as e:
             logger.error("process_message_error", error=str(e), session_id=session_id)
             return self._error_response(session_id)
@@ -90,7 +112,6 @@ class ChatService:
             # ALWAYS preserve diagnostic_context and issue_category across turns.
             # Only reset them if the user is clearly starting a new topic (detected
             # by the triage node, not by the chat service).
-            was_clarification_turn = state.get("needs_clarification", False)
             state["needs_clarification"] = False
             state["clarification_question"] = None
             state["quick_replies"] = None
@@ -109,9 +130,11 @@ class ChatService:
             state["resolution_confidence"] = 0.0
             state["confidence_breakdown"] = None
             state["should_escalate"] = False
+            state["escalation_confirmed"] = False
             state["escalation_reason"] = None
             state["issue_resolved"] = False
             state["ticket_draft"] = None
+            state["ticket_offered"] = False
             state["ticket_created"] = False
         else:
             state = {
@@ -136,6 +159,8 @@ class ChatService:
                 "confidence_breakdown": None,
                 "steps_attempted": [],
                 "should_escalate": False,
+                "escalation_confirmed": False,
+                "ticket_offered": False,
                 "escalation_reason": None,
                 "handoff_summary": None,
                 "ticket_draft": None,
@@ -181,7 +206,12 @@ class ChatService:
         return result
 
     def _format_response(
-        self, session_id: str, result: dict, *, include_debug: bool = False
+        self,
+        session_id: str,
+        result: dict,
+        *,
+        ticket_ref: TicketRef | None = None,
+        include_debug: bool = False,
     ) -> ChatMessageResponse:
         """Format workflow result into API response."""
         messages = result.get("messages", [])
@@ -193,6 +223,17 @@ class ChatService:
             if isinstance(msg, AIMessage) or (hasattr(msg, "type") and msg.type == "ai"):
                 content = msg.content
                 break
+
+        # A ticket was just created (explicit-confirm path) → replace the interim
+        # workflow message with a definitive, accurate confirmation citing the
+        # real ticket number. Never claim a ticket exists unless one does.
+        if ticket_ref is not None:
+            content = (
+                f"✅ I've created ticket **{ticket_ref.ticket_number}** and handed it to "
+                f"our IT specialists. They have the full context of our conversation and "
+                f"the steps we tried, and will follow up with you directly.\n\n"
+                f"Is there anything else I can help you with in the meantime?"
+            )
 
         steps = [
             ResolutionStepSchema(
@@ -222,13 +263,134 @@ class ChatService:
             issue_category=result.get("issue_category"),
             issue_subtype=result.get("issue_subtype"),
             resolution_steps=steps,
-            requires_escalation=result.get("should_escalate", False),
+            # Once a ticket exists, stop prompting for escalation — show the
+            # ticket instead. The "Connect" CTA is driven by escalation_offered.
+            requires_escalation=bool(result.get("should_escalate")) and ticket_ref is None,
+            escalation_offered=bool(result.get("ticket_offered")) and ticket_ref is None,
+            ticket=ticket_ref,
             follow_up_question=result.get("clarification_question"),
             quick_replies=quick_replies,
             conversation_phase=result.get("conversation_phase"),
             resolved=bool(result.get("issue_resolved")),
             debug=debug,
         )
+
+    # ── Ticketing / live-agent handoff ───────────────────────────────
+
+    async def _handle_ticketing(
+        self, session_id: str, result: dict, requester: User | None
+    ) -> TicketRef | None:
+        """Create a real ticket when (and only when) escalation is confirmed.
+
+        Idempotent per session: if a ticket already exists it is reused. Returns
+        the ticket reference if one exists/was created, else None (offer only).
+        """
+        existing = _session_tickets.get(session_id)
+        if existing:
+            return TicketRef(**existing)
+
+        # Only persist on EXPLICIT confirmation (typed yes / connect-me). A bare
+        # escalation offer must not create a ticket.
+        if not result.get("escalation_confirmed"):
+            return None
+
+        draft = result.get("ticket_draft")
+        if not (draft and self.ticket_service and requester):
+            # Confirmed but we can't persist (no DB/user) — degrade to offer.
+            return None
+
+        return await self._persist_and_queue(session_id, draft, requester)
+
+    async def request_live_agent(
+        self, session_id: str, requester: User
+    ) -> tuple[str, TicketRef]:
+        """Explicit 'Connect with a specialist' action from the UI.
+
+        Guarantees the ticket-before-handoff invariant: ensures a ticket exists
+        (creating one from the session's drafted context, or a minimal draft if
+        none), queues it for a human, and returns a confirmation message + ref.
+        Idempotent: repeated clicks reuse the same ticket.
+        """
+        if self.ticket_service is None:
+            raise ValueError("Live-agent handoff is unavailable (no ticket backend).")
+
+        existing = _session_tickets.get(session_id)
+        if existing:
+            ref = TicketRef(**existing)
+            return (
+                f"You're already in the queue — ticket **{ref.ticket_number}** is with "
+                f"our IT specialists and they'll follow up shortly.",
+                ref,
+            )
+
+        state = _sessions.get(session_id) or {}
+        draft = state.get("ticket_draft") or self._minimal_draft(state, requester)
+        ref = await self._persist_and_queue(session_id, draft, requester)
+        return (
+            f"✅ I've created ticket **{ref.ticket_number}** and connected it to our IT "
+            f"specialists. They'll review the conversation and follow up with you directly.",
+            ref,
+        )
+
+    async def _persist_and_queue(
+        self, session_id: str, draft: dict, requester: User
+    ) -> TicketRef:
+        """Create the ticket from a draft and queue it for a live agent."""
+        svc = self.ticket_service
+        assert svc is not None  # guarded by callers
+
+        # NOTE: chat sessions are currently in-memory only (no `chat_sessions`
+        # row), so we must NOT set ticket.session_id — it's an FK to a persisted
+        # session and would violate the constraint. The conversation context is
+        # captured in the description/ai_summary instead. (When chat sessions are
+        # persisted, pass `session_id=_coerce_uuid(session_id)` here.)
+        ticket = await svc.create_ticket(
+            requester=requester,
+            title=draft.get("title") or "IT Support Request",
+            description=draft.get("description") or "Escalated from support chat.",
+            priority=draft.get("priority", "medium"),
+            category=draft.get("category"),
+            source="chat",
+            ai_summary=draft.get("problem_statement") or draft.get("conversation_summary"),
+        )
+        # Ticket-before-handoff: create first, THEN queue for a human.
+        await svc.request_live_agent(ticket.id, requester)
+        await svc.db.commit()
+
+        ref = {
+            "ticket_id": str(ticket.id),
+            "ticket_number": ticket.ticket_number,
+            "status": ticket.status,
+            "priority": ticket.priority,
+            "live_agent_requested": True,
+        }
+        _session_tickets[session_id] = ref
+        logger.info(
+            "chat_ticket_created",
+            session_id=session_id,
+            ticket_number=ticket.ticket_number,
+        )
+        return TicketRef(**ref)
+
+    @staticmethod
+    def _minimal_draft(state: dict, requester: User) -> dict:
+        """Build a minimal ticket draft when the session has no drafted context."""
+        diag = state.get("diagnostic_context") or {}
+        category = state.get("issue_category") or "other"
+        problem = (
+            diag.get("exact_problem_statement")
+            or "Employee requested a live IT specialist from the support chat."
+        )
+        return {
+            "title": f"Live support request - {category}",
+            "description": (
+                f"## Requested By\n{requester.full_name} ({requester.email})\n\n"
+                f"## Problem\n{problem}"
+            ),
+            "category": category,
+            "priority": "high",
+            "problem_statement": problem,
+        }
 
     @staticmethod
     def _build_debug(result: dict) -> ChatDebugInfo:
@@ -264,7 +426,12 @@ class ChatService:
 
 
 # Factory for dependency injection
-def get_chat_service() -> ChatService:
-    """Create a ChatService instance."""
-    return ChatService()
+def get_chat_service(db: AsyncSession | None = None) -> ChatService:
+    """Create a ChatService instance.
+
+    Wired in the API layer via `get_chat_service_dep` (injects a DB session so
+    tickets can be persisted). Callable bare in tests/non-DB contexts, where it
+    degrades to offer-only escalation.
+    """
+    return ChatService(TicketService(db) if db is not None else None)
 

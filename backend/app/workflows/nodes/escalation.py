@@ -70,6 +70,11 @@ async def escalation_node(state: WorkflowState) -> dict:
     return {
         "current_node": "escalate",
         "should_escalate": True,
+        # Explicit confirmation (typed "yes"/"connect me") or a prior live-agent
+        # request → the service layer may now create + queue the real ticket.
+        "escalation_confirmed": bool(
+            is_confirming_escalation or diag_ctx.live_agent_requested
+        ),
         "escalation_reason": reason,
         "handoff_summary": handoff_summary,
         "messages": [AIMessage(content=message)],

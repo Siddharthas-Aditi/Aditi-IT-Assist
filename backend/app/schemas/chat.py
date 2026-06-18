@@ -45,6 +45,20 @@ class ChatDebugInfo(BaseModel):
     escalation_reason: str | None = None
 
 
+class TicketRef(BaseModel):
+    """Reference to a persisted support ticket, surfaced to the chat UI.
+
+    Present only once a real ticket has been created (on explicit user
+    confirmation / live-agent handoff) — never for a mere escalation offer.
+    """
+
+    ticket_id: str
+    ticket_number: str
+    status: str
+    priority: str
+    live_agent_requested: bool = False
+
+
 class ChatMessageResponse(BaseModel):
     """AI assistant response with metadata."""
 
@@ -57,11 +71,30 @@ class ChatMessageResponse(BaseModel):
     issue_subtype: str | None = None
     resolution_steps: list[ResolutionStepSchema] = []
     requires_escalation: bool = False
+    # True when the agent has OFFERED to raise a ticket + connect a human but
+    # is waiting for the user to confirm (drives the "Connect" CTA). Distinct
+    # from `ticket`, which is only set once a ticket actually exists.
+    escalation_offered: bool = False
+    ticket: TicketRef | None = None
     follow_up_question: str | None = None
     quick_replies: list[QuickReplyOption] | None = None
     conversation_phase: str | None = None
     resolved: bool = False
     debug: ChatDebugInfo | None = None
+
+
+class LiveAgentRequest(BaseModel):
+    """Employee request to create a ticket and hand off to a live IT agent."""
+
+    session_id: str
+
+
+class LiveAgentResponse(BaseModel):
+    """Result of a live-agent handoff: the ticket that was created/queued."""
+
+    session_id: str
+    message: str
+    ticket: TicketRef
 
 
 class SessionSummary(BaseModel):
