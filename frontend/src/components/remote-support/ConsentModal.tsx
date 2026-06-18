@@ -45,7 +45,10 @@ function useCountdown(deadline: string) {
       });
     }, 1000);
     return () => clearInterval(id);
-  }, []);           // intentionally run once; deadline won't change mid-display
+    // Intentionally run once; deadline won't change mid-display and the timer
+    // uses a functional update, so `secondsLeft` is not a real dependency.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const minutes = Math.floor(secondsLeft / 60);
   const seconds = secondsLeft % 60;

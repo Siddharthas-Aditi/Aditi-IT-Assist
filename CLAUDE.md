@@ -184,9 +184,15 @@ export class ChatInput extends React.Component<any> {
 # Run tests
 make test-backend       # Backend unit + integration
 make test-frontend      # Frontend unit
+make test-e2e           # Playwright E2E (needs backend running + seeded)
 make test               # Everything
 make lint               # Linting (both)
 ```
+
+### Code-quality hooks (enabled via `make install-hooks`)
+- **Post-edit (Claude Code)**: `.claude/settings.json` runs `scripts/claude-lint-file.sh` on each edited file — ESLint for frontend `.ts/.tsx`, Ruff for backend `.py`. Lint failures are surfaced back; fix them in the same turn rather than ignoring.
+- **Pre-push (git)**: `.githooks/pre-push` gates pushes on frontend lint+typecheck+vitest and backend ruff+mypy+pytest (backend via `uv`). Bypass only with `git push --no-verify` / `SKIP_PREPUSH=1` when intentional.
+- Frontend `lint` runs with `--max-warnings=0` — warnings fail. ESLint config: `frontend/.eslintrc.cjs`.
 
 ---
 

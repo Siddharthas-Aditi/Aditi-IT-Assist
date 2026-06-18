@@ -30,6 +30,8 @@ export function MyTicketsPage() {
 
   useEffect(() => {
     fetchTickets();
+    // Run once on mount; fetchTickets is stable for this page's lifetime.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchTickets = async () => {

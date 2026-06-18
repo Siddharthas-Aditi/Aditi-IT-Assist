@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+# Pre-push gate — runs the project's fast checks before code leaves your machine.
+# Mirrors CI so failures are caught locally first.
+#
+#   Frontend: eslint (--max-warnings=0), tsc typecheck, vitest
+#   Backend:  ruff lint + format check, mypy typecheck, pytest (unit)
+#
+# Backend typecheck/tests run through `uv` (the project's toolchain) because they
+# need the backend dependency env. If `uv` isn't installed they are SKIPPED with a
+# visible warning — CI remains the authoritative gate.
+#
+# Bypass once with:   git push --no-verify     (or)     SKIP_PREPUSH=1 git push
+#
+# Enable in a fresh clone with:   make install-hooks
+# (sets git config core.hooksPath .githooks)
+
+set -uo pipefail
+
+if [ "${SKIP_PREPUSH:-}" = "1" ]; then
+  echo "⏭  SKIP_PREPUSH=1 — skipping pre-push checks."
+  exit 0
+fi
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT" || exit 1
+
+fail=0
+skipped=()
+
+# step "label" "workdir" cmd...
+step() {
+  local label="$1" dir="$2"
+  shift 2
+  echo ""
+  echo "▶ $label"
+  if (cd "$dir" && "$@"); then
+    echo "✓ $label"
+  else
+    echo "✖ FAILED: $label"
+    fail=1
+  fi
+}
+
+# ── Frontend ────────────────────────────────────────────────────────
+if [ -d frontend/node_modules ]; then
+  step "frontend: eslint" frontend npm run --silent lint
+  step "frontend: typecheck" frontend npm run --silent typecheck
+  step "frontend: unit tests" frontend npm run --silent test -- --run
+else
+  skipped+=("frontend: all (run 'npm install' in frontend/)")
+fi
+
+# ── Backend ─────────────────────────────────────────────────────────
+# Backend checks run through `uv` so the ruff/mypy/pytest versions AND the
+# dependency env match CI exactly. A bare `ruff`/`pytest` from a different
+# environment gives false failures (e.g. formatter version skew), so without
+# uv we skip the backend entirely — CI remains the authoritative gate.
+if command -v uv >/dev/null 2>&1; then
+  step "backend: ruff lint" backend uv run ruff check .
+  step "backend: ruff format" backend uv run ruff format --check .
+  step "backend: mypy" backend uv run mypy app/ --ignore-missing-imports
+  step "backend: pytest" backend uv run pytest -q
+else
+  skipped+=("backend: ruff + mypy + pytest (uv not installed — install uv to enable; CI still runs them)")
+fi
+
+# ── Summary ─────────────────────────────────────────────────────────
+echo ""
+echo "──────────── pre-push summary ────────────"
+for s in "${skipped[@]:-}"; do
+  [ -n "$s" ] && echo "⏭  skipped — $s"
+done
+
+if [ "$fail" -ne 0 ]; then
+  echo "✖ pre-push checks failed — push aborted."
+  echo "   Fix the issues above, or bypass once with: git push --no-verify"
+  exit 1
+fi
+
+echo "✓ all pre-push checks passed"
+exit 0

@@ -9,6 +9,8 @@ export function DashboardPage() {
 
   useEffect(() => {
     fetchDashboard();
+    // Run once on mount; fetchDashboard is stable for this page's lifetime.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchDashboard = async () => {

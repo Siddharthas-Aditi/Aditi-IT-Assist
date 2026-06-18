@@ -39,7 +39,10 @@ export const P = {
   ADMIN_VIEW_AUDIT_LOG: 'admin:view_audit_log',
 } as const;
 
-export type PermissionCode = (typeof P)[keyof typeof P] | (string & {});
+// `string & Record<never, never>` preserves literal autocomplete on the known
+// permission codes while still accepting any string (the lint-safe form of the
+// classic `string & {}` idiom).
+export type PermissionCode = (typeof P)[keyof typeof P] | (string & Record<never, never>);
 
 /** Default landing route per role. */
 export const DEFAULT_ROUTES: Record<UserRole, string> = {

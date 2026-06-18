@@ -108,12 +108,33 @@ aditi-it-assist/
 
 ```bash
 make test              # Run all tests
+make test-e2e          # Run Playwright E2E tests (needs backend running + seeded)
 make lint              # Run linters
 make format            # Auto-format code
 make typecheck         # Type checking
 make seed             # Seed knowledge base
 make smoke-test       # Verify services running
 ```
+
+### 🪝 Code-quality hooks
+
+Two automated quality gates keep lint/type/test issues out of the repo.
+
+```bash
+make install-hooks     # Enable git hooks for your clone (run once; also part of `make install`)
+```
+
+**1. Git `pre-push` hook** (`.githooks/pre-push`) — runs before every `git push`, mirroring CI:
+
+- **Frontend:** ESLint (`--max-warnings=0`) → TypeScript typecheck → Vitest
+- **Backend:** Ruff lint + format → mypy → pytest (run via `uv`)
+
+If a check fails, the push is aborted. Bypass once with `git push --no-verify` (or `SKIP_PREPUSH=1 git push`).
+Backend checks run through `uv` so versions match CI; if `uv` isn't installed they're skipped locally (with a warning) and CI still enforces them — install [`uv`](https://docs.astral.sh/uv/) to run them on your machine.
+
+**2. Claude Code post-edit hook** (`.claude/settings.json`) — when working in Claude Code, lints each file
+right after it's edited (ESLint for frontend, Ruff for backend) so issues surface immediately. Runs
+`scripts/claude-lint-file.sh`; activate with `/hooks` or a session restart after first checkout.
 
 ## 📚 Documentation
 

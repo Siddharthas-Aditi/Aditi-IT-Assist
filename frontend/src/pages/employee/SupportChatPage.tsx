@@ -121,7 +121,9 @@ export function SupportChatPage() {
         follow_up_question?: string;
         issue_category?: string;
         confidence_score?: number;
-        detail?: string;
+        // FastAPI sends a string for HTTPException, but an array of
+        // `{ loc, msg, type }` objects for 422 validation errors.
+        detail?: string | { msg?: string; loc?: unknown[] }[];
       } = {};
 
       try {
@@ -132,7 +134,10 @@ export function SupportChatPage() {
         const errText =
           typeof data.detail === 'string'
             ? data.detail
-            : `Service unavailable (${res.status}). Please try again or contact IT support directly.`;
+            : Array.isArray(data.detail) && data.detail.length > 0
+              ? (data.detail[0]?.msg ??
+                `Your message couldn't be processed (${res.status}). Please rephrase and try again.`)
+              : `Service unavailable (${res.status}). Please try again or contact IT support directly.`;
         setMessages((prev) => [
           ...prev,
           { id: `err-${Date.now()}`, role: 'assistant', content: errText, timestamp: new Date(), isError: true },
@@ -337,12 +342,14 @@ export function SupportChatPage() {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && sendMessage()}
             placeholder="Describe your IT issue…"
+            maxLength={5000}
             disabled={isLoading}
             className="flex-1 rounded-xl border border-gray-300 px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200 disabled:opacity-60"
           />
           <button
             onClick={sendMessage}
             disabled={!input.trim() || isLoading}
+            aria-label="Send message"
             className="flex items-center justify-center rounded-xl bg-indigo-600 px-4 py-2.5 text-white shadow-sm transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Send size={17} />

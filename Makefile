@@ -22,13 +22,17 @@ help: ## Show this help
 
 # ─── Installation ───────────────────────────────
 
-install: install-backend install-frontend ## Install all dependencies
+install: install-backend install-frontend install-hooks ## Install all dependencies
 
 install-backend: ## Install backend dependencies
 	cd backend && $(UV) sync
 
 install-frontend: ## Install frontend dependencies
 	cd frontend && npm install
+
+install-hooks: ## Enable git hooks (pre-push checks) for this clone
+	git config core.hooksPath .githooks
+	@echo "✅ git hooks enabled (core.hooksPath=.githooks) — pre-push checks active"
 
 # ─── Development ────────────────────────────────
 
@@ -77,6 +81,12 @@ test-backend: ## Run backend tests
 
 test-frontend: ## Run frontend tests
 	cd frontend && npm run test
+
+test-e2e: ## Run Playwright E2E tests (needs backend running + seeded)
+	cd frontend && npm run test:e2e
+
+test-e2e-ui: ## Open the Playwright UI runner
+	cd frontend && npm run test:e2e:ui
 
 test-coverage: ## Run backend tests with coverage
 	cd backend && $(UV) run pytest --cov=app --cov-report=term --cov-report=html

@@ -111,6 +111,15 @@ export const useAuthStore = create<AuthStore>()(
     {
       name: 'aditi-auth',
       partialize: (state) => ({ token: state.token, user: state.user }),
+      // `isAuthenticated` is intentionally not persisted, so recompute it from
+      // the restored token after rehydration. Without this, a full page reload
+      // (refresh or deep link) resets it to `false` and RouteGuard bounces an
+      // already-authenticated user back to /login.
+      onRehydrateStorage: () => (state) => {
+        if (state) {
+          state.isAuthenticated = Boolean(state.token);
+        }
+      },
     }
   )
 );

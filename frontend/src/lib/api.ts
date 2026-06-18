@@ -29,6 +29,37 @@ export class ApiError extends Error {
 
 type Query = Record<string, string | number | boolean | null | undefined>;
 
+/**
+ * Turn a backend error body into a human-readable message.
+ *
+ * FastAPI validation errors (422) return `detail` as an array of
+ * `{ loc, msg, type }` objects, not a string — collapse those to a readable,
+ * field-aware sentence instead of a generic "Request failed".
+ */
+export function extractErrorMessage(data: unknown, status: number): string {
+  const detail = (data as { detail?: unknown; message?: unknown } | null)?.detail;
+  const message = (data as { message?: unknown } | null)?.message;
+
+  if (typeof detail === 'string') return detail;
+  if (typeof message === 'string') return message;
+
+  if (Array.isArray(detail)) {
+    const parts = detail
+      .map((d) => {
+        if (typeof d === 'string') return d;
+        const msg = (d as { msg?: string })?.msg;
+        const loc = (d as { loc?: unknown[] })?.loc;
+        const field = Array.isArray(loc) && loc.length ? loc[loc.length - 1] : undefined;
+        if (!msg) return undefined;
+        return field ? `${msg} (${field})` : msg;
+      })
+      .filter(Boolean);
+    if (parts.length) return parts.join('; ');
+  }
+
+  return `Request failed (${status})`;
+}
+
 interface RequestOptions {
   method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
   body?: unknown;
@@ -72,9 +103,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   const data = text ? JSON.parse(text) : null;
 
   if (!response.ok) {
-    const detail =
-      (data && (data.detail || data.message)) || `Request failed (${response.status})`;
-    throw new ApiError(response.status, typeof detail === 'string' ? detail : 'Request failed');
+    throw new ApiError(response.status, extractErrorMessage(data, response.status));
   }
   return data as T;
 }
