@@ -4,8 +4,8 @@ description: "Troubleshooting playbooks for Sixth Sense (Naukri) portal access i
 articles:
   - id: "sixth-sense-001"
     title: "Sixth Sense / Naukri Login Issues — Account Locked or Unhandled Message"
-    category: "access/permissions"
-    subcategory: "sixth-sense-login"
+    category: "access/sixth_sense"
+    subcategory: "login-failure"
     tags:
       - "sixth sense"
       - "naukri"
@@ -68,8 +68,8 @@ articles:
 
   - id: "sixth-sense-002"
     title: "Sixth Sense — 'Unhandled Message' Error on Direct Login"
-    category: "access/permissions"
-    subcategory: "sixth-sense-unhandled-message"
+    category: "access/sixth_sense"
+    subcategory: "unhandled-message"
     tags:
       - "sixth sense"
       - "naukri"
@@ -110,8 +110,8 @@ articles:
 
   - id: "sixth-sense-003"
     title: "Sixth Sense — OTP Not Received After Account Recovery"
-    category: "access/permissions"
-    subcategory: "sixth-sense-otp"
+    category: "access/sixth_sense"
+    subcategory: "otp-issue"
     tags:
       - "sixth sense"
       - "naukri"

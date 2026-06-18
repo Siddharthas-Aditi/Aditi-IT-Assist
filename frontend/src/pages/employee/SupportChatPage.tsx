@@ -1,8 +1,79 @@
-/** Employee support chat page — AI-powered professional IT help desk. */
+/** Employee support chat page -- AI-powered professional IT help desk.
+ *
+ * Hybrid UX: guided category tiles on the welcome screen that each trigger
+ * a real backend API call, so users get a familiar click-to-start experience
+ * while still getting KB-grounded AI responses.
+ * Teams webhook fires automatically when the backend signals escalation.
+ */
 
 import { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, Bot, ChevronRight, Send, User } from 'lucide-react';
+import { Bot, ChevronRight, Send, User } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
+import { WelcomeCategories } from '@/features/chat/WelcomeCategories';
+import { EscalationBanner, type TeamsStatus } from '@/features/chat/EscalationBanner';
+
+// Teams Webhook
+// Set VITE_TEAMS_WEBHOOK_URL in your .env to enable Teams notifications on
+// escalation. Leave blank to skip -- the banner still shows.
+const TEAMS_WEBHOOK_URL = import.meta.env.VITE_TEAMS_WEBHOOK_URL as string | undefined;
+
+async function notifyTeams(
+  userName: string,
+  userEmail: string,
+  transcript: { role: string; content: string }[],
+): Promise<void> {
+  if (!TEAMS_WEBHOOK_URL) throw new Error('VITE_TEAMS_WEBHOOK_URL not configured');
+
+  const summary = transcript
+    .filter((m) => m.role === 'user')
+    .map((m) => `* ${m.content}`)
+    .join('\n') || 'No user messages recorded';
+
+  const fullLog = transcript
+    .map((m) => `[${m.role === 'assistant' ? 'Bot' : 'User'}] ${m.content}`)
+    .join('\n\n');
+
+  const body = {
+    type: 'message',
+    attachments: [
+      {
+        contentType: 'application/vnd.microsoft.card.adaptive',
+        contentUrl: null,
+        content: {
+          $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
+          type: 'AdaptiveCard',
+          version: '1.4',
+          body: [
+            { type: 'TextBlock', text: 'IT Support Escalation', weight: 'Bolder', size: 'Large', color: 'Attention' },
+            {
+              type: 'FactSet', facts: [
+                { title: 'User', value: userName || 'Unknown' },
+                { title: 'Email', value: userEmail || 'Not provided' },
+                { title: 'Time', value: new Date().toLocaleString() },
+              ],
+            },
+            { type: 'TextBlock', text: 'User reported:', weight: 'Bolder', wrap: true },
+            { type: 'TextBlock', text: summary, wrap: true, color: 'Warning' },
+            { type: 'TextBlock', text: 'Full transcript:', weight: 'Bolder', wrap: true, spacing: 'Medium' },
+            { type: 'TextBlock', text: fullLog, wrap: true, fontType: 'Monospace', size: 'Small' },
+          ],
+          actions: [
+            { type: 'Action.OpenUrl', title: 'Open Freshservice', url: 'https://aditiconsulting.freshservice.com' },
+          ],
+        },
+      },
+    ],
+  };
+
+  const res = await fetch(TEAMS_WEBHOOK_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`Teams webhook responded ${res.status}`);
+}
+
+// Types
 
 interface ResolutionStep {
   step_number: number;
@@ -23,7 +94,7 @@ interface ChatMessage {
   isError?: boolean;
 }
 
-/** Render text with **bold** markdown → <strong> and newlines → <br>. */
+// Render **bold** markdown and newlines without a full MD library.
 function FormattedText({ text }: { text: string }) {
   const parts = text.split(/(\*\*[^*]+\*\*)/g);
   return (
@@ -46,16 +117,21 @@ function FormattedText({ text }: { text: string }) {
 const CATEGORY_LABELS: Record<string, string> = {
   'email/outlook': 'Outlook / Email',
   'video-conferencing/zoom': 'Video Conferencing',
+  'video-conferencing/teams': 'Microsoft Teams',
   'device-management/intune': 'Device Management',
   'hardware/camera': 'Camera',
+  'hardware/audio': 'Audio / Headset',
   'hardware/other': 'Hardware',
   'software/other': 'Software',
-  'network/connectivity': 'Network',
+  'network/connectivity': 'Network / VPN',
   'access/permissions': 'Access & Permissions',
+  'access/ruddr': 'Ruddr',
   'other': 'General IT',
 };
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
+
+// Component
 
 export function SupportChatPage() {
   const { user, token } = useAuthStore();
@@ -66,30 +142,27 @@ export function SupportChatPage() {
       id: 'welcome',
       role: 'assistant',
       content:
-        `Welcome, ${firstName}. I'm the Aditi IT Support Assistant — your dedicated ` +
-        `AI-powered help desk agent.\n\n` +
-        `I can assist you with a wide range of IT issues including:\n` +
-        `• Email & Outlook problems\n` +
-        `• VPN and network connectivity\n` +
-        `• Video conferencing (Zoom / Teams)\n` +
-        `• Hardware and device issues\n` +
-        `• Access, permissions, and MFA\n\n` +
-        `Please describe the issue you are experiencing and I will guide you through the resolution.`,
+        `Welcome, ${firstName}! I'm your Aditi IT Support Assistant.\n\n` +
+        `Select a topic below to get started, or type your issue directly.`,
       timestamp: new Date(),
     },
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [teamsStatus, setTeamsStatus] = useState<TeamsStatus>('idle');
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to latest message
+  // Show category tiles only on the welcome screen (no real conversation yet)
+  const isWelcomeScreen = messages.length === 1 && messages[0].id === 'welcome';
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const sendMessage = async () => {
-    const text = input.trim();
+  // Core send -- accepts an override so category tiles send without touching input
+  const sendMessage = async (overrideText?: string) => {
+    const text = (overrideText ?? input).trim();
     if (!text || isLoading) return;
 
     const userMsg: ChatMessage = {
@@ -99,7 +172,7 @@ export function SupportChatPage() {
       timestamp: new Date(),
     };
     setMessages((prev) => [...prev, userMsg]);
-    setInput('');
+    if (!overrideText) setInput('');
     setIsLoading(true);
 
     try {
@@ -121,22 +194,17 @@ export function SupportChatPage() {
         follow_up_question?: string;
         issue_category?: string;
         confidence_score?: number;
-        // FastAPI sends a string for HTTPException, but an array of
-        // `{ loc, msg, type }` objects for 422 validation errors.
         detail?: string | { msg?: string; loc?: unknown[] }[];
       } = {};
 
-      try {
-        data = await res.json();
-      } catch { /* non-JSON error body */ }
+      try { data = await res.json(); } catch { /* non-JSON body */ }
 
       if (!res.ok) {
         const errText =
           typeof data.detail === 'string'
             ? data.detail
             : Array.isArray(data.detail) && data.detail.length > 0
-              ? (data.detail[0]?.msg ??
-                `Your message couldn't be processed (${res.status}). Please rephrase and try again.`)
+              ? (data.detail[0]?.msg ?? `Could not process request (${res.status}). Please try again.`)
               : `Service unavailable (${res.status}). Please try again or contact IT support directly.`;
         setMessages((prev) => [
           ...prev,
@@ -147,20 +215,31 @@ export function SupportChatPage() {
 
       if (data.session_id) setSessionId(data.session_id);
 
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: data.message_id ?? `ai-${Date.now()}`,
-          role: 'assistant',
-          content: data.content ?? 'I received your message and am looking into it.',
-          timestamp: new Date(),
-          requiresEscalation: data.requires_escalation ?? false,
-          resolutionSteps: data.resolution_steps ?? [],
-          followUpQuestion: data.follow_up_question ?? undefined,
-          category: data.issue_category ?? undefined,
-          confidence: data.confidence_score,
-        },
-      ]);
+      const assistantMsg: ChatMessage = {
+        id: data.message_id ?? `ai-${Date.now()}`,
+        role: 'assistant',
+        content: data.content ?? 'I received your message and am looking into it.',
+        timestamp: new Date(),
+        requiresEscalation: data.requires_escalation ?? false,
+        resolutionSteps: data.resolution_steps ?? [],
+        followUpQuestion: data.follow_up_question ?? undefined,
+        category: data.issue_category ?? undefined,
+        confidence: data.confidence_score,
+      };
+      setMessages((prev) => [...prev, assistantMsg]);
+
+      // Auto-fire Teams webhook on escalation
+      if (data.requires_escalation && TEAMS_WEBHOOK_URL) {
+        setTeamsStatus('sending');
+        const allMessages = [...messages, userMsg, assistantMsg];
+        notifyTeams(
+          user?.full_name ?? '',
+          user?.email ?? '',
+          allMessages.map((m) => ({ role: m.role, content: m.content })),
+        )
+          .then(() => setTeamsStatus('sent'))
+          .catch(() => setTeamsStatus('failed'));
+      }
     } catch {
       setMessages((prev) => [
         ...prev,
@@ -179,9 +258,26 @@ export function SupportChatPage() {
     }
   };
 
+  const handleManualEscalate = () => {
+    if (teamsStatus === 'sent') return;
+    setTeamsStatus('sending');
+    notifyTeams(
+      user?.full_name ?? '',
+      user?.email ?? '',
+      messages.map((m) => ({ role: m.role, content: m.content })),
+    )
+      .then(() => setTeamsStatus('sent'))
+      .catch(() => setTeamsStatus('failed'));
+  };
+
+  // Attach escalation banner only to the most recent escalation message
+  const lastEscalationMsgId = [...messages]
+    .reverse()
+    .find((m) => m.role === 'assistant' && m.requiresEscalation)?.id;
+
   return (
     <div className="flex h-full flex-col bg-gray-50">
-      {/* ── Header ─────────────────────────────────────────────── */}
+      {/* Header */}
       <div className="flex items-center gap-3 border-b border-gray-200 bg-white px-6 py-4 shadow-sm">
         <div className="flex h-9 w-9 items-center justify-center rounded-full bg-indigo-100">
           <Bot size={18} className="text-indigo-600" />
@@ -195,120 +291,115 @@ export function SupportChatPage() {
         </div>
       </div>
 
-      {/* ── Message thread ──────────────────────────────────────── */}
+      {/* Message thread */}
       <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6">
         <div className="mx-auto max-w-3xl space-y-5">
           {messages.map((msg) => (
-            <div
-              key={msg.id}
-              className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
-            >
-              {/* Avatar */}
-              <div
-                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
-                  msg.role === 'user'
-                    ? 'bg-indigo-600'
-                    : msg.isError
-                      ? 'bg-red-100'
-                      : 'border border-gray-200 bg-white'
-                }`}
-              >
-                {msg.role === 'user' ? (
-                  <User size={15} className="text-white" />
-                ) : (
-                  <Bot size={15} className={msg.isError ? 'text-red-500' : 'text-indigo-600'} />
-                )}
-              </div>
+            <div key={msg.id}>
+              <div className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
+                {/* Avatar */}
+                <div
+                  className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
+                    msg.role === 'user'
+                      ? 'bg-indigo-600'
+                      : msg.isError
+                        ? 'bg-red-100'
+                        : 'border border-gray-200 bg-white'
+                  }`}
+                >
+                  {msg.role === 'user' ? (
+                    <User size={15} className="text-white" />
+                  ) : (
+                    <Bot size={15} className={msg.isError ? 'text-red-500' : 'text-indigo-600'} />
+                  )}
+                </div>
 
-              {/* Content column */}
-              <div
-                className={`flex max-w-[78%] flex-col space-y-2 ${
-                  msg.role === 'user' ? 'items-end' : 'items-start'
-                }`}
-              >
-                {/* Subtle "what I understand" chip (AI messages only).
-                    The raw confidence % is intentionally NOT shown to employees —
-                    it was misleading noise; it's available to IT/admin via the
-                    debug trace instead. */}
-                {msg.role === 'assistant' && msg.category && (
-                  <div className="flex items-center gap-2">
+                {/* Content column */}
+                <div
+                  className={`flex max-w-[78%] flex-col space-y-2 ${
+                    msg.role === 'user' ? 'items-end' : 'items-start'
+                  }`}
+                >
+                  {/* Category chip */}
+                  {msg.role === 'assistant' && msg.category && (
                     <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700">
                       {CATEGORY_LABELS[msg.category] ?? msg.category}
                     </span>
+                  )}
+
+                  {/* Main bubble */}
+                  <div
+                    className={`rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm ${
+                      msg.role === 'user'
+                        ? 'rounded-tr-sm bg-indigo-600 text-white'
+                        : msg.isError
+                          ? 'rounded-tl-sm border border-red-200 bg-red-50 text-red-700'
+                          : 'rounded-tl-sm border border-gray-200 bg-white text-gray-800'
+                    }`}
+                  >
+                    <FormattedText text={msg.content} />
                   </div>
-                )}
 
-                {/* Main bubble */}
-                <div
-                  className={`rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm ${
-                    msg.role === 'user'
-                      ? 'rounded-tr-sm bg-indigo-600 text-white'
-                      : msg.isError
-                        ? 'rounded-tl-sm border border-red-200 bg-red-50 text-red-700'
-                        : 'rounded-tl-sm border border-gray-200 bg-white text-gray-800'
-                  }`}
-                >
-                  <FormattedText text={msg.content} />
-                </div>
+                  {/* Category tiles on welcome message only */}
+                  {msg.id === 'welcome' && isWelcomeScreen && (
+                    <WelcomeCategories
+                      onSelect={(query) => sendMessage(query)}
+                      disabled={isLoading}
+                    />
+                  )}
 
-                {/* Numbered resolution steps */}
-                {msg.resolutionSteps && msg.resolutionSteps.length > 0 && (
-                  <div className="w-full rounded-xl border border-indigo-100 bg-indigo-50 p-4">
-                    <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-indigo-700">
-                      Troubleshooting Steps
-                    </p>
-                    <ol className="space-y-3">
-                      {msg.resolutionSteps.map((step) => (
-                        <li key={step.step_number} className="flex gap-2.5 text-sm text-gray-700">
-                          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-xs font-bold text-white">
-                            {step.step_number}
-                          </span>
-                          <div>
-                            <FormattedText text={step.instruction} />
-                            {step.details && (
-                              <p className="mt-0.5 text-xs text-gray-500">
-                                <FormattedText text={step.details} />
-                              </p>
-                            )}
-                          </div>
-                        </li>
-                      ))}
-                    </ol>
-                  </div>
-                )}
-
-                {/* Follow-up question */}
-                {msg.followUpQuestion && (
-                  <div className="flex items-start gap-2 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2">
-                    <ChevronRight size={14} className="mt-0.5 shrink-0 text-blue-600" />
-                    <p className="text-xs text-blue-700">
-                      <FormattedText text={msg.followUpQuestion} />
-                    </p>
-                  </div>
-                )}
-
-                {/* Escalation banner */}
-                {msg.requiresEscalation && (
-                  <div className="flex w-full items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5">
-                    <AlertTriangle size={14} className="mt-0.5 shrink-0 text-amber-600" />
-                    <div className="flex-1">
-                      <p className="text-xs font-semibold text-amber-700">
-                        This issue may require specialist assistance
+                  {/* Numbered resolution steps */}
+                  {msg.resolutionSteps && msg.resolutionSteps.length > 0 && (
+                    <div className="w-full rounded-xl border border-indigo-100 bg-indigo-50 p-4">
+                      <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-indigo-700">
+                        Troubleshooting Steps
                       </p>
-                      <p className="mt-0.5 text-xs text-amber-600">
-                        Would you like to be connected with an IT specialist?
+                      <ol className="space-y-3">
+                        {msg.resolutionSteps.map((step) => (
+                          <li key={step.step_number} className="flex gap-2.5 text-sm text-gray-700">
+                            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-xs font-bold text-white">
+                              {step.step_number}
+                            </span>
+                            <div>
+                              <FormattedText text={step.instruction} />
+                              {step.details && (
+                                <p className="mt-0.5 text-xs text-gray-500">
+                                  <FormattedText text={step.details} />
+                                </p>
+                              )}
+                            </div>
+                          </li>
+                        ))}
+                      </ol>
+                    </div>
+                  )}
+
+                  {/* Follow-up question */}
+                  {msg.followUpQuestion && (
+                    <div className="flex items-start gap-2 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2">
+                      <ChevronRight size={14} className="mt-0.5 shrink-0 text-blue-600" />
+                      <p className="text-xs text-blue-700">
+                        <FormattedText text={msg.followUpQuestion} />
                       </p>
                     </div>
-                    <button className="ml-2 shrink-0 rounded-lg bg-amber-600 px-3 py-1 text-xs font-medium text-white hover:bg-amber-700">
-                      Connect
-                    </button>
-                  </div>
-                )}
+                  )}
 
-                {/* Timestamp */}
-                <span className="px-1 text-xs text-gray-400">
-                  {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </span>
+                  {/* Escalation banner -- only on the most recent escalation message */}
+                  {msg.requiresEscalation && msg.id === lastEscalationMsgId && (
+                    <div className="w-full">
+                      <EscalationBanner
+                        teamsStatus={teamsStatus}
+                        onEscalate={handleManualEscalate}
+                        onContinue={() => sendMessage('Please continue helping me with this issue')}
+                      />
+                    </div>
+                  )}
+
+                  {/* Timestamp */}
+                  <span className="px-1 text-xs text-gray-400">
+                    {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
               </div>
             </div>
           ))}
@@ -333,7 +424,7 @@ export function SupportChatPage() {
         </div>
       </div>
 
-      {/* ── Input bar ───────────────────────────────────────────── */}
+      {/* Input bar */}
       <div className="border-t border-gray-200 bg-white px-4 py-4 sm:px-6">
         <div className="mx-auto flex max-w-3xl gap-3">
           <input
@@ -341,13 +432,13 @@ export function SupportChatPage() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && sendMessage()}
-            placeholder="Describe your IT issue…"
+            placeholder={isWelcomeScreen ? 'Or type your issue directly...' : 'Describe your IT issue...'}
             maxLength={5000}
             disabled={isLoading}
             className="flex-1 rounded-xl border border-gray-300 px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200 disabled:opacity-60"
           />
           <button
-            onClick={sendMessage}
+            onClick={() => sendMessage()}
             disabled={!input.trim() || isLoading}
             aria-label="Send message"
             className="flex items-center justify-center rounded-xl bg-indigo-600 px-4 py-2.5 text-white shadow-sm transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"

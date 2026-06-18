@@ -31,22 +31,91 @@ from app.workflows.state import WorkflowState
 
 logger = get_logger(__name__)
 
+# ── Feedback signal lists ─────────────────────────────────────────────────────
+# Keep these comprehensive — humans are creative about expressing success/failure.
+
 # Phrases that indicate the previously suggested steps did NOT work.
 _NEGATIVE_FEEDBACK = (
+    # Explicit failure
     "didn't work", "did not work", "doesn't work", "does not work",
-    "still not working", "still not", "not resolved", "not fixed",
-    "same problem", "same issue", "no luck", "nope", "tried that",
-    "already tried", "that didn't help", "didn't help", "did not help",
-    "still happening", "still broken", "no it didn't", "no it did not",
-    "not working still", "issue persists", "still having",
+    "not working", "not fixed", "not resolved", "not sorted",
+    "still not working", "still not", "still the same", "same issue",
+    "same problem", "no change", "nothing changed", "no difference",
+    "no effect", "no luck", "not helping", "didn't help", "did not help",
+    "that didn't help", "doesn't help", "no joy",
+    # Persisting
+    "still happening", "still broken", "still there", "issue persists",
+    "problem persists", "still having", "still getting",
+    "no it didn't", "no it did not", "nope",
+    # Already attempted
+    "tried that", "already tried", "tried that already", "done that already",
+    "already done that", "i tried", "already done",
+    # Confusion / can't follow steps
+    "don't see that", "can't find that", "can't find it", "i don't see",
+    "where is that", "can't find the option", "don't have that option",
+    "can't see that tab", "there's no such option", "that option isn't there",
+    # Worsened
+    "made it worse", "now it's worse", "now worse", "it crashed",
 )
 
-# Phrases that indicate the issue is resolved.
+# Phrases that indicate the issue IS resolved / found / closed.
 _POSITIVE_FEEDBACK = (
-    "that worked", "it worked", "it's fixed", "its fixed", "resolved",
-    "that fixed it", "fixed now", "all good", "working now", "thanks that worked",
-    "yes that resolved", "problem solved", "sorted now", "that did it",
+    # Classic resolution
+    "it worked", "that worked", "works now", "working now", "working fine",
+    "it's fixed", "its fixed", "fixed it", "fixed now", "issue fixed",
+    "that fixed it", "now it works", "it's working", "its working",
+    # Resolved/sorted
+    "resolved", "issue resolved", "problem resolved", "all resolved",
+    "sorted", "sorted now", "sorted it", "sorted out", "problem solved",
+    "all sorted", "that sorted it", "that sorted", "now sorted",
+    # Good / OK
+    "all good", "looks good", "all fine", "fine now", "ok now",
+    "back to normal", "normal now", "back online", "it's back",
+    # Found / located the issue (e.g. "found emails in junk")
+    "found it", "found them", "found the emails", "found the issue",
+    "found the problem", "got it", "got them", "i can see them",
+    "can see them now", "they're there", "there they are", "there it is",
+    "emails are showing", "mails are showing", "showing now", "showing up now",
+    "in junk", "in spam", "mails in junk", "emails in junk",
+    "mails are in junk", "emails are in junk", "found in junk",
+    "mails are in spam", "emails are in spam", "they were in junk",
+    # Progress / figured out
+    "figured it out", "i see the issue", "i see what happened",
+    "that explains it", "oh i see", "ah i see", "makes sense now",
+    "i understand now", "that's why", "ah that's why",
+    # Confirmatory closure
+    "done", "all done", "completed", "finished",
+    "that did it", "yes it worked", "yep that worked", "yeah that worked",
+    "thanks that worked", "yes that resolved", "yes that fixed",
 )
+
+# Pure gratitude / closure phrases — when steps have already been given, these
+# mean the user is done and satisfied, NOT a new problem to troubleshoot.
+_GRATITUDE_WORDS = {
+    "thank", "thanks", "thank you", "thankyou", "ty", "thx", "tq", "tysm",
+    "many thanks", "thanks a lot", "thank you so much", "thanks so much",
+    "cheers", "appreciated", "much appreciated", "great thanks", "great thank you",
+    "thanks a bunch", "thank you very much", "thanks very much",
+}
+
+
+def _is_gratitude(text: str) -> bool:
+    """True when the message is a short pure thank-you with no new issue content."""
+    t = text.strip().lower().rstrip("!.? ")
+    if not t:
+        return False
+    if t in _GRATITUDE_WORDS:
+        return True
+    words = [w for w in t.replace(",", " ").split() if w]
+    filler = {"a", "so", "very", "lot", "much", "you", "for", "the", "help",
+              "that", "this", "your", "assistance", "support"}
+    if len(words) <= 6 and all(w in _GRATITUDE_WORDS or w in filler for w in words):
+        return True
+    return False
+
+
+_NEGATION_PREFIXES = {"not", "no", "nope", "didn't", "did not", "hasn't", "haven't",
+                      "doesn't", "isn't", "wasn't", "still not", "not yet", "never"}
 
 
 def _is_negative_feedback(text: str) -> bool:
@@ -55,8 +124,22 @@ def _is_negative_feedback(text: str) -> bool:
 
 
 def _is_positive_feedback(text: str) -> bool:
+    """Return True only when a positive phrase is NOT immediately negated.
+
+    Handles cases like 'not resolved', 'still not working', 'emails not in junk'.
+    """
     t = text.lower()
-    return any(p in t for p in _POSITIVE_FEEDBACK)
+    for phrase in _POSITIVE_FEEDBACK:
+        idx = t.find(phrase)
+        if idx == -1:
+            continue
+        prefix_words = t[:idx].strip().split()
+        last_word = prefix_words[-1] if prefix_words else ""
+        two_words = " ".join(prefix_words[-2:]) if len(prefix_words) >= 2 else last_word
+        if last_word in _NEGATION_PREFIXES or two_words in _NEGATION_PREFIXES:
+            continue  # negated — skip
+        return True
+    return False
 
 
 # Greetings / small talk that should be met with a warm welcome, not triage.
@@ -178,6 +261,18 @@ async def triage_node(state: WorkflowState) -> dict:
 
     diag_ctx = DiagnosticContext.from_dict(state.get("diagnostic_context") or {})
 
+    # ── Step 0a: Post-resolution handling ────────────────────────
+    # The previous issue was resolved. Two cases:
+    # (a) User just says thanks — close warmly, no new triage.
+    #     MUST happen before reset_issue_context() clears suggested_steps.
+    # (b) User starts a genuinely new request — reset context so it's treated
+    #     as a fresh issue, not a continuation of the old playbook.
+    if diag_ctx.issue_resolved:
+        if _is_gratitude(user_message):
+            return _gratitude_close_message(diag_ctx)
+        # Not gratitude → start fresh
+        diag_ctx.reset_issue_context()
+
     # ── Step 0: Greeting / small talk (only when no issue is in flight) ──
     # A real analyst greets back and invites the problem — it does not jump to
     # "which system is affected?".
@@ -228,7 +323,7 @@ async def triage_node(state: WorkflowState) -> dict:
             method=entity_match.method,
         )
 
-    # ── Step 1b: Sentiment Detection (NEW - every turn) ─────────────
+    # ── Step 1b: Sentiment Detection (every turn) ────────────────
     # Detect urgency, frustration, and confusion to tailor responses
     sentiment_analyzer = SentimentAnalyzerService(get_llm_service())
     sentiment = await sentiment_analyzer.analyze(user_message)
@@ -263,6 +358,12 @@ async def triage_node(state: WorkflowState) -> dict:
         diag_ctx.last_response_type = "resolved"
         diag_ctx.resolved_steps.extend(diag_ctx.suggested_steps)
         return _resolved_message(diag_ctx)
+
+    # Pure gratitude after steps = user is satisfied; close gracefully.
+    if steps_were_given and _is_gratitude(user_message):
+        diag_ctx.issue_resolved = True
+        diag_ctx.last_response_type = "resolved"
+        return _gratitude_close_message(diag_ctx)
 
     if steps_were_given and _is_negative_feedback(user_message):
         diag_ctx.last_resolution_failed = True
@@ -336,9 +437,7 @@ async def triage_node(state: WorkflowState) -> dict:
         diag_ctx.issue_subtype = subtype_match.subtype
         diag_ctx.subtype_confidence = subtype_match.confidence
         diag_ctx.issue_subcategory = subtype_match.subtype
-        # Keep symptom aligned with the ACTIVE subtype. Previously symptom was
-        # only set when empty, so it got stuck on the first subtype (e.g. it kept
-        # saying "outlook-crash" after the user moved on to "mailbox full").
+        # Keep symptom aligned with the ACTIVE subtype.
         if subtype_changed or not diag_ctx.symptom:
             diag_ctx.symptom = subtype_match.subtype
         # A genuine topic move within the category resets prior tried-step memory
@@ -547,6 +646,30 @@ def _resolved_message(diag_ctx: DiagnosticContext) -> dict:
         "resolution_confirmed": True,
         "messages": [AIMessage(content=content)],
         "audit_trail": [{"event": "triage.resolved", "subtype": diag_ctx.issue_subtype}],
+    }
+
+
+def _gratitude_close_message(diag_ctx: DiagnosticContext) -> dict:
+    """Return a warm closing when the user says thanks after receiving steps."""
+    diag_ctx.phase = DiagnosticPhase.CONFIRMING
+    content = (
+        "You're welcome! 😊 Hope that helps sort things out. "
+        "If you run into anything else, feel free to start a new chat — I'm always here."
+    )
+    return {
+        "current_node": "triage",
+        "issue_category": diag_ctx.issue_category,
+        "issue_subcategory": diag_ctx.issue_subcategory,
+        "issue_subtype": diag_ctx.issue_subtype,
+        "issue_resolved": True,
+        "needs_clarification": False,
+        "clarification_question": None,
+        "quick_replies": None,
+        "diagnostic_context": diag_ctx.to_dict(),
+        "conversation_phase": "resolved",
+        "resolution_confirmed": False,
+        "messages": [AIMessage(content=content)],
+        "audit_trail": [{"event": "triage.gratitude_close", "subtype": diag_ctx.issue_subtype}],
     }
 
 

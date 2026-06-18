@@ -68,20 +68,46 @@ def get_articles_by_category(category: str) -> list[dict]:
 def search_articles(query: str, limit: int = 5) -> list[dict]:
     """Simple keyword search across all knowledge articles.
 
+    Uses word-level matching so natural-language queries (e.g. "I have an
+    Outlook email issue") correctly match article titles and content.
+    Stops short words (≤ 2 chars) and common stop-words to reduce noise.
+
     Production: replaced by pgvector semantic search.
     """
     knowledge = load_all_knowledge()
-    results = []
-    query_lower = query.lower()
+
+    _STOPWORDS = frozenset(
+        {"i", "a", "an", "the", "is", "am", "are", "was", "were", "be",
+         "been", "being", "have", "has", "had", "do", "does", "did", "will",
+         "would", "could", "should", "may", "might", "shall", "can", "need",
+         "to", "of", "in", "on", "at", "by", "for", "with", "or", "and",
+         "but", "not", "my", "me", "we", "you", "it", "its"}
+    )
+
+    # Split query into meaningful content words (>2 chars, not stop-words)
+    query_words = [
+        w for w in query.lower().split()
+        if len(w) > 2 and w not in _STOPWORDS
+    ]
+    # Fall back to all non-trivially-short words if nothing survives
+    if not query_words:
+        query_words = [w for w in query.lower().split() if len(w) > 1]
+
+    results: list[tuple[int, dict]] = []  # (score, article)
 
     for _category, articles in knowledge.items():
         for article in articles:
-            # Simple keyword matching
             title = article.get("title", "").lower()
             content = article.get("content", "").lower()
             tags = " ".join(article.get("tags", [])).lower()
+            keywords = " ".join(article.get("keywords", [])).lower()
+            haystack = f"{title} {tags} {keywords} {content}"
 
-            if query_lower in title or query_lower in content or query_lower in tags:
-                results.append(article)
+            # Count how many query words appear somewhere in the article
+            score = sum(1 for w in query_words if w in haystack)
+            if score > 0:
+                results.append((score, article))
 
-    return results[:limit]
+    # Return highest-scoring articles first
+    results.sort(key=lambda x: x[0], reverse=True)
+    return [art for _, art in results[:limit]]

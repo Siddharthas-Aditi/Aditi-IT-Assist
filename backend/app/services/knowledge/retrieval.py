@@ -240,3 +240,6 @@ class _DictArticle:
         self.resolution_steps = data.get("resolution_steps") or []
         self.steps = data.get("steps") or []
         self.troubleshooting_steps = data.get("troubleshooting_steps") or []
+        # Required by KnowledgeRetrievalService._rank() boost calculations
+        self.usage_count: int = 0
+        self.quality_score: float = 0.0
