@@ -124,3 +124,10 @@ detects feedback only when steps were previously given
 
 The frontend "Still having issues" / "Yes, it's fixed!" buttons send phrases
 that match these detectors.
+
+## Escalation → ticket → live agent
+
+When grounded troubleshooting is exhausted (or the user asks for a human), the
+agent **offers** to raise a ticket and connect a specialist. A real ticket is
+created only on explicit confirmation, and always **before** the live-agent
+handoff. See [escalation-and-live-agent-handoff.md](escalation-and-live-agent-handoff.md).

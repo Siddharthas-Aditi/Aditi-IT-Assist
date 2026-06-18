@@ -83,9 +83,16 @@ class WorkflowState(TypedDict):
     should_escalate: bool
     escalation_reason: str | None
     handoff_summary: HandoffSummary | None
+    # True once the user has explicitly confirmed they want a human/ticket
+    # (vs. merely being offered escalation). Drives ticket persistence in the
+    # service layer — we only create a ticket on explicit confirmation.
+    escalation_confirmed: bool
 
     # Ticket (set by Ticket Agent)
     ticket_draft: TicketDraft | None
+    # The ticket node prepares a draft and OFFERS to create a ticket; it never
+    # persists one itself. `ticket_offered` signals the offer was made.
+    ticket_offered: bool
     ticket_created: bool
 
     # Meta

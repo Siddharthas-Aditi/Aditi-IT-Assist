@@ -95,3 +95,10 @@ Every ticket has a chronological timeline:
 - SLA breach warnings
 - Escalation events
 - Resolution notes
+
+## Chat-initiated tickets & live-agent handoff
+
+Tickets created from the support chat are persisted only on explicit user
+confirmation, then queued for a human (`new → triaged`, priority ≥ `high`,
+`live_agent_requested` event). See
+[escalation-and-live-agent-handoff.md](escalation-and-live-agent-handoff.md).

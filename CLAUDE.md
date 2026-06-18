@@ -68,7 +68,8 @@ retrieve relevant knowledge, guide troubleshooting, and escalate when needed.
 - Loop control / tried-step memory: `DiagnosticContext.suggested_steps`/`failed_steps` + `workflows/nodes/resolution.py` `_build_progression` (present only NEW steps; never repeat a failed batch; escalate when exhausted). Context is persisted across turns by `ChatService`.
 - KB rule: each article's `subcategory` MUST equal a real subtype from `subtype_classifier.known_subtypes(category)`; keep steps scoped to that subtype. No monolithic "all issues" articles.
 - IT/admin-only `debug` trace on the chat response (employees never get it).
-- Docs: `docs/architecture/chat-grounding-rules.md`, `docs/architecture/retrieval-guardrails.md`, `docs/architecture/troubleshooting-state-machine.md`, `docs/development/chat-debugging-guide.md`, `docs/development/golden-conversations.md`
+- **Escalation → ticket → live agent**: when grounded help is exhausted (or the user asks for a human), the agent *offers* to raise a ticket; a real ticket is persisted **only on explicit confirmation** ("Connect with a specialist" → `POST /chat/request-live-agent`, or typed "yes"), and always **before** the human handoff. Persistence is in the service layer (`ChatService._handle_ticketing` / `request_live_agent`), not the workflow nodes — `ticketing.py` only builds a draft + offer. Idempotent per session. See `docs/architecture/escalation-and-live-agent-handoff.md`.
+- Docs: `docs/architecture/chat-grounding-rules.md`, `docs/architecture/retrieval-guardrails.md`, `docs/architecture/troubleshooting-state-machine.md`, `docs/architecture/escalation-and-live-agent-handoff.md`, `docs/development/chat-debugging-guide.md`, `docs/development/golden-conversations.md`
 
 ## Build Order (When Implementing Features)
 

@@ -1,7 +1,7 @@
 /** Employee support chat page — AI-powered professional IT help desk. */
 
 import { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, Bot, ChevronRight, Send, User } from 'lucide-react';
+import { AlertTriangle, Bot, CheckCircle2, ChevronRight, Send, Ticket, User } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 
 interface ResolutionStep {
@@ -10,12 +10,24 @@ interface ResolutionStep {
   details?: string;
 }
 
+interface TicketRef {
+  ticket_id: string;
+  ticket_number: string;
+  status: string;
+  priority: string;
+  live_agent_requested: boolean;
+}
+
 interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
   requiresEscalation?: boolean;
+  /** Agent offered to raise a ticket + connect a human, awaiting confirmation. */
+  escalationOffered?: boolean;
+  /** A real ticket was created/queued for this message. */
+  ticket?: TicketRef;
   resolutionSteps?: ResolutionStep[];
   followUpQuestion?: string;
   category?: string;
@@ -80,6 +92,7 @@ export function SupportChatPage() {
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [connecting, setConnecting] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -117,6 +130,8 @@ export function SupportChatPage() {
         message_id?: string;
         content?: string;
         requires_escalation?: boolean;
+        escalation_offered?: boolean;
+        ticket?: TicketRef;
         resolution_steps?: ResolutionStep[];
         follow_up_question?: string;
         issue_category?: string;
@@ -155,6 +170,8 @@ export function SupportChatPage() {
           content: data.content ?? 'I received your message and am looking into it.',
           timestamp: new Date(),
           requiresEscalation: data.requires_escalation ?? false,
+          escalationOffered: data.escalation_offered ?? false,
+          ticket: data.ticket ?? undefined,
           resolutionSteps: data.resolution_steps ?? [],
           followUpQuestion: data.follow_up_question ?? undefined,
           category: data.issue_category ?? undefined,
@@ -176,6 +193,74 @@ export function SupportChatPage() {
       ]);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  /**
+   * Explicit "Connect with a specialist" action. Creates (if needed) and
+   * queues a support ticket for a live IT agent, then shows the confirmation
+   * with the real ticket number. Ticket-before-handoff is enforced server-side.
+   */
+  const connectToAgent = async () => {
+    if (connecting || !sessionId) return;
+    setConnecting(true);
+    try {
+      const res = await fetch(`${API_BASE}/chat/request-live-agent`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ session_id: sessionId }),
+      });
+
+      let data: { message?: string; ticket?: TicketRef; detail?: string } = {};
+      try {
+        data = await res.json();
+      } catch { /* non-JSON error body */ }
+
+      if (!res.ok) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `err-${Date.now()}`,
+            role: 'assistant',
+            content:
+              typeof data.detail === 'string'
+                ? data.detail
+                : 'I could not reach the IT queue just now. Please try again in a moment.',
+            timestamp: new Date(),
+            isError: true,
+          },
+        ]);
+        return;
+      }
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `agent-${Date.now()}`,
+          role: 'assistant',
+          content: data.message ?? 'A support ticket has been created and queued for our IT team.',
+          timestamp: new Date(),
+          ticket: data.ticket,
+        },
+      ]);
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `err-${Date.now()}`,
+          role: 'assistant',
+          content:
+            'I was unable to reach the support service to connect you. Please try again, or email ' +
+            'it-support@aditiconsulting.com.',
+          timestamp: new Date(),
+          isError: true,
+        },
+      ]);
+    } finally {
+      setConnecting(false);
     }
   };
 
@@ -287,8 +372,9 @@ export function SupportChatPage() {
                   </div>
                 )}
 
-                {/* Escalation banner */}
-                {msg.requiresEscalation && (
+                {/* Escalation banner — offer to create a ticket + connect a human.
+                    No ticket exists yet; clicking Connect creates and queues one. */}
+                {msg.requiresEscalation && !msg.ticket && (
                   <div className="flex w-full items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5">
                     <AlertTriangle size={14} className="mt-0.5 shrink-0 text-amber-600" />
                     <div className="flex-1">
@@ -296,12 +382,33 @@ export function SupportChatPage() {
                         This issue may require specialist assistance
                       </p>
                       <p className="mt-0.5 text-xs text-amber-600">
-                        Would you like to be connected with an IT specialist?
+                        I'll raise a support ticket and connect you with an IT specialist.
                       </p>
                     </div>
-                    <button className="ml-2 shrink-0 rounded-lg bg-amber-600 px-3 py-1 text-xs font-medium text-white hover:bg-amber-700">
-                      Connect
+                    <button
+                      onClick={connectToAgent}
+                      disabled={connecting || !sessionId}
+                      className="ml-2 shrink-0 rounded-lg bg-amber-600 px-3 py-1 text-xs font-medium text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {connecting ? 'Connecting…' : 'Connect with a specialist'}
                     </button>
+                  </div>
+                )}
+
+                {/* Ticket created + queued for a human */}
+                {msg.ticket && (
+                  <div className="flex w-full items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5">
+                    <CheckCircle2 size={14} className="mt-0.5 shrink-0 text-emerald-600" />
+                    <div className="flex-1">
+                      <p className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700">
+                        <Ticket size={13} /> Ticket {msg.ticket.ticket_number} created
+                      </p>
+                      <p className="mt-0.5 text-xs text-emerald-600">
+                        {msg.ticket.live_agent_requested
+                          ? 'Queued for a live IT specialist — they have your full conversation context.'
+                          : `Priority: ${msg.ticket.priority} · Status: ${msg.ticket.status}`}
+                      </p>
+                    </div>
                   </div>
                 )}
 

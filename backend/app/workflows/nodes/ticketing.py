@@ -43,27 +43,44 @@ async def ticket_node(state: WorkflowState) -> dict:
         "conversation_summary": handoff.get("issue_description", ""),
     }
 
-    # Generate user-facing message
-    message = (
-        f"I've drafted a support ticket for you:\n\n"
-        f"**Title**: {ticket_draft['title']}\n"
-        f"**Priority**: {ticket_draft['priority']}\n"
-        f"**Category**: {ticket_draft['category']}\n\n"
-        f"The ticket includes your conversation history and the steps we've "
-        f"already tried. Our IT team will follow up with you shortly.\n\n"
-        f"Is there anything else I can help you with?"
-    )
+    # IMPORTANT: this node prepares a draft and OFFERS to escalate — it does NOT
+    # persist a ticket. Real ticket creation happens in the service layer only
+    # after the user explicitly confirms (clicks "Connect with a specialist" or
+    # replies yes), which is also where the live-agent queueing happens. This
+    # keeps workflow nodes side-effect free and avoids promising a ticket that
+    # was never created (the previous bug).
+    confirmed = bool(state.get("escalation_confirmed"))
+
+    if confirmed:
+        # User already confirmed → the service will create + queue the ticket and
+        # replace this content with the real ticket number. Interim text only.
+        message = (
+            "Thanks — I'm creating your support ticket and connecting you with "
+            "an IT specialist now."
+        )
+    else:
+        message = (
+            f"I wasn't able to fully resolve this one on my own, so the best next "
+            f"step is our IT team.\n\n"
+            f"I can raise a **{ticket_draft['priority']}**-priority support ticket "
+            f"(**{ticket_draft['category']}**) with everything we've covered — your "
+            f"problem details and the steps we tried — and connect you with a "
+            f"specialist.\n\n"
+            f"Click **Connect with a specialist** below (or reply *yes*) and I'll set it up."
+        )
 
     audit_entry = {
-        "event": "ticket.drafted",
+        "event": "ticket.offered",
         "title": ticket_draft["title"],
         "priority": ticket_draft["priority"],
+        "confirmed": confirmed,
     }
 
     return {
         "current_node": "draft_ticket",
         "ticket_draft": ticket_draft,
-        "ticket_created": True,
+        "ticket_offered": True,
+        "ticket_created": False,
         "messages": [AIMessage(content=message)],
         "audit_trail": [audit_entry],
     }
