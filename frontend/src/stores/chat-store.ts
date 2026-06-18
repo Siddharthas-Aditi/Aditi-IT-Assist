@@ -9,8 +9,10 @@ interface ChatState {
   sessionId: string | null;
   isLoading: boolean;
   error: string | null;
+  escalationStatus: 'idle' | 'sending' | 'sent' | 'failed';
 
   sendMessage: (content: string) => Promise<void>;
+  requestLiveAgent: () => Promise<void>;
   reset: () => void;
 }
 
@@ -27,6 +29,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   sessionId: null,
   isLoading: false,
   error: null,
+  escalationStatus: 'idle',
 
   sendMessage: async (content: string) => {
     // Guard: ignore empty input or a send already in flight. This prevents the
@@ -95,6 +98,27 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
+  requestLiveAgent: async () => {
+    const sessionId = get().sessionId;
+    if (!sessionId) return;
+    set({ escalationStatus: 'sending' });
+    try {
+      const res = await chatApi.requestLiveAgent(sessionId);
+      const ticketMsg: ChatMessage = {
+        id: `escalation-${Date.now()}`,
+        role: 'assistant',
+        content: res.message,
+        timestamp: new Date(),
+      };
+      set((state) => ({
+        messages: [...state.messages, ticketMsg],
+        escalationStatus: 'sent',
+      }));
+    } catch {
+      set({ escalationStatus: 'failed' });
+    }
+  },
+
   reset: () =>
     set({
       messages: [
@@ -109,5 +133,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       sessionId: null,
       isLoading: false,
       error: null,
+      escalationStatus: 'idle',
     }),
 }));

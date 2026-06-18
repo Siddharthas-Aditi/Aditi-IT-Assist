@@ -406,12 +406,12 @@ async def _llm_resolution(
     if diag_ctx.failed_steps:
         additional.append(f"- Already tried (do NOT repeat): {', '.join(diag_ctx.failed_steps)}")
 
-    # NEW: Include conversation summary if available (turn > 10)
-    conversation_summary = diag_ctx.conversation_summary or None
+    # Include conversation summary if available (turn > 10)
+    conversation_summary = getattr(diag_ctx, "conversation_summary", None)
     if conversation_summary:
         additional.append(f"- Conversation so far: {conversation_summary}")
 
-    # NEW: Include urgency/sentiment context for tone adjustment
+    # Include urgency/sentiment context for tone adjustment
     if diag_ctx.urgency:
         additional.append(f"- User urgency level: {diag_ctx.urgency}")
     if diag_ctx.business_impact:

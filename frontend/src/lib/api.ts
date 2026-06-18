@@ -144,11 +144,29 @@ export interface ChatMessageResponse {
   debug: ChatDebugInfo | null;
 }
 
+export interface LiveAgentResponse {
+  session_id: string;
+  message: string;
+  ticket: {
+    ticket_id: string;
+    ticket_number: string;
+    status: string;
+    priority: string;
+    live_agent_requested: boolean;
+  } | null;
+}
+
 export const chatApi = {
   sendMessage: (message: string, sessionId?: string) =>
     apiRequest<ChatMessageResponse>('/chat/message', {
       method: 'POST',
       body: { message, session_id: sessionId },
+    }),
+
+  requestLiveAgent: (sessionId: string) =>
+    apiRequest<LiveAgentResponse>('/chat/request-live-agent', {
+      method: 'POST',
+      body: { session_id: sessionId },
     }),
 };
 

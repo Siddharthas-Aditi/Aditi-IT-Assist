@@ -16,7 +16,7 @@ const QUICK_PROMPTS = [
 ];
 
 export function ChatPanel() {
-  const { messages, isLoading, sendMessage, reset } = useChatStore();
+  const { messages, isLoading, sendMessage, reset, requestLiveAgent, escalationStatus } = useChatStore();
   const [input, setInput] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -120,7 +120,13 @@ export function ChatPanel() {
                 disabled={isLoading}
               />
             )}
-            {showEscalation && <EscalationBanner />}
+            {showEscalation && (
+              <EscalationBanner
+                onEscalate={requestLiveAgent}
+                onContinue={() => sendMessage("I'd like to continue troubleshooting with AI.")}
+                teamsStatus={escalationStatus}
+              />
+            )}
           </div>
         )}
       </div>

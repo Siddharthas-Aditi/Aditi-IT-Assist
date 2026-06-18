@@ -132,7 +132,11 @@ class ChatService:
             state["should_escalate"] = False
             state["escalation_confirmed"] = False
             state["escalation_reason"] = None
-            state["issue_resolved"] = False
+            # BUGFIX #1: Do NOT reset issue_resolved here — it must persist via
+            # diagnostic_context so the triage node can detect post-resolution context
+            # and call reset_issue_context() for new issues. Resetting it here breaks
+            # the "I have another issue" detection.
+            # state["issue_resolved"] = False  ← REMOVED
             state["ticket_draft"] = None
             state["ticket_offered"] = False
             state["ticket_created"] = False
