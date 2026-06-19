@@ -37,6 +37,8 @@ export const P = {
   KNOWLEDGE_VIEW_ANALYTICS: 'knowledge:view_analytics',
   // Cross-cutting
   ADMIN_VIEW_AUDIT_LOG: 'admin:view_audit_log',
+  ADMIN_MANAGE_USERS: 'admin:manage_users',
+  ADMIN_ASSIGN_ROLES: 'admin:assign_roles',
 } as const;
 
 // `string & Record<never, never>` preserves literal autocomplete on the known
@@ -89,6 +91,8 @@ const ADMIN_PERMS: PermissionCode[] = [
   P.KNOWLEDGE_MANAGE_OWNERSHIP,
   P.KNOWLEDGE_REINDEX,
   P.ADMIN_VIEW_AUDIT_LOG,
+  P.ADMIN_MANAGE_USERS,
+  P.ADMIN_ASSIGN_ROLES,
 ];
 
 const AUDITOR_PERMS: PermissionCode[] = [

@@ -195,7 +195,16 @@ export const queueApi = {
     }),
 };
 
+export interface ActiveSessionResponse {
+  session_id: string | null;
+  status?: SpecialistChatStatus;
+  ticket_number?: string | null;
+}
+
 export const liveChatApi = {
+  /** The caller's current live session, if any (powers the employee join banner). */
+  active: () => apiRequest<ActiveSessionResponse>('/specialist-chat/active'),
+
   start: (ticketId: string, opts?: { idleWarningSeconds?: number; idleEndSeconds?: number }) =>
     apiRequest<SpecialistChatSessionOut>('/specialist-chat/start', {
       method: 'POST',

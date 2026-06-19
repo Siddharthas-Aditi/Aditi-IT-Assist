@@ -30,7 +30,9 @@ import { RemoteAssistPage } from '@/pages/operations/RemoteAssistPage';
 import { DashboardPage } from '@/pages/admin/DashboardPage';
 import { TeamQueuePage } from '@/pages/admin/TeamQueuePage';
 import { AuditLogPage } from '@/pages/admin/AuditLogPage';
+import { AuditEventDetailPage } from '@/pages/admin/AuditEventDetailPage';
 import { UserManagementPage } from '@/pages/admin/UserManagementPage';
+import { UserDetailPage } from '@/pages/admin/UserDetailPage';
 import { KnowledgeManagementPage } from '@/pages/admin/KnowledgeManagementPage';
 import { KnowledgeArticleDetailPage } from '@/pages/admin/knowledge/KnowledgeArticleDetailPage';
 import { KnowledgeEditorPage } from '@/pages/admin/knowledge/KnowledgeEditorPage';
@@ -99,12 +101,14 @@ export function App() {
         <Route path="knowledge/ingest/:jobId" element={<CandidateReviewPage />} />
         <Route path="knowledge/ingest/:jobId/:candidateId" element={<CandidateEditorPage />} />
         <Route path="users" element={<UserManagementPage />} />
+        <Route path="users/:id" element={<UserDetailPage />} />
         <Route path="feedback/review" element={<FeedbackReviewPage />} />
       </Route>
 
       {/* Audit (admin + auditor) */}
       <Route path="/audit" element={<AuditorRoute><AdminLayout /></AuditorRoute>}>
         <Route index element={<AuditLogPage />} />
+        <Route path=":eventId" element={<AuditEventDetailPage />} />
       </Route>
 
       {/* Fallback */}

@@ -1,87 +1,96 @@
-/** IT Operations layout for agents, leads, admins. */
+/** IT Operations layout for agents, leads, admins — brand-consistent shell. */
 
 import { Outlet, NavLink } from 'react-router-dom';
-import { Inbox, ClipboardList, Monitor, LayoutDashboard, LogOut } from 'lucide-react';
+import {
+  Inbox,
+  ClipboardList,
+  Monitor,
+  LayoutDashboard,
+  LogOut,
+  Headset,
+  ArrowLeft,
+} from 'lucide-react';
+
 import { useAuthStore } from '@/stores/auth-store';
+
+const NAV = [
+  { to: '/operations/queue', label: 'Live Queue', icon: Inbox },
+  { to: '/operations/assigned', label: 'My Assigned', icon: ClipboardList },
+  { to: '/operations/remote-assist', label: 'Remote Assist', icon: Monitor },
+];
 
 export function OperationsLayout() {
   const { user, logout, isAdmin } = useAuthStore();
 
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex h-screen bg-background">
       {/* Sidebar */}
-      <aside className="w-64 bg-slate-900 text-white flex flex-col">
-        <div className="p-4 border-b border-slate-700">
-          <h1 className="text-lg font-bold text-emerald-400">IT Operations</h1>
-          <p className="text-xs text-slate-400 mt-1">Aditi IT Assist</p>
+      <aside className="flex w-64 flex-col bg-[hsl(var(--sidebar))] text-[hsl(var(--sidebar-foreground))]">
+        <div className="flex items-center gap-2.5 px-5 py-5">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[hsl(var(--accent))]/15 text-[hsl(var(--accent))]">
+            <Headset size={20} />
+          </div>
+          <div>
+            <h1 className="text-sm font-semibold leading-tight">Aditi IT Assist</h1>
+            <p className="text-[11px] text-white/55">IT Operations</p>
+          </div>
         </div>
 
-        <nav className="flex-1 p-3 space-y-1">
-          <NavLink
-            to="/operations/queue"
-            className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2 rounded-lg text-sm ${
-                isActive ? 'bg-slate-700 text-emerald-400 font-medium' : 'text-slate-300 hover:bg-slate-800'
-              }`
-            }
-          >
-            <Inbox size={18} />
-            Live Queue
-          </NavLink>
-          <NavLink
-            to="/operations/assigned"
-            className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2 rounded-lg text-sm ${
-                isActive ? 'bg-slate-700 text-emerald-400 font-medium' : 'text-slate-300 hover:bg-slate-800'
-              }`
-            }
-          >
-            <ClipboardList size={18} />
-            My Assigned
-          </NavLink>
-          <NavLink
-            to="/operations/remote-assist"
-            className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2 rounded-lg text-sm ${
-                isActive ? 'bg-slate-700 text-emerald-400 font-medium' : 'text-slate-300 hover:bg-slate-800'
-              }`
-            }
-          >
-            <Monitor size={18} />
-            Remote Assist
-          </NavLink>
+        <nav className="flex-1 space-y-0.5 px-3 py-2">
+          {NAV.map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              className={({ isActive }) =>
+                `flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
+                  isActive
+                    ? 'bg-white/10 font-medium text-white ring-1 ring-white/10'
+                    : 'text-white/70 hover:bg-white/5 hover:text-white'
+                }`
+              }
+            >
+              <item.icon size={18} />
+              {item.label}
+            </NavLink>
+          ))}
         </nav>
 
-        {/* Navigation links */}
-        <div className="p-3 border-t border-slate-700 space-y-1">
+        {/* Cross-workspace links (legitimate multi-role navigation) */}
+        <div className="space-y-0.5 px-3 pb-2">
           {isAdmin() && (
             <NavLink
               to="/dashboard"
-              className="flex items-center gap-2 px-3 py-2 text-xs text-emerald-400 hover:bg-slate-800 rounded"
+              className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-white/60 transition-colors hover:bg-white/5 hover:text-white"
             >
-              <LayoutDashboard size={14} />
-              Admin Dashboard
+              <LayoutDashboard size={14} /> Admin Console
             </NavLink>
           )}
           <NavLink
             to="/support"
-            className="flex items-center gap-2 px-3 py-2 text-xs text-slate-400 hover:bg-slate-800 rounded"
+            className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-white/60 transition-colors hover:bg-white/5 hover:text-white"
           >
-            ← Employee View
+            <ArrowLeft size={14} /> Employee View
           </NavLink>
         </div>
 
-        {/* User footer */}
-        <div className="p-3 border-t border-slate-700">
-          <div className="flex items-center gap-2 px-2">
-            <div className="w-8 h-8 rounded-full bg-emerald-900 flex items-center justify-center text-emerald-400 text-xs font-medium">
-              {user?.full_name?.charAt(0) || '?'}
+        {/* Account footer */}
+        <div className="border-t border-white/10 p-3">
+          <div className="flex items-center gap-2.5 px-2">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[hsl(var(--accent))]/20 text-xs font-semibold text-[hsl(var(--accent))]">
+              {user?.full_name?.charAt(0)?.toUpperCase() || '?'}
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-white truncate">{user?.full_name}</p>
-              <p className="text-xs text-slate-400 truncate">{user?.role}</p>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium text-white">{user?.full_name}</p>
+              <p className="truncate text-[11px] capitalize text-white/55">
+                {user?.role?.replace(/_/g, ' ')}
+              </p>
             </div>
-            <button onClick={() => logout()} className="text-slate-400 hover:text-red-400" title="Logout">
+            <button
+              onClick={() => logout()}
+              className="rounded p-1 text-white/50 transition-colors hover:text-red-300"
+              title="Sign out"
+              aria-label="Sign out"
+            >
               <LogOut size={16} />
             </button>
           </div>
@@ -89,7 +98,7 @@ export function OperationsLayout() {
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 overflow-auto">
+      <main className="flex flex-1 flex-col overflow-auto">
         <Outlet />
       </main>
     </div>

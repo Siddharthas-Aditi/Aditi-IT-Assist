@@ -7,9 +7,11 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, Bot, CheckCircle2, ChevronRight, Send, Ticket, User } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { AlertTriangle, Bot, CheckCircle2, ChevronRight, Headset, Send, Ticket, User } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { WelcomeCategories } from '@/features/chat/WelcomeCategories';
+import { liveChatApi } from '@/features/specialist-chat/api';
 
 // Teams Webhook
 // Set VITE_TEAMS_WEBHOOK_URL in your .env to enable Teams notifications on
@@ -147,7 +149,15 @@ const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
 
 export function SupportChatPage() {
   const { user, token } = useAuthStore();
+  const navigate = useNavigate();
   const firstName = user?.full_name?.split(' ')[0] ?? 'there';
+
+  // Live-chat handoff: poll for an active specialist session so the employee
+  // is offered a one-click join the moment a specialist picks up their ticket.
+  const [liveSession, setLiveSession] = useState<{
+    id: string;
+    ticketNumber?: string | null;
+  } | null>(null);
 
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -173,6 +183,29 @@ export function SupportChatPage() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // Poll for an active live-chat session (specialist picked up the ticket).
+  useEffect(() => {
+    let active = true;
+    const poll = async () => {
+      try {
+        const r = await liveChatApi.active();
+        if (active) {
+          setLiveSession(
+            r.session_id ? { id: r.session_id, ticketNumber: r.ticket_number } : null,
+          );
+        }
+      } catch {
+        /* transient — keep polling */
+      }
+    };
+    void poll();
+    const t = window.setInterval(poll, 5000);
+    return () => {
+      active = false;
+      window.clearInterval(t);
+    };
+  }, []);
 
   /** Core send — accepts an overrideText so category tiles can fire without typing. */
   const sendMessage = async (overrideText?: string) => {
@@ -360,6 +393,24 @@ export function SupportChatPage() {
           </div>
         </div>
       </div>
+
+      {/* ── Live specialist join banner ─────────────────────────── */}
+      {liveSession && (
+        <button
+          type="button"
+          onClick={() => navigate(`/support/live-chat/${liveSession.id}`)}
+          className="flex items-center justify-between gap-3 border-b border-emerald-200 bg-emerald-50 px-6 py-3 text-left transition-colors hover:bg-emerald-100"
+        >
+          <span className="flex items-center gap-2 text-sm font-medium text-emerald-800">
+            <Headset size={16} />
+            An IT specialist has joined
+            {liveSession.ticketNumber ? ` (${liveSession.ticketNumber})` : ''} — continue in live chat
+          </span>
+          <span className="flex items-center gap-1 text-sm font-semibold text-emerald-700">
+            Join <ChevronRight size={15} />
+          </span>
+        </button>
+      )}
 
       {/* ── Message thread ──────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6">

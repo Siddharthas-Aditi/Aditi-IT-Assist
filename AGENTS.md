@@ -758,3 +758,28 @@ what made "first N steps" answer the wrong question.
   `test_outlook_mailbox_full_flow.py`).
 - The IT/admin-only `debug` field on the chat response exposes the full trace;
   employees never receive it (`api/v1/chat.py`).
+
+## Admin Console
+
+Admin-focused operations surface (it_lead / it_admin; security_auditor for audit).
+The shell has **no cross-workspace profile switching** — a single stable nav rail
+plus a clean account-summary footer (Profile & settings, Sign out).
+
+- **Sections:** Analytics, Team Queue, Knowledge Base, User Management, Audit Logs.
+- **Backend:** `app/api/v1/admin.py` → `app/services/admin/` (`AdminUserService`,
+  `AuditQueryService`, `AdminStatsService`) + `app/schemas/admin.py`. RBAC via
+  `require_permissions` (`admin:manage_users`, `admin:assign_roles`,
+  `admin:view_audit_log`). All user/role mutations are audit-logged (before/after).
+  A user always keeps ≥1 role. `GET /admin/stats` and `/admin/audit-log*` are real
+  (previously stubs).
+- **Analytics:** `_sla_metrics.compliance_rate` is a real rate (None → "No data";
+  never `NaN%`).
+- **Frontend:** feature module `src/features/admin/` (typed React Query hooks);
+  shared `src/components/admin/` (`Breadcrumbs`, `PageHeader`). Every detail / edit /
+  review / create page renders breadcrumbs. UI gating mirrors the backend via
+  `src/lib/permissions.ts`.
+- **Docs:** `docs/product/admin-console.md`, `docs/architecture/admin-console-architecture.md`,
+  `docs/development/admin-qa-checklist.md`.
+- **Tests:** `backend/tests/api/test_admin.py`,
+  `frontend/src/components/admin/Breadcrumbs.test.tsx`,
+  `frontend/src/features/admin/components/badges.test.tsx`.

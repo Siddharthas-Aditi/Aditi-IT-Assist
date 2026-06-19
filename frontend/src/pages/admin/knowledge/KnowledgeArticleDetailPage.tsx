@@ -16,6 +16,7 @@ import {
   useFeedback,
   useReviewNotes,
 } from '@/features/knowledge';
+import { Breadcrumbs } from '@/components/admin';
 import { hasPermission, P } from '@/lib/permissions';
 import { useAuthStore } from '@/stores/auth-store';
 
@@ -59,6 +60,13 @@ export function KnowledgeArticleDetailPage() {
 
   return (
     <div className="p-6">
+      <Breadcrumbs
+        className="mb-4"
+        items={[
+          { label: 'Knowledge Base', to: '/dashboard/knowledge' },
+          { label: article.title },
+        ]}
+      />
       <Link
         to="/dashboard/knowledge"
         className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"

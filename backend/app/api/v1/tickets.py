@@ -188,6 +188,40 @@ async def get_queue_summary(
     return await service.get_queue_summary()
 
 
+@router.get("/{ticket_id}")
+async def get_ticket_detail(
+    ticket_id: str,
+    agent_user: ITAgentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict:
+    """Get full ticket detail for IT staff (includes internal notes + events)."""
+    service = TicketService(db)
+    result = await service.get_ticket_for_agent(uuid.UUID(ticket_id))
+    if not result:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+    return {
+        "ticket": _ticket_to_response(result["ticket"]),
+        "comments": [
+            {
+                "id": str(c.id),
+                "content": c.content,
+                "is_internal": c.is_internal,
+                "author_id": str(c.author_id),
+                "created_at": c.created_at.isoformat(),
+            }
+            for c in result["comments"]
+        ],
+        "events": [
+            {
+                "type": e.event_type,
+                "description": e.description,
+                "created_at": e.created_at.isoformat(),
+            }
+            for e in result["events"]
+        ],
+    }
+
+
 @router.post("/{ticket_id}/assign")
 async def assign_ticket(
     ticket_id: str,

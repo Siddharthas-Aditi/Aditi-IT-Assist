@@ -448,6 +448,31 @@ class SpecialistChatService:
             raise LookupError(f"Specialist chat session {session_id} not found")
         return session
 
+    async def get_active_for_participant(
+        self, user_id: uuid.UUID,
+    ) -> SpecialistChatSession | None:
+        """Most-recent non-ended session where this user is a participant.
+
+        Powers the employee "an IT specialist has joined — open chat" banner:
+        the employee polls this after escalation and is routed into the live
+        chat the moment the specialist starts it.
+        """
+        stmt = (
+            select(SpecialistChatSession)
+            .where(
+                and_(
+                    or_(
+                        SpecialistChatSession.user_id == user_id,
+                        SpecialistChatSession.specialist_id == user_id,
+                    ),
+                    SpecialistChatSession.status.in_(("active", "idle_warning")),
+                )
+            )
+            .order_by(SpecialistChatSession.started_at.desc())
+            .limit(1)
+        )
+        return (await self.db.execute(stmt)).scalar_one_or_none()
+
     async def _get_active_for_ticket(
         self, ticket_id: uuid.UUID,
     ) -> SpecialistChatSession | None:

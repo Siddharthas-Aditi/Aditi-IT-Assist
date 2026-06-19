@@ -200,3 +200,21 @@ async def node_name(state: WorkflowState) -> WorkflowState:
   `docs/architecture/chat-playbooks.md`,
   `docs/product/conversation-quality-guidelines.md`,
   `docs/development/failure-cases-and-golden-conversations.md`.
+
+## Admin Console
+
+The Admin Console (it_lead / it_admin; auditor for audit) is admin-focused — no
+cross-workspace "profile switch". Sections: Analytics, Team Queue, Knowledge Base,
+User Management, Audit Logs.
+
+- Backend: `app/api/v1/admin.py` → `app/services/admin/` (user mgmt, audit query,
+  stats) + `app/schemas/admin.py`. Gate with `require_permissions` (`admin:manage_users`,
+  `admin:assign_roles`, `admin:view_audit_log`). Audit-log every user/role mutation
+  with before/after diffs; never strip a user's last role.
+- Frontend: `src/features/admin/` (typed React Query hooks, `utils.ts`, `components/badges.tsx`)
+  and `src/components/admin/` (`Breadcrumbs`, `PageHeader`). Put pure helpers in
+  non-component files (react-refresh lint rule). Add breadcrumbs to every deep page.
+- Real data only — no dummy cards. Rates that can't be computed render "No data",
+  not `NaN%`. Keep `src/lib/permissions.ts` in sync with the backend registry.
+- Docs: `docs/product/admin-console.md`, `docs/architecture/admin-console-architecture.md`,
+  `docs/development/admin-qa-checklist.md`.

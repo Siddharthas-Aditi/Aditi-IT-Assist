@@ -26,6 +26,7 @@ import {
   useTemplates,
   useUpdateArticle,
 } from '@/features/knowledge';
+import { Breadcrumbs } from '@/components/admin';
 import type {
   ArticleDetail,
   ArticleTemplate,
@@ -289,6 +290,15 @@ export function KnowledgeEditorPage() {
 
   return (
     <div className="p-6">
+      <Breadcrumbs
+        className="mb-4"
+        items={[
+          { label: 'Knowledge Base', to: '/dashboard/knowledge' },
+          ...(isEdit
+            ? [{ label: 'Article', to: `/dashboard/knowledge/${id}` }, { label: 'Edit' }]
+            : [{ label: 'New article' }]),
+        ]}
+      />
       <Link
         to={isEdit ? `/dashboard/knowledge/${id}` : '/dashboard/knowledge'}
         className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"

@@ -10,6 +10,7 @@ import {
 } from '@/features/ingestion';
 import { CandidateCard } from '@/features/ingestion/components/CandidateCard';
 import { ParseStatusBadge } from '@/features/ingestion/components/ParseStatusBadge';
+import { Breadcrumbs } from '@/components/admin';
 import type { CandidateReviewStatus } from '@/types/ingestion';
 
 function timeAgo(dateStr: string): string {
@@ -67,6 +68,13 @@ export function CandidateReviewPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 p-6">
+      <Breadcrumbs
+        items={[
+          { label: 'Knowledge Base', to: '/dashboard/knowledge' },
+          { label: 'Upload', to: '/dashboard/knowledge/upload' },
+          { label: job.source_filename },
+        ]}
+      />
       {/* Job header */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>

@@ -3,6 +3,7 @@
 import { ArrowLeft } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 
+import { Breadcrumbs } from '@/components/admin';
 import { useVersions } from '@/features/knowledge';
 
 export function KnowledgeVersionHistoryPage() {
@@ -11,6 +12,14 @@ export function KnowledgeVersionHistoryPage() {
 
   return (
     <div className="p-6">
+      <Breadcrumbs
+        className="mb-4"
+        items={[
+          { label: 'Knowledge Base', to: '/dashboard/knowledge' },
+          { label: 'Article', to: `/dashboard/knowledge/${id}` },
+          { label: 'Version history' },
+        ]}
+      />
       <Link
         to={`/dashboard/knowledge/${id}`}
         className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"

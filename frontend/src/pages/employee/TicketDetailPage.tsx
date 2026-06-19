@@ -2,8 +2,9 @@
 
 import { useParams, useNavigate } from 'react-router-dom';
 import { useState, useEffect, useCallback } from 'react';
-import { useAuthStore } from '@/stores/auth-store';
 import { ArrowLeft } from 'lucide-react';
+
+import { apiRequest } from '@/lib/api';
 
 interface TicketDetail {
   id: string;
@@ -31,134 +32,176 @@ interface TicketEvent {
   created_at: string;
 }
 
+interface DetailResponse {
+  ticket: TicketDetail;
+  comments: TicketComment[];
+  events: TicketEvent[];
+}
+
 const STATUS_COLORS: Record<string, string> = {
   new: 'bg-blue-100 text-blue-700',
   triaged: 'bg-purple-100 text-purple-700',
-  in_progress: 'bg-yellow-100 text-yellow-700',
+  in_progress: 'bg-amber-100 text-amber-700',
   waiting_for_user: 'bg-orange-100 text-orange-700',
-  resolved: 'bg-green-100 text-green-700',
+  escalated: 'bg-red-100 text-red-700',
+  resolved: 'bg-emerald-100 text-emerald-700',
   closed: 'bg-gray-100 text-gray-600',
 };
 
 const PRIORITY_COLORS: Record<string, string> = {
   critical: 'bg-red-100 text-red-700',
   high: 'bg-orange-100 text-orange-700',
-  medium: 'bg-yellow-100 text-yellow-700',
-  low: 'bg-green-100 text-green-700',
+  medium: 'bg-amber-100 text-amber-700',
+  low: 'bg-emerald-100 text-emerald-700',
 };
+
+function fmt(iso: string): string {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString();
+}
 
 export function TicketDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { token } = useAuthStore();
   const [ticket, setTicket] = useState<TicketDetail | null>(null);
   const [comments, setComments] = useState<TicketComment[]>([]);
   const [events, setEvents] = useState<TicketEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
-
   const fetchDetail = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${API_BASE}/tickets/my/${id}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) {
-        setError(res.status === 404 ? 'Ticket not found' : 'Failed to load ticket');
-        return;
-      }
-      const data = await res.json();
+      const data = await apiRequest<DetailResponse>(`/tickets/my/${id}`);
       setTicket(data.ticket);
       setComments(data.comments ?? []);
       setEvents(data.events ?? []);
-    } catch {
-      setError('Network error');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load ticket');
     } finally {
       setLoading(false);
     }
-  }, [API_BASE, id, token]);
+  }, [id]);
 
-  useEffect(() => { fetchDetail(); }, [fetchDetail]);
+  useEffect(() => {
+    fetchDetail();
+  }, [fetchDetail]);
 
   if (loading) {
-    return <div className="p-6 text-center text-gray-400">Loading ticket…</div>;
+    return <div className="p-6 text-center text-muted-foreground">Loading ticket…</div>;
   }
   if (error || !ticket) {
     return (
       <div className="p-6 text-center">
-        <p className="text-red-500 mb-4">{error ?? 'Ticket not found'}</p>
-        <button onClick={() => navigate(-1)} className="text-sm text-indigo-600 hover:underline">← Back</button>
+        <p className="mb-4 text-destructive">{error ?? 'Ticket not found'}</p>
+        <button
+          onClick={() => navigate(-1)}
+          className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+        >
+          <ArrowLeft size={14} /> Back
+        </button>
       </div>
     );
   }
 
   const timeline = [
-    ...events.map((e) => ({ kind: 'event' as const, text: e.description, type: e.type, ts: e.created_at })),
-    ...comments.map((c) => ({ kind: 'comment' as const, text: c.content, type: 'comment', ts: c.created_at })),
+    ...events.map((e) => ({
+      kind: 'event' as const,
+      text: e.description,
+      type: e.type,
+      ts: e.created_at,
+    })),
+    ...comments.map((c) => ({
+      kind: 'comment' as const,
+      text: c.content,
+      type: 'comment',
+      ts: c.created_at,
+    })),
   ].sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime());
 
   return (
-    <div className="p-6 max-w-3xl mx-auto">
-      <button onClick={() => navigate(-1)} className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800 mb-4">
+    <div className="mx-auto max-w-3xl p-6">
+      <button
+        onClick={() => navigate(-1)}
+        className="mb-4 flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
+      >
         <ArrowLeft size={14} /> Back
       </button>
 
       {/* Header */}
-      <div className="bg-white rounded-lg border p-6 mb-6">
-        <div className="flex items-start justify-between mb-3">
+      <div className="mb-6 rounded-xl border border-border bg-card p-6">
+        <div className="mb-3 flex items-start justify-between gap-3">
           <div>
-            <p className="text-xs text-gray-400 font-mono">{ticket.ticket_number}</p>
-            <h1 className="text-xl font-bold text-gray-900 mt-1">{ticket.title}</h1>
+            <p className="font-mono text-xs text-muted-foreground">{ticket.ticket_number}</p>
+            <h1 className="mt-1 text-xl font-bold text-foreground">{ticket.title}</h1>
           </div>
-          <div className="flex gap-2">
-            <span className={`px-2 py-0.5 rounded text-xs font-medium ${STATUS_COLORS[ticket.status] ?? 'bg-gray-100 text-gray-600'}`}>{ticket.status.replace(/_/g, ' ')}</span>
-            <span className={`px-2 py-0.5 rounded text-xs font-medium ${PRIORITY_COLORS[ticket.priority] ?? 'bg-gray-100 text-gray-600'}`}>{ticket.priority}</span>
+          <div className="flex shrink-0 gap-2">
+            <span
+              className={`rounded px-2 py-0.5 text-xs font-medium ${
+                STATUS_COLORS[ticket.status] ?? 'bg-gray-100 text-gray-600'
+              }`}
+            >
+              {ticket.status.replace(/_/g, ' ')}
+            </span>
+            <span
+              className={`rounded px-2 py-0.5 text-xs font-medium ${
+                PRIORITY_COLORS[ticket.priority] ?? 'bg-gray-100 text-gray-600'
+              }`}
+            >
+              {ticket.priority}
+            </span>
           </div>
         </div>
-        <p className="text-sm text-gray-700 whitespace-pre-wrap">{ticket.description}</p>
-        <div className="mt-4 flex gap-6 text-xs text-gray-400">
+        <p className="whitespace-pre-wrap text-sm text-muted-foreground">{ticket.description}</p>
+        <div className="mt-4 flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted-foreground">
           {ticket.category && <span>Category: {ticket.category}</span>}
-          <span>Created: {new Date(ticket.created_at).toLocaleString()}</span>
-          {ticket.assigned_to && <span>Assigned: {ticket.assigned_to}</span>}
+          <span>Created: {fmt(ticket.created_at)}</span>
+          {ticket.assigned_to && <span>Assigned to a specialist</span>}
         </div>
       </div>
 
       {/* AI Summary */}
       {ticket.ai_summary && (
-        <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4 mb-6">
-          <p className="text-xs font-semibold text-indigo-600 mb-1">AI Summary</p>
-          <p className="text-sm text-indigo-800">{ticket.ai_summary}</p>
+        <div className="mb-6 rounded-xl border border-primary/20 bg-primary/5 p-4">
+          <p className="mb-1 text-xs font-semibold text-primary">AI Summary</p>
+          <p className="text-sm text-muted-foreground">{ticket.ai_summary}</p>
         </div>
       )}
 
       {/* Resolution Notes */}
       {ticket.resolution_notes && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
-          <p className="text-xs font-semibold text-green-600 mb-1">Resolution</p>
-          <p className="text-sm text-green-800">{ticket.resolution_notes}</p>
+        <div className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+          <p className="mb-1 text-xs font-semibold text-emerald-700">Resolution</p>
+          <p className="text-sm text-emerald-800">{ticket.resolution_notes}</p>
         </div>
       )}
 
       {/* Timeline */}
-      <div className="bg-white rounded-lg border p-6">
-        <h3 className="text-sm font-semibold text-gray-700 mb-4">Activity Timeline</h3>
+      <div className="rounded-xl border border-border bg-card p-6">
+        <h3 className="mb-4 text-sm font-semibold text-foreground">Activity Timeline</h3>
         {timeline.length > 0 ? (
-          <div className="space-y-4 relative before:absolute before:left-[7px] before:top-2 before:bottom-2 before:w-0.5 before:bg-gray-200">
+          <div className="relative space-y-4 before:absolute before:bottom-2 before:left-[7px] before:top-2 before:w-0.5 before:bg-border">
             {timeline.map((item, i) => (
-              <div key={i} className="flex gap-3 pl-5 relative">
-                <span className={`absolute left-0 top-1.5 w-4 h-4 rounded-full border-2 ${item.kind === 'comment' ? 'bg-indigo-100 border-indigo-400' : 'bg-gray-100 border-gray-400'}`} />
+              <div key={i} className="relative flex gap-3 pl-5">
+                <span
+                  className={`absolute left-0 top-1.5 h-4 w-4 rounded-full border-2 ${
+                    item.kind === 'comment'
+                      ? 'border-primary/50 bg-primary/15'
+                      : 'border-border bg-muted'
+                  }`}
+                />
                 <div>
-                  <p className="text-sm text-gray-800">{item.text}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">{new Date(item.ts).toLocaleString()} · {item.type}</p>
+                  <p className="text-sm text-foreground">{item.text}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {fmt(item.ts)} · {item.type}
+                  </p>
                 </div>
               </div>
             ))}
           </div>
         ) : (
-          <p className="text-sm text-gray-400 text-center py-4">No activity yet</p>
+          <p className="py-4 text-center text-sm text-muted-foreground">No activity yet</p>
         )}
       </div>
     </div>

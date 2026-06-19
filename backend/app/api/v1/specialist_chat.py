@@ -137,6 +137,29 @@ async def start_session(
     return _to_out(state, ticket_number=ticket.ticket_number)
 
 
+@router.get("/active")
+async def get_active_session(
+    current_user: CurrentUser,
+    svc: SvcDep,
+    db: DBDep,
+) -> dict:
+    """Return the caller's current live session, if any.
+
+    Used by the employee support chat to detect when a specialist has started
+    a live chat and offer to join. Returns ``{session_id: null}`` when there is
+    no active session, so the client can poll cheaply.
+    """
+    session = await svc.get_active_for_participant(current_user.id)
+    if session is None:
+        return {"session_id": None}
+    ticket = await db.get(Ticket, session.ticket_id)
+    return {
+        "session_id": str(session.id),
+        "status": session.status,
+        "ticket_number": ticket.ticket_number if ticket else None,
+    }
+
+
 @router.get("/{session_id}", response_model=SpecialistChatSessionOut)
 async def get_session(
     session_id: uuid.UUID,

@@ -138,10 +138,16 @@ class AnalyticsService:
         }
 
     async def _sla_metrics(self, start: datetime, end: datetime) -> dict:
-        """Compute SLA compliance metrics."""
+        """Compute SLA compliance metrics.
+
+        ``compliance_rate`` is a *real* rate over tickets resolved in the period
+        that carried a resolution target: the share resolved on or before that
+        target. It is ``None`` (rendered as "No data") when there is nothing to
+        measure, so the UI never shows ``NaN%``.
+        """
         now = datetime.now(timezone.utc)
 
-        # SLA at risk (within 1 hour of breach)
+        # SLA at risk (open, within 1 hour of breach)
         at_risk_stmt = select(func.count(Ticket.id)).where(
             and_(
                 Ticket.status.in_(["new", "triaged", "in_progress", "waiting_for_user"]),
@@ -150,10 +156,9 @@ class AnalyticsService:
                 Ticket.sla_resolution_target > now,
             )
         )
-        at_risk_result = await self.db.execute(at_risk_stmt)
-        at_risk = at_risk_result.scalar() or 0
+        at_risk = (await self.db.execute(at_risk_stmt)).scalar() or 0
 
-        # SLA breached
+        # SLA breached (open, past target)
         breached_stmt = select(func.count(Ticket.id)).where(
             and_(
                 Ticket.status.in_(["new", "triaged", "in_progress", "waiting_for_user"]),
@@ -161,12 +166,42 @@ class AnalyticsService:
                 Ticket.sla_resolution_target < now,
             )
         )
-        breached_result = await self.db.execute(breached_stmt)
-        breached = breached_result.scalar() or 0
+        breached = (await self.db.execute(breached_stmt)).scalar() or 0
+
+        # Compliance over tickets RESOLVED in the period that had a target.
+        resolved_with_target_stmt = select(func.count(Ticket.id)).where(
+            and_(
+                Ticket.resolved_at.isnot(None),
+                Ticket.resolved_at >= start,
+                Ticket.resolved_at <= end,
+                Ticket.sla_resolution_target.isnot(None),
+            )
+        )
+        resolved_with_target = (await self.db.execute(resolved_with_target_stmt)).scalar() or 0
+
+        resolved_on_time_stmt = select(func.count(Ticket.id)).where(
+            and_(
+                Ticket.resolved_at.isnot(None),
+                Ticket.resolved_at >= start,
+                Ticket.resolved_at <= end,
+                Ticket.sla_resolution_target.isnot(None),
+                Ticket.resolved_at <= Ticket.sla_resolution_target,
+            )
+        )
+        resolved_on_time = (await self.db.execute(resolved_on_time_stmt)).scalar() or 0
+
+        compliance_rate = (
+            round(resolved_on_time / resolved_with_target * 100, 1)
+            if resolved_with_target > 0
+            else None
+        )
 
         return {
             "at_risk": at_risk,
             "breached": breached,
+            "resolved_with_target": resolved_with_target,
+            "resolved_on_time": resolved_on_time,
+            "compliance_rate": compliance_rate,
         }
 
     async def _remote_support_metrics(self, start: datetime, end: datetime) -> dict:

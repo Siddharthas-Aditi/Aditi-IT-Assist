@@ -1,109 +1,172 @@
-/** Admin/Lead dashboard layout. */
+/**
+ * Admin / IT-Lead console layout.
+ *
+ * Admin-focused shell: a single, stable navigation rail (no cross-workspace
+ * profile switching) and a clean enterprise account summary in the footer.
+ * Branding uses the Aditi sidebar token (dark blue) for theme consistency.
+ */
 
-import { Outlet, NavLink } from 'react-router-dom';
-import { BarChart3, Users, BookOpen, Shield, Settings, LogOut } from 'lucide-react';
+import { useState } from 'react';
+import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import {
+  BarChart3,
+  BookOpen,
+  Shield,
+  Users2,
+  UserCog,
+  LogOut,
+  ChevronDown,
+  LifeBuoy,
+} from 'lucide-react';
+
 import { useAuthStore } from '@/stores/auth-store';
+import { hasPermission, isLeadOrAbove, P, type UserRole } from '@/lib/permissions';
+import type { AuthUser } from '@/types/auth';
+
+const ROLE_LABELS: Record<UserRole, string> = {
+  employee: 'Employee',
+  it_agent: 'IT Agent',
+  it_lead: 'IT Lead',
+  it_admin: 'IT Admin',
+  security_auditor: 'Security Auditor',
+};
+
+interface NavItem {
+  to: string;
+  label: string;
+  icon: typeof BarChart3;
+  end?: boolean;
+  /** Whether this user may see (and reach) the item — mirrors route guards. */
+  can: (user: AuthUser | null) => boolean;
+}
+
+// Gating mirrors the route guards so a user never sees a link that would bounce
+// to /unauthorized: /dashboard/* is it_lead+; /dashboard/users is it_admin only
+// (admin:manage_users); /audit is it_admin + security_auditor (admin:view_audit_log).
+const NAV: NavItem[] = [
+  { to: '/dashboard', label: 'Analytics', icon: BarChart3, end: true, can: isLeadOrAbove },
+  { to: '/dashboard/team-queue', label: 'Team Queue', icon: Users2, can: isLeadOrAbove },
+  { to: '/dashboard/knowledge', label: 'Knowledge Base', icon: BookOpen, can: isLeadOrAbove },
+  {
+    to: '/dashboard/users',
+    label: 'User Management',
+    icon: UserCog,
+    can: (u) => hasPermission(u, P.ADMIN_MANAGE_USERS),
+  },
+  {
+    to: '/audit',
+    label: 'Audit Logs',
+    icon: Shield,
+    can: (u) => hasPermission(u, P.ADMIN_VIEW_AUDIT_LOG),
+  },
+];
 
 export function AdminLayout() {
   const { user, logout } = useAuthStore();
+  const navigate = useNavigate();
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  const initials = (user?.full_name || '?')
+    .split(' ')
+    .map((p) => p.charAt(0))
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+
+  const roleLabel = user?.role ? ROLE_LABELS[user.role] ?? user.role : '';
 
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex h-screen bg-background">
       {/* Sidebar */}
-      <aside className="w-64 bg-indigo-950 text-white flex flex-col">
-        <div className="p-4 border-b border-indigo-800">
-          <h1 className="text-lg font-bold text-indigo-300">Admin Console</h1>
-          <p className="text-xs text-indigo-400 mt-1">Aditi IT Assist</p>
+      <aside className="flex w-64 flex-col bg-[hsl(var(--sidebar))] text-[hsl(var(--sidebar-foreground))]">
+        <div className="flex items-center gap-2.5 px-5 py-5">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[hsl(var(--accent))]/15 text-[hsl(var(--accent))]">
+            <LifeBuoy size={20} />
+          </div>
+          <div>
+            <h1 className="text-sm font-semibold leading-tight">Aditi IT Assist</h1>
+            <p className="text-[11px] text-white/55">Admin Console</p>
+          </div>
         </div>
 
-        <nav className="flex-1 p-3 space-y-1">
-          <NavLink
-            to="/dashboard"
-            end
-            className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2 rounded-lg text-sm ${
-                isActive ? 'bg-indigo-800 text-indigo-200 font-medium' : 'text-indigo-300 hover:bg-indigo-900'
-              }`
-            }
-          >
-            <BarChart3 size={18} />
-            Analytics
-          </NavLink>
-          <NavLink
-            to="/dashboard/team-queue"
-            className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2 rounded-lg text-sm ${
-                isActive ? 'bg-indigo-800 text-indigo-200 font-medium' : 'text-indigo-300 hover:bg-indigo-900'
-              }`
-            }
-          >
-            <Users size={18} />
-            Team Queue
-          </NavLink>
-          <NavLink
-            to="/dashboard/knowledge"
-            className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2 rounded-lg text-sm ${
-                isActive ? 'bg-indigo-800 text-indigo-200 font-medium' : 'text-indigo-300 hover:bg-indigo-900'
-              }`
-            }
-          >
-            <BookOpen size={18} />
-            Knowledge Base
-          </NavLink>
-          <NavLink
-            to="/dashboard/users"
-            className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2 rounded-lg text-sm ${
-                isActive ? 'bg-indigo-800 text-indigo-200 font-medium' : 'text-indigo-300 hover:bg-indigo-900'
-              }`
-            }
-          >
-            <Settings size={18} />
-            User Management
-          </NavLink>
-          <NavLink
-            to="/audit"
-            className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2 rounded-lg text-sm ${
-                isActive ? 'bg-indigo-800 text-indigo-200 font-medium' : 'text-indigo-300 hover:bg-indigo-900'
-              }`
-            }
-          >
-            <Shield size={18} />
-            Audit Logs
-          </NavLink>
+        <nav className="flex-1 space-y-0.5 px-3 py-2">
+          <p className="px-3 pb-1.5 pt-2 text-[10px] font-semibold uppercase tracking-wider text-white/40">
+            Operations
+          </p>
+          {NAV.filter((i) => i.can(user)).map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.end}
+              className={({ isActive }) =>
+                `flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
+                  isActive
+                    ? 'bg-white/10 font-medium text-white shadow-sm ring-1 ring-white/10'
+                    : 'text-white/70 hover:bg-white/5 hover:text-white'
+                }`
+              }
+            >
+              <item.icon size={18} />
+              {item.label}
+            </NavLink>
+          ))}
         </nav>
 
-        {/* Quick links */}
-        <div className="p-3 border-t border-indigo-800 space-y-1">
-          <NavLink
-            to="/operations"
-            className="flex items-center gap-2 px-3 py-2 text-xs text-indigo-400 hover:bg-indigo-900 rounded"
+        {/* Account summary */}
+        <div className="relative border-t border-white/10 p-3">
+          <button
+            type="button"
+            onClick={() => setMenuOpen((o) => !o)}
+            className="flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-colors hover:bg-white/5"
           >
-            ← Operations View
-          </NavLink>
-        </div>
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[hsl(var(--accent))]/20 text-xs font-semibold text-[hsl(var(--accent))]">
+              {initials}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium text-white">{user?.full_name}</p>
+              <p className="truncate text-[11px] text-white/55">{user?.email}</p>
+            </div>
+            <ChevronDown
+              size={16}
+              className={`shrink-0 text-white/50 transition-transform ${menuOpen ? 'rotate-180' : ''}`}
+            />
+          </button>
 
-        {/* User footer */}
-        <div className="p-3 border-t border-indigo-800">
-          <div className="flex items-center gap-2 px-2">
-            <div className="w-8 h-8 rounded-full bg-indigo-800 flex items-center justify-center text-indigo-300 text-xs font-medium">
-              {user?.full_name?.charAt(0) || '?'}
+          {menuOpen && (
+            <div className="absolute bottom-[4.25rem] left-3 right-3 overflow-hidden rounded-lg border border-white/10 bg-[hsl(var(--sidebar))] shadow-xl">
+              <div className="border-b border-white/10 px-3 py-2.5">
+                <p className="text-[11px] uppercase tracking-wide text-white/40">Signed in as</p>
+                <p className="mt-0.5 truncate text-sm text-white">{user?.full_name}</p>
+                {roleLabel && (
+                  <span className="mt-1 inline-flex rounded-full bg-[hsl(var(--accent))]/15 px-2 py-0.5 text-[11px] font-medium text-[hsl(var(--accent))]">
+                    {roleLabel}
+                  </span>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setMenuOpen(false);
+                  navigate('/support/profile');
+                }}
+                className="flex w-full items-center gap-2 px-3 py-2.5 text-sm text-white/80 transition-colors hover:bg-white/5"
+              >
+                <UserCog size={15} /> Profile &amp; settings
+              </button>
+              <button
+                type="button"
+                onClick={() => logout()}
+                className="flex w-full items-center gap-2 px-3 py-2.5 text-sm text-red-300 transition-colors hover:bg-red-500/10"
+              >
+                <LogOut size={15} /> Sign out
+              </button>
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-white truncate">{user?.full_name}</p>
-              <p className="text-xs text-indigo-400 truncate">{user?.role}</p>
-            </div>
-            <button onClick={() => logout()} className="text-indigo-400 hover:text-red-400" title="Logout">
-              <LogOut size={16} />
-            </button>
-          </div>
+          )}
         </div>
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 overflow-auto">
+      <main className="flex flex-1 flex-col overflow-auto">
         <Outlet />
       </main>
     </div>

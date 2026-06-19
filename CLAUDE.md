@@ -71,6 +71,14 @@ retrieve relevant knowledge, guide troubleshooting, and escalate when needed.
 - **Escalation → ticket → live agent**: when grounded help is exhausted (or the user asks for a human), the agent *offers* to raise a ticket; a real ticket is persisted **only on explicit confirmation** ("Connect with a specialist" → `POST /chat/request-live-agent`, or typed "yes"), and always **before** the human handoff. Persistence is in the service layer (`ChatService._handle_ticketing` / `request_live_agent`), not the workflow nodes — `ticketing.py` only builds a draft + offer. Idempotent per session. See `docs/architecture/escalation-and-live-agent-handoff.md`.
 - Docs: `docs/architecture/chat-grounding-rules.md`, `docs/architecture/retrieval-guardrails.md`, `docs/architecture/troubleshooting-state-machine.md`, `docs/architecture/escalation-and-live-agent-handoff.md`, `docs/development/chat-debugging-guide.md`, `docs/development/golden-conversations.md`
 
+### Admin Console
+- Admin-focused shell (no cross-workspace "profile switch"). Sections: Analytics, Team Queue, Knowledge Base, User Management, Audit Logs. Routes under `/dashboard/*` (AdminLayout) + `/audit/*`.
+- Backend `app/api/v1/admin.py` → services in `app/services/admin/` (`AdminUserService`, `AuditQueryService`, `AdminStatsService`) + `app/schemas/admin.py`. RBAC via `require_permissions` (`admin:manage_users`, `admin:assign_roles`, `admin:view_audit_log`). Every user/role mutation is audit-logged with before/after diffs. Service-layer rule: a user always keeps ≥1 role.
+- User Management API: `GET/PATCH /admin/users`, `GET /admin/users/{id}`, `POST/DELETE /admin/users/{id}/roles[/{role}]`, `GET /admin/roles`. Audit API: `GET /admin/audit-log[/facets|/{id}]`. `GET /admin/stats` is real aggregation (was a stub).
+- Analytics `_sla_metrics` returns a real `compliance_rate` (None → UI shows "No data", never `NaN%`).
+- Frontend feature module `src/features/admin/` (typed React Query hooks); shared `src/components/admin/` (`Breadcrumbs`, `PageHeader`). Every detail/edit/review page renders breadcrumbs. UI gating mirrors the backend via `src/lib/permissions.ts`.
+- Docs: `docs/product/admin-console.md`, `docs/architecture/admin-console-architecture.md`, `docs/development/admin-qa-checklist.md`. Tests: `backend/tests/api/test_admin.py`, `frontend/src/components/admin/Breadcrumbs.test.tsx`, `frontend/src/features/admin/components/badges.test.tsx`.
+
 ## Build Order (When Implementing Features)
 
 1. Define data models and schemas first

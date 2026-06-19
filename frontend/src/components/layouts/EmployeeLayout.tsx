@@ -1,80 +1,81 @@
-/** Employee workspace layout with sidebar navigation. */
+/** Employee workspace layout — brand-consistent sidebar navigation. */
 
 import { Outlet, NavLink } from 'react-router-dom';
-import { MessageSquare, Ticket, User, LogOut } from 'lucide-react';
+import { MessageSquare, Ticket, User, LogOut, LifeBuoy, ArrowRight } from 'lucide-react';
+
 import { useAuthStore } from '@/stores/auth-store';
+
+const NAV = [
+  { to: '/support/chat', label: 'Support Chat', icon: MessageSquare },
+  { to: '/support/tickets', label: 'My Tickets', icon: Ticket },
+  { to: '/support/profile', label: 'Profile', icon: User },
+];
 
 export function EmployeeLayout() {
   const { user, logout, isITStaff } = useAuthStore();
 
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex h-screen bg-background">
       {/* Sidebar */}
-      <aside className="w-64 bg-white border-r border-gray-200 flex flex-col">
-        <div className="p-4 border-b">
-          <h1 className="text-lg font-bold text-indigo-700">Aditi IT Assist</h1>
-          <p className="text-xs text-gray-500 mt-1">Employee Support</p>
+      <aside className="flex w-64 flex-col bg-[hsl(var(--sidebar))] text-[hsl(var(--sidebar-foreground))]">
+        <div className="flex items-center gap-2.5 px-5 py-5">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[hsl(var(--accent))]/15 text-[hsl(var(--accent))]">
+            <LifeBuoy size={20} />
+          </div>
+          <div>
+            <h1 className="text-sm font-semibold leading-tight">Aditi IT Assist</h1>
+            <p className="text-[11px] text-white/55">Employee Support</p>
+          </div>
         </div>
 
-        <nav className="flex-1 p-3 space-y-1">
-          <NavLink
-            to="/support/chat"
-            className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2 rounded-lg text-sm ${
-                isActive ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-gray-700 hover:bg-gray-100'
-              }`
-            }
-          >
-            <MessageSquare size={18} />
-            Support Chat
-          </NavLink>
-          <NavLink
-            to="/support/tickets"
-            className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2 rounded-lg text-sm ${
-                isActive ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-gray-700 hover:bg-gray-100'
-              }`
-            }
-          >
-            <Ticket size={18} />
-            My Tickets
-          </NavLink>
-          <NavLink
-            to="/support/profile"
-            className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2 rounded-lg text-sm ${
-                isActive ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-gray-700 hover:bg-gray-100'
-              }`
-            }
-          >
-            <User size={18} />
-            Profile
-          </NavLink>
+        <nav className="flex-1 space-y-0.5 px-3 py-2">
+          {NAV.map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              className={({ isActive }) =>
+                `flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
+                  isActive
+                    ? 'bg-white/10 font-medium text-white ring-1 ring-white/10'
+                    : 'text-white/70 hover:bg-white/5 hover:text-white'
+                }`
+              }
+            >
+              <item.icon size={18} />
+              {item.label}
+            </NavLink>
+          ))}
         </nav>
 
-        {/* Switch to operations if IT staff */}
+        {/* Cross-workspace link for IT staff (legitimate multi-role navigation) */}
         {isITStaff() && (
-          <div className="p-3 border-t">
+          <div className="px-3 pb-2">
             <NavLink
               to="/operations"
-              className="flex items-center gap-2 px-3 py-2 text-xs text-indigo-600 hover:bg-indigo-50 rounded"
+              className="flex items-center justify-between rounded-lg px-3 py-2 text-xs text-white/60 transition-colors hover:bg-white/5 hover:text-white"
             >
-              Switch to Operations →
+              Switch to Operations
+              <ArrowRight size={14} />
             </NavLink>
           </div>
         )}
 
-        {/* User footer */}
-        <div className="p-3 border-t">
-          <div className="flex items-center gap-2 px-2">
-            <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 text-xs font-medium">
-              {user?.full_name?.charAt(0) || '?'}
+        {/* Account footer */}
+        <div className="border-t border-white/10 p-3">
+          <div className="flex items-center gap-2.5 px-2">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[hsl(var(--accent))]/20 text-xs font-semibold text-[hsl(var(--accent))]">
+              {user?.full_name?.charAt(0)?.toUpperCase() || '?'}
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-gray-900 truncate">{user?.full_name}</p>
-              <p className="text-xs text-gray-500 truncate">{user?.email}</p>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium text-white">{user?.full_name}</p>
+              <p className="truncate text-[11px] text-white/55">{user?.email}</p>
             </div>
-            <button onClick={() => logout()} className="text-gray-400 hover:text-red-500" title="Logout">
+            <button
+              onClick={() => logout()}
+              className="rounded p-1 text-white/50 transition-colors hover:text-red-300"
+              title="Sign out"
+              aria-label="Sign out"
+            >
               <LogOut size={16} />
             </button>
           </div>
@@ -82,7 +83,7 @@ export function EmployeeLayout() {
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 overflow-auto">
+      <main className="flex flex-1 flex-col overflow-auto">
         <Outlet />
       </main>
     </div>

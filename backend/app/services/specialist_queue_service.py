@@ -26,7 +26,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import and_, or_, select, update
+from sqlalchemy import and_, func, or_, select, update
 
 from app.core.logging import get_logger
 from app.models.ticket import Ticket
@@ -123,7 +123,9 @@ class SpecialistQueueService:
             .values(
                 assigned_to=claimer.id,
                 status="in_progress",
-                first_response_at=Ticket.first_response_at.op("COALESCE")(now),
+                # Stamp first response only if not already set (COALESCE is a
+                # function — NOT a binary operator, so use func.coalesce here).
+                first_response_at=func.coalesce(Ticket.first_response_at, now),
             )
             .returning(Ticket)
         )

@@ -217,6 +217,32 @@ class TicketService:
             "events": events,
         }
 
+    async def get_ticket_for_agent(self, ticket_id: uuid.UUID) -> dict | None:
+        """Get full ticket detail for IT staff — all comments (incl. internal) + events.
+
+        Unlike the employee view this is not scoped to the requester and includes
+        internal notes, since IT agents/leads/admins work the whole queue.
+        """
+        ticket = await self._get_ticket(ticket_id)
+        if not ticket:
+            return None
+
+        comments_stmt = (
+            select(TicketComment)
+            .where(TicketComment.ticket_id == ticket_id)
+            .order_by(TicketComment.created_at)
+        )
+        comments = (await self.db.execute(comments_stmt)).scalars().all()
+
+        events_stmt = (
+            select(TicketEvent)
+            .where(TicketEvent.ticket_id == ticket_id)
+            .order_by(TicketEvent.created_at)
+        )
+        events = (await self.db.execute(events_stmt)).scalars().all()
+
+        return {"ticket": ticket, "comments": comments, "events": events}
+
     async def list_tickets_for_employee(
         self, employee: User, status: str | None = None,
         limit: int = 20, offset: int = 0,
