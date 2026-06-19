@@ -26,10 +26,8 @@ interface DashboardMetrics {
 }
 
 interface AgentWorkload {
-  agent_name: string;
-  agent_email: string;
+  agent_id: string;
   active_tickets: number;
-  resolved_today: number;
 }
 
 export function DashboardPage() {
@@ -143,7 +141,7 @@ export function DashboardPage() {
             {workload.length > 0 ? (
               <div className="space-y-3">
                 {workload.map((agent) => (
-                  <AgentRow key={agent.agent_email} name={agent.agent_name} tickets={agent.active_tickets} resolved={agent.resolved_today} />
+                  <AgentRow key={agent.agent_id} agentId={agent.agent_id} tickets={agent.active_tickets} />
                 ))}
               </div>
             ) : (
@@ -165,15 +163,15 @@ function MetricCard({ title, value, color }: { title: string; value: string; col
   );
 }
 
-function AgentRow({ name, tickets, resolved }: { name: string; tickets: number; resolved: number }) {
+function AgentRow({ agentId, tickets }: { agentId: string; tickets: number }) {
+  const shortId = agentId.slice(0, 8);
   return (
     <div className="flex items-center gap-4">
       <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-xs font-medium text-indigo-700">
-        {name.charAt(0)}
+        {shortId.charAt(0).toUpperCase()}
       </div>
       <div className="flex-1">
-        <p className="text-sm font-medium text-gray-900">{name}</p>
-        <p className="text-xs text-gray-400">{resolved} resolved today</p>
+        <p className="text-sm font-medium text-gray-900">Agent {shortId}</p>
       </div>
       <p className="text-sm text-gray-500">{tickets} active</p>
     </div>

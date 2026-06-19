@@ -17,11 +17,33 @@ async def get_current_user(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(security_scheme)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> User:
-    """Extract and validate current user from JWT bearer token."""
+    """Extract and validate current user from JWT bearer token.
+
+    Every 401 returned from this dependency carries a typed ``error_code`` in
+    the response body so the frontend can decide *behavior* (silent refresh,
+    logout, redirect) from a stable contract rather than parsing the human
+    message string.
+
+    Error codes:
+
+    * ``auth_required`` — no bearer credentials supplied. The client is
+      either logged out or sent the call before login completed.
+    * ``session_expired`` — token was structurally valid but failed
+      validation (signature, expiry, type-mismatch, user disabled). The
+      client should attempt one ``/auth/refresh`` and then logout if that
+      fails.
+
+    The two are distinguished so the frontend can tell a never-logged-in
+    user (show login screen) from an expired session (try refresh, show a
+    toast).
+    """
     if not credentials:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required",
+            detail={
+                "error_code": "auth_required",
+                "message": "Authentication required",
+            },
             headers={"WWW-Authenticate": "Bearer"},
         )
 
@@ -32,7 +54,13 @@ async def get_current_user(
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token",
+            detail={
+                "error_code": "session_expired",
+                "message": (
+                    "Your session has expired. Please sign in again to "
+                    "continue."
+                ),
+            },
             headers={"WWW-Authenticate": "Bearer"},
         )
 

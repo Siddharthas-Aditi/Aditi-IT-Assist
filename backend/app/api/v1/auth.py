@@ -82,6 +82,24 @@ class MeResponse(BaseModel):
     is_active: bool
 
 
+class RefreshRequest(BaseModel):
+    """Body for the refresh endpoint — the long-lived refresh token issued
+    at login. Sent in the body (NOT the Authorization header) so the
+    short-lived access token can't accidentally satisfy it.
+    """
+
+    refresh_token: str
+
+
+class RefreshResponse(BaseModel):
+    """Refresh response — a new access token (and optionally a rotated refresh
+    token if the policy rotates refresh tokens on use)."""
+
+    access_token: str
+    refresh_token: str | None = None
+    token_type: str = "bearer"
+
+
 class SAMLStatusResponse(BaseModel):
     """SAML configuration status response."""
 
@@ -148,6 +166,55 @@ async def register(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e.message)) from e
 
     return {"message": "User registered successfully", "user_id": str(user.id)}
+
+
+@router.post("/refresh", response_model=RefreshResponse)
+async def refresh_session(
+    data: RefreshRequest,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> RefreshResponse:
+    """Exchange a refresh token for a new access token.
+
+    Contract for the frontend:
+
+    * If the refresh token is **valid and is of type ``refresh``**, returns a
+      fresh access token (and optionally a rotated refresh token).
+    * Otherwise returns 401 with ``error_code: "session_expired"`` — the
+      frontend treats this as the terminal signal to logout + redirect.
+
+    Refresh tokens MUST be sent in the request body so a leaked access token
+    in the Authorization header can never accidentally satisfy this route.
+    """
+    from app.core.security import create_access_token, verify_token
+
+    payload = verify_token(data.refresh_token) if data.refresh_token else None
+    if not payload or payload.get("type") != "refresh":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "error_code": "session_expired",
+                "message": "Refresh token is missing or invalid.",
+            },
+        )
+
+    # Look up the user to make sure the account hasn't been disabled since
+    # the refresh token was issued — disabling a user must immediately stop
+    # refresh from working.
+    auth_service = AuthService(db)
+    user = await auth_service.get_user_by_id(payload.get("sub"))
+    if user is None or not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "error_code": "session_expired",
+                "message": "Account is inactive or no longer exists.",
+            },
+        )
+
+    new_access = create_access_token(
+        data={"sub": str(user.id), "email": user.email}
+    )
+    return RefreshResponse(access_token=new_access)
 
 
 @router.get("/me", response_model=MeResponse)

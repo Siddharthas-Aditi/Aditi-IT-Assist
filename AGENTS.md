@@ -4,6 +4,28 @@
 > employee IT issues. This document is the authoritative reference for the
 > agent system architecture.
 
+> **Phase 1 update (2026-06-19):** the system is being upgraded to a
+> Supervisor + typed Specialist Agent architecture. The declarative source
+> of truth is now `backend/app/services/agents/registry.py` (the
+> `AGENT_REGISTRY`). The legacy LangGraph flow continues to run; the
+> supervisor is wired in as the routing brain. See:
+>
+> - [`docs/architecture/multi-agent-support-architecture.md`](docs/architecture/multi-agent-support-architecture.md)
+>   — the target architecture and decisions encoded in the supervisor.
+> - [`docs/architecture/conversation-intents.md`](docs/architecture/conversation-intents.md)
+>   — the typed conversational intent layer (fixes the `ITA-000007`-style bugs).
+> - [`docs/architecture/human-handoff-and-queue.md`](docs/architecture/human-handoff-and-queue.md)
+>   — IT specialist queue + structured `HandoffPackage`.
+> - [`docs/architecture/knowledge-improvement-loop.md`](docs/architecture/knowledge-improvement-loop.md)
+>   — KnowledgeCandidate review pipeline.
+> - [`docs/architecture/controlled-web-fallback.md`](docs/architecture/controlled-web-fallback.md)
+>   — policy-gated external search.
+> - [`docs/development/rollout-plan-multi-agent.md`](docs/development/rollout-plan-multi-agent.md)
+>   — phased migration plan + feature flags + risks.
+>
+> The "System Overview" diagram below describes the **legacy** linear graph
+> that remains in production; the supervisor lays over the top of it.
+
 ---
 
 ## System Overview

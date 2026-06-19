@@ -3,6 +3,7 @@
 from langchain_core.messages import AIMessage
 
 from app.core.logging import get_logger
+from app.services.agents.diagnostic_state import DiagnosticContext
 from app.workflows.state import WorkflowState
 
 logger = get_logger(__name__)
@@ -38,7 +39,10 @@ async def ticket_node(state: WorkflowState) -> dict:
             "email": state.get("user_email"),
             "user_id": state.get("user_id"),
         },
-        "problem_statement": diag.get("exact_problem_statement") or handoff.get("issue_description", ""),
+        "problem_statement": (
+            diag.get("exact_problem_statement")
+            or handoff.get("issue_description", "")
+        ),
         "steps_attempted": steps_tried,
         "conversation_summary": handoff.get("issue_description", ""),
     }
@@ -76,11 +80,18 @@ async def ticket_node(state: WorkflowState) -> dict:
         "confirmed": confirmed,
     }
 
+    # Mark the session as having been offered escalation, so a future bare
+    # "yes" can be unambiguously interpreted as "yes please escalate" rather
+    # than the prior bug where any confirmation became ticket consent.
+    diag_ctx = DiagnosticContext.from_dict(state.get("diagnostic_context") or {})
+    diag_ctx.escalation_offered_in_session = True
+
     return {
         "current_node": "draft_ticket",
         "ticket_draft": ticket_draft,
         "ticket_offered": True,
         "ticket_created": False,
+        "diagnostic_context": diag_ctx.to_dict(),
         "messages": [AIMessage(content=message)],
         "audit_trail": [audit_entry],
     }

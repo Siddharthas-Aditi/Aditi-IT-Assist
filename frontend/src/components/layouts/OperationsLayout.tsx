@@ -81,7 +81,7 @@ export function OperationsLayout() {
               <p className="text-sm font-medium text-white truncate">{user?.full_name}</p>
               <p className="text-xs text-slate-400 truncate">{user?.role}</p>
             </div>
-            <button onClick={logout} className="text-slate-400 hover:text-red-400" title="Logout">
+            <button onClick={() => logout()} className="text-slate-400 hover:text-red-400" title="Logout">
               <LogOut size={16} />
             </button>
           </div>

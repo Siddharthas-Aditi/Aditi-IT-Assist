@@ -1,0 +1,173 @@
+"""Schemas for the IT Specialist queue + structured handoff packages.
+
+The :class:`HandoffPackage` is the typed contract a live specialist receives
+when they pick up a chat. It contains **everything** the AI gathered so the
+specialist never has to re-ask the user the same questions — that's the
+whole point of warm handoff.
+
+These schemas are exposed on the queue endpoints (see
+``app/api/v1/specialist_queue.py``). Keeping them separate from
+``schemas/chat.py`` means the chat client never accidentally depends on the
+internal handoff shape.
+"""
+
+from datetime import datetime
+from typing import Literal
+from uuid import UUID
+
+from pydantic import BaseModel, Field
+
+
+class HandoffSummary(BaseModel):
+    """One-screen-tall summary the specialist reads first."""
+
+    issue_one_liner: str = Field(..., description="Plain-English one-line problem statement.")
+    affected_system: str | None = None
+    issue_category: str | None = None
+    issue_subtype: str | None = None
+    urgency: Literal["low", "medium", "high", "critical"] | None = None
+    user_name: str | None = None
+    user_email: str | None = None
+    ai_confidence_at_handoff: float = Field(0.0, ge=0.0, le=1.0)
+
+
+class StepAttempted(BaseModel):
+    """One troubleshooting step that was suggested + the outcome."""
+
+    instruction: str
+    outcome: Literal["worked", "failed", "skipped", "unknown"] = "unknown"
+    source_kb_title: str | None = None
+
+
+class KBSourceConsulted(BaseModel):
+    """A KB article the AI grounded its answer on."""
+
+    article_id: str
+    title: str
+    relevance: float | None = None
+
+
+class WebSourceConsulted(BaseModel):
+    """An external source the AI considered (web fallback)."""
+
+    url: str
+    title: str
+    trust_tier: Literal["official", "vendor", "trusted_community", "general_blog"]
+    snippet: str | None = None
+
+
+class ConversationTurn(BaseModel):
+    """A flattened chat turn for the specialist's review pane."""
+
+    role: Literal["user", "assistant"]
+    content: str
+    timestamp: datetime | None = None
+
+
+class HandoffPackage(BaseModel):
+    """The complete, structured context bundle attached to every queue entry.
+
+    The specialist UI renders this as the "Context" pane. Everything is
+    serializable + auditable.
+    """
+
+    schema_version: Literal["1.0"] = "1.0"
+    session_id: str
+    ticket_id: UUID | None = None
+    summary: HandoffSummary
+    diagnostic_slots: dict[str, str] = Field(default_factory=dict)
+    steps_attempted: list[StepAttempted] = Field(default_factory=list)
+    kb_sources_consulted: list[KBSourceConsulted] = Field(default_factory=list)
+    web_sources_consulted: list[WebSourceConsulted] = Field(default_factory=list)
+    conversation: list[ConversationTurn] = Field(default_factory=list)
+    handoff_reason: str
+    handoff_triggered_by: Literal[
+        "user_request", "ai_low_confidence", "exhausted_grounded_steps",
+        "loop_detected", "repeated_failure", "policy_block", "missing_data",
+    ]
+    supervisor_decision_trace: list[dict] = Field(
+        default_factory=list,
+        description="Replayable list of supervisor decisions for audit.",
+    )
+
+
+# ── Queue response shapes ──────────────────────────────────────────────────
+
+
+class QueueEntry(BaseModel):
+    """One row in the specialist's queue list."""
+
+    ticket_id: UUID
+    ticket_number: str
+    title: str
+    priority: Literal["low", "medium", "high", "critical"]
+    status: Literal[
+        "new", "triaged", "in_progress",
+        "waiting_for_user", "escalated", "resolved", "closed",
+    ]
+    category: str | None = None
+    issue_subtype: str | None = None
+    requester_name: str | None = None
+    queued_at: datetime
+    claimed_by_name: str | None = None
+    claimed_at: datetime | None = None
+    summary: HandoffSummary
+
+
+class QueueListResponse(BaseModel):
+    """Paginated queue list."""
+
+    total: int
+    entries: list[QueueEntry]
+
+
+class ClaimRequest(BaseModel):
+    """Body for the claim endpoint."""
+
+    ticket_id: UUID
+
+
+class ClaimResponse(BaseModel):
+    """Response after a successful claim."""
+
+    ticket_id: UUID
+    ticket_number: str
+    claimed_by_user_id: UUID
+    claimed_at: datetime
+    handoff_package: HandoffPackage
+
+
+class ResolveRequest(BaseModel):
+    """Body for the resolve endpoint."""
+
+    ticket_id: UUID
+    resolution_notes: str
+    propose_knowledge_candidate: bool = Field(
+        False,
+        description=(
+            "If true, the resolution is sent to the Knowledge Improvement queue "
+            "as a candidate for SME review (NEVER auto-published)."
+        ),
+    )
+
+
+class ResolveResponse(BaseModel):
+    ticket_id: UUID
+    status: Literal["resolved"]
+    knowledge_candidate_id: UUID | None = None
+
+
+__all__ = [
+    "ClaimRequest",
+    "ClaimResponse",
+    "ConversationTurn",
+    "HandoffPackage",
+    "HandoffSummary",
+    "KBSourceConsulted",
+    "QueueEntry",
+    "QueueListResponse",
+    "ResolveRequest",
+    "ResolveResponse",
+    "StepAttempted",
+    "WebSourceConsulted",
+]

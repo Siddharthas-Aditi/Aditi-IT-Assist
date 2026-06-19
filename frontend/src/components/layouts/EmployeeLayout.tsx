@@ -74,7 +74,7 @@ export function EmployeeLayout() {
               <p className="text-sm font-medium text-gray-900 truncate">{user?.full_name}</p>
               <p className="text-xs text-gray-500 truncate">{user?.email}</p>
             </div>
-            <button onClick={logout} className="text-gray-400 hover:text-red-500" title="Logout">
+            <button onClick={() => logout()} className="text-gray-400 hover:text-red-500" title="Logout">
               <LogOut size={16} />
             </button>
           </div>

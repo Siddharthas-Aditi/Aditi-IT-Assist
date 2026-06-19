@@ -95,7 +95,7 @@ export function AdminLayout() {
               <p className="text-sm font-medium text-white truncate">{user?.full_name}</p>
               <p className="text-xs text-indigo-400 truncate">{user?.role}</p>
             </div>
-            <button onClick={logout} className="text-indigo-400 hover:text-red-400" title="Logout">
+            <button onClick={() => logout()} className="text-indigo-400 hover:text-red-400" title="Logout">
               <LogOut size={16} />
             </button>
           </div>

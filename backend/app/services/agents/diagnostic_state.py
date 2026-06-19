@@ -90,6 +90,11 @@ class DiagnosticContext:
     # ── Resolution Context ───────────────────────────────────────
     steps_already_tried: list[str] = field(default_factory=list)
     live_agent_requested: bool = False
+    # Persists across turns: True once the workflow has offered escalation to
+    # the user at least once in this session. Used to disambiguate a bare
+    # "yes" — which after a confirm-understanding question means "yes I have
+    # this issue", but after an escalation offer means "yes please escalate".
+    escalation_offered_in_session: bool = False
 
     # ── Troubleshooting State & Memory ───────────────────────────
     # Normalized instruction text the agent has already PRESENTED to the user.
@@ -215,6 +220,11 @@ class DiagnosticContext:
         self.issue_resolved = False
         self.escalation_reason = None
         self.last_response_type = None
+        # A new topic resets the escalation-offer flag — a future bare "yes"
+        # in the new issue must not be misread as "yes please escalate the
+        # old one".
+        self.escalation_offered_in_session = False
+        self.live_agent_requested = False
 
     @staticmethod
     def _norm_step(text: str) -> str:
@@ -330,6 +340,7 @@ class DiagnosticContext:
             "network_type": self.network_type,
             "steps_already_tried": self.steps_already_tried,
             "live_agent_requested": self.live_agent_requested,
+            "escalation_offered_in_session": self.escalation_offered_in_session,
             "suggested_steps": self.suggested_steps,
             "attempted_steps": self.attempted_steps,
             "failed_steps": self.failed_steps,

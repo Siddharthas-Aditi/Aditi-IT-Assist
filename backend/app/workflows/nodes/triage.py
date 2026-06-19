@@ -23,6 +23,11 @@ from app.services.agents.entity_normalizer import (
     detect_issue_intent,
     normalize_entity,
 )
+from app.services.agents.intent_classifier import (
+    ConversationIntent,
+    classify_intent,
+)
+from app.services.agents.llm_intent import classify_intent_with_llm
 from app.services.agents.playbooks import get_playbook, get_playbook_for_entity  # noqa: F401
 from app.services.agents.sentiment_analyzer import SentimentAnalyzerService
 from app.services.agents.subtype_classifier import classify_subtype
@@ -109,9 +114,7 @@ def _is_gratitude(text: str) -> bool:
     words = [w for w in t.replace(",", " ").split() if w]
     filler = {"a", "so", "very", "lot", "much", "you", "for", "the", "help",
               "that", "this", "your", "assistance", "support"}
-    if len(words) <= 6 and all(w in _GRATITUDE_WORDS or w in filler for w in words):
-        return True
-    return False
+    return len(words) <= 6 and all(w in _GRATITUDE_WORDS or w in filler for w in words)
 
 
 _NEGATION_PREFIXES = {"not", "no", "nope", "didn't", "did not", "hasn't", "haven't",
@@ -144,7 +147,7 @@ def _is_positive_feedback(text: str) -> bool:
 
 # Greetings / small talk that should be met with a warm welcome, not triage.
 _GREETING_WORDS = {
-    "hi", "hii", "hiii", "hello", "helo", "hey", "hey", "hiya", "yo",
+    "hi", "hii", "hiii", "hello", "helo", "hey", "hiya", "yo",
     "hi there", "hello there", "hey there", "good morning", "good afternoon",
     "good evening", "greetings", "howdy", "morning", "afternoon", "evening",
     "namaste", "hola", "sup", "whatsup", "what's up",
@@ -206,8 +209,8 @@ ISSUE_CATEGORIES = [
     "other",
 ]
 
-CLASSIFICATION_PROMPT = """You are a professional IT support classification specialist at Aditi Consulting.
-Analyze the user's message and classify their IT issue.
+CLASSIFICATION_PROMPT = """You are a professional IT support classification specialist
+at Aditi Consulting. Analyze the user's message and classify their IT issue.
 
 Categories:
 - email/outlook, video-conferencing/zoom, device-management/intune
@@ -260,6 +263,67 @@ async def triage_node(state: WorkflowState) -> dict:
         return _welcome_message()
 
     diag_ctx = DiagnosticContext.from_dict(state.get("diagnostic_context") or {})
+
+    # ── Step 0 (NEW): Conversational intent classification ───────
+    # Hybrid: LLM-first for natural-language understanding, deterministic
+    # keyword classifier as fallback AND as safety override for the bug-class
+    # we already pinned with tests (NEW_TOPIC, ESCALATE_REQUEST). See
+    # docs/architecture/conversation-intents.md for the layered contract.
+    #
+    # LLM understands phrasings we never wrote keywords for ("unable to
+    # connect to internet", "I am not getting new mails"). The keyword layer
+    # is still authoritative for safety-critical routing — it can OVERRIDE
+    # the LLM, never the other way around.
+    intent_context = dict(
+        has_active_issue=bool(
+            diag_ctx.issue_category
+            or diag_ctx.normalized_system
+            or diag_ctx.suggested_steps
+        ),
+        awaiting_confirmation=diag_ctx.awaiting_confirmation,
+        steps_given=bool(diag_ctx.suggested_steps),
+        issue_resolved=diag_ctx.issue_resolved,
+    )
+    try:
+        intent_result = await classify_intent_with_llm(
+            user_message, **intent_context
+        )
+    except Exception as exc:  # noqa: BLE001 — defensive; the keyword layer never raises
+        logger.warning("llm_intent_unexpected_error", error=str(exc))
+        intent_result = classify_intent(user_message, **intent_context)
+    logger.info(
+        "conversation_intent",
+        session_id=state.get("session_id"),
+        intent=intent_result.intent.value,
+        confidence=intent_result.confidence,
+        matched=intent_result.matched,
+    )
+
+    # NEW_TOPIC: the user is switching to a different IT issue. Reset the
+    # diagnostic context (including category and system) so the next turn
+    # diagnoses the new problem from scratch. We do NOT create a ticket here —
+    # that requires explicit ESCALATE_REQUEST + confirmation.
+    if intent_result.intent is ConversationIntent.NEW_TOPIC:
+        diag_ctx.reset_issue_context()
+        diag_ctx.issue_category = None
+        diag_ctx.normalized_system = None
+        diag_ctx.raw_system_mention = None
+        diag_ctx.entity_confidence = 0.0
+        diag_ctx.affected_system = None
+        diag_ctx.topic_shifts += 1
+        return _new_topic_message(diag_ctx, intent_result.matched)
+
+    # ESCALATE_REQUEST: the user explicitly asked for a human / ticket. Set the
+    # live-agent flag so the routing layer takes the escalation path, and mark
+    # the escalation as confirmed so the service layer is allowed to persist
+    # the ticket (without this flag, the workflow only OFFERS a ticket).
+    if intent_result.intent is ConversationIntent.ESCALATE_REQUEST:
+        diag_ctx.live_agent_requested = True
+        diag_ctx.escalation_reason = (
+            diag_ctx.escalation_reason
+            or "User explicitly requested a live IT specialist."
+        )
+        return _escalate_request_handoff(state, diag_ctx)
 
     # ── Step 0a: Post-resolution handling ────────────────────────
     # The previous issue was resolved. Two cases:
@@ -711,20 +775,127 @@ _CONFIRM_FRAGMENTS: dict[str, str] = {
 }
 
 
+# Varied openers for the "let me confirm I understood" question. Picking by a
+# stable hash of the subtype keeps individual runs deterministic for tests, but
+# distributes phrasing across different issues so the agent doesn't sound like
+# it's reading from a script.
+_CONFIRM_OPENERS: tuple[str, ...] = (
+    "Got it — just to make sure I've understood:",
+    "Thanks for the detail. Quick check before I dive in:",
+    "Okay, let me make sure I'm on the same page:",
+    "Right — so if I've got this:",
+)
+
+_CONFIRM_FOLLOWUPS: tuple[str, ...] = (
+    "is that right? Once you confirm, I'll walk you through the fix.",
+    "have I got that? Say yes and I'll share the next steps.",
+    "does that match what you're seeing? Confirm and I'll get you sorted.",
+    "is that the gist? If so, I'll talk you through how to fix it.",
+)
+
+
+def _pick(options: tuple[str, ...], key: str) -> str:
+    """Pick a deterministic-but-varied option based on a stable hash of ``key``."""
+    return options[(hash(key) & 0x7FFFFFFF) % len(options)]
+
+
 def _confirmation_message(diag_ctx: DiagnosticContext) -> str:
-    """A natural 'let me confirm I understood' question before solving."""
-    system = diag_ctx.affected_system or "IT"
+    """A natural 'let me confirm I understood' question before solving.
+
+    Varied phrasing keyed on the subtype so the same issue produces a stable
+    response in tests, while different issues phrase the question differently
+    — avoiding the "every reply opens with 'Got it. Just to make sure...'"
+    feel of the previous implementation.
+    """
+    system = diag_ctx.affected_system or "your IT"
     subtype = (diag_ctx.issue_subtype or "").replace("_", "-").lower()
     detail = _CONFIRM_FRAGMENTS.get(subtype) or diag_ctx.exact_problem_statement
+    key = subtype or system
+
     if detail:
-        return (
-            f"Got it. Just to make sure I've understood your {system} issue correctly — "
-            f"{detail}. Is that right? Once you confirm, I'll walk you through how to fix it."
-        )
+        opener = _pick(_CONFIRM_OPENERS, key)
+        follow = _pick(_CONFIRM_FOLLOWUPS, key)
+        return f"{opener} {detail} — {follow}"
     return (
-        f"Thanks. So I can help with your {system} issue — could you confirm I've "
-        f"got the gist of it, and I'll talk you through the fix?"
+        f"Thanks. So I can help with your {system} issue — could you confirm "
+        f"I've got the gist of it, and I'll talk you through the fix?"
     )
+
+
+_NEW_TOPIC_OPENERS: tuple[str, ...] = (
+    "Of course — what's the new issue?",
+    "Sure thing. What's coming up now?",
+    "Happy to help with that. What's going on this time?",
+    "Got it — tell me about the new problem and I'll take a look.",
+)
+
+
+def _new_topic_message(diag_ctx: DiagnosticContext, matched: str) -> dict:
+    """Handle a NEW_TOPIC intent.
+
+    The user switched to an unrelated issue mid-session. We've already reset
+    the diagnostic context; now invite them to describe the new problem.
+    Critically, we do NOT create a ticket — that bug ("I have another problem"
+    → ticket ITA-000007) was the original reason this layer exists.
+    """
+    # Pick a deterministic but varied opener — hash the matched phrase so the
+    # same trigger always picks the same opener (helps tests pin output).
+    opener = _NEW_TOPIC_OPENERS[hash(matched) % len(_NEW_TOPIC_OPENERS)]
+    diag_ctx.phase = DiagnosticPhase.INTAKE
+    diag_ctx.last_response_type = "new_topic"
+    return {
+        "current_node": "triage",
+        "issue_category": None,
+        "issue_subcategory": None,
+        "issue_subtype": None,
+        "issue_resolved": False,
+        "needs_clarification": True,
+        "clarification_question": opener,
+        "quick_replies": None,
+        "diagnostic_context": diag_ctx.to_dict(),
+        "conversation_phase": diag_ctx.phase.value,
+        "messages": [AIMessage(content=opener)],
+        "audit_trail": [{
+            "event": "triage.new_topic_reset",
+            "matched": matched,
+            "topic_shifts": diag_ctx.topic_shifts,
+        }],
+    }
+
+
+def _escalate_request_handoff(state: WorkflowState, diag_ctx: DiagnosticContext) -> dict:
+    """Handle an explicit ESCALATE_REQUEST intent.
+
+    The user asked for a human in plain language ("connect me to a specialist",
+    "raise a ticket"). We mark the escalation as user-confirmed so the service
+    layer is allowed to persist the ticket, and we let the workflow flow to the
+    escalation node via the live_agent_requested path. The escalation/ticket
+    nodes downstream produce the actual draft + handoff message.
+    """
+    diag_ctx.phase = DiagnosticPhase.ESCALATING
+    diag_ctx.last_response_type = "escalate"
+    return {
+        "current_node": "triage",
+        "issue_category": diag_ctx.issue_category,
+        "issue_subcategory": diag_ctx.issue_subcategory,
+        "issue_subtype": diag_ctx.issue_subtype,
+        "issue_resolved": False,
+        "needs_clarification": False,
+        "clarification_question": None,
+        "quick_replies": None,
+        "severity": state.get("severity") or _infer_severity(diag_ctx),
+        "urgency": state.get("urgency") or "high",
+        "diagnostic_context": diag_ctx.to_dict(),
+        "conversation_phase": diag_ctx.phase.value,
+        # Explicit user request → confirmed escalation. The service layer
+        # enforces ticket-on-confirm only; this is the safe path.
+        "escalation_confirmed": True,
+        "should_escalate": True,
+        "audit_trail": [{
+            "event": "triage.escalate_request",
+            "reason": diag_ctx.escalation_reason,
+        }],
+    }
 
 
 def _greeting_message(diag_ctx: DiagnosticContext) -> dict:

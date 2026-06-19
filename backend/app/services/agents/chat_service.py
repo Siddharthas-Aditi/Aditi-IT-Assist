@@ -15,6 +15,8 @@ from app.schemas.chat import (
     TicketRef,
 )
 from app.services.agents.context_summarizer import ContextSummarizerService
+from app.services.agents.intent_classifier import ConversationIntent
+from app.services.agents.llm_intent import classify_intent_with_llm
 from app.services.llm_service import get_llm_service
 from app.services.ticket_service import TicketService
 
@@ -207,6 +209,17 @@ class ChatService:
         # Persist session state for future turns
         _sessions[session_id] = result
 
+        # If the workflow detected a NEW_TOPIC this turn (triage reset the
+        # diagnostic context), drop the session's cached ticket reference.
+        # The OLD ticket remains in the database; the cache is only for
+        # idempotency of the *current* escalation flow. The new issue, if it
+        # ever escalates, gets its own ticket.
+        diag = result.get("diagnostic_context") or {}
+        if diag.get("last_response_type") == "new_topic":
+            _session_tickets.pop(session_id, None)
+            logger.info("session_ticket_cache_cleared_on_new_topic",
+                        session_id=session_id)
+
         return result
 
     def _format_response(
@@ -286,16 +299,54 @@ class ChatService:
     ) -> TicketRef | None:
         """Create a real ticket when (and only when) escalation is confirmed.
 
-        Idempotent per session: if a ticket already exists it is reused. Returns
-        the ticket reference if one exists/was created, else None (offer only).
+        Idempotent per session: if a ticket already exists AND this turn ALSO
+        wants to escalate (re-click of "Connect with a specialist"), the same
+        ticket is returned. On turns where the workflow is NOT escalating, the
+        cached ticket is NOT returned — otherwise the format-response layer
+        would override every subsequent reply with the "ticket created" banner
+        even when the user is asking a new question. That was the second bug
+        in the ITA-000006 transcript.
+
+        Three layers of defense against unwanted ticket creation:
+
+        1. ``escalation_confirmed`` must be True — only the workflow's
+           escalation node sets this, and only when the user's intent
+           classified as ESCALATE_REQUEST or (CONFIRM + prior offer).
+        2. **Belt-and-suspenders intent guard** — we independently re-classify
+           the user's last message and check the offer-required rule for
+           CONFIRM. See :meth:`_user_intent_authorizes_ticket`.
+        3. **Per-turn caching** — once a ticket exists, we only re-surface it
+           when this turn is also requesting escalation.
         """
         existing = _session_tickets.get(session_id)
-        if existing:
-            return TicketRef(**existing)
+        wants_escalation_this_turn = bool(
+            result.get("escalation_confirmed")
+            or (
+                (result.get("diagnostic_context") or {}).get("live_agent_requested")
+            )
+        )
 
-        # Only persist on EXPLICIT confirmation (typed yes / connect-me). A bare
-        # escalation offer must not create a ticket.
+        # Idempotency for re-clicks: return the existing ticket only when this
+        # turn is also asking to escalate. Otherwise the conversation moves on.
+        if existing and wants_escalation_this_turn:
+            return TicketRef(**existing)
+        if existing:
+            return None
+
+        # Only persist on EXPLICIT confirmation (typed yes after offer, or
+        # explicit "connect me with a specialist"). A bare escalation offer
+        # must not create a ticket.
         if not result.get("escalation_confirmed"):
+            return None
+
+        # Defense in depth: re-verify the user's last message expresses an
+        # escalation/confirmation intent.
+        if not await self._user_intent_authorizes_ticket(result):
+            logger.warning(
+                "ticket_creation_blocked_by_intent_guard",
+                session_id=session_id,
+                reason="last user message did not classify as CONFIRM/ESCALATE_REQUEST",
+            )
             return None
 
         draft = result.get("ticket_draft")
@@ -304,6 +355,51 @@ class ChatService:
             return None
 
         return await self._persist_and_queue(session_id, draft, requester)
+
+    @staticmethod
+    async def _user_intent_authorizes_ticket(result: dict) -> bool:
+        """Return True iff the user's last message classifies as a ticket-grant intent.
+
+        Walks the workflow's message list, finds the most recent human turn,
+        and runs the typed ConversationIntent classifier on it.
+
+        * ``ESCALATE_REQUEST`` always authorizes — explicit human ask.
+        * ``CONFIRM`` only authorizes when escalation was actually offered to
+          the user in a prior turn (``escalation_offered_in_session`` on the
+          diagnostic context, or ``ticket_offered`` on the current result).
+          Without that prior offer, a bare "yes" can mean "yes I have this
+          issue" (confirm-understanding), which must NOT spawn a ticket.
+        * Everything else (NEW_TOPIC, GRATITUDE, REPEAT_OR_SIMPLIFY,
+          CONTINUE, ...) blocks ticket creation.
+        """
+        last_user_text = ""
+        for msg in reversed(result.get("messages", []) or []):
+            if isinstance(msg, HumanMessage) or (
+                hasattr(msg, "type") and msg.type == "human"
+            ):
+                last_user_text = getattr(msg, "content", "") or ""
+                break
+        if not last_user_text:
+            # No human message visible (workflow-internal call) — fall back to
+            # trusting escalation_confirmed alone. This path is exercised by
+            # the unit tests with synthetic state.
+            return True
+        intent = await classify_intent_with_llm(
+            last_user_text,
+            awaiting_confirmation=True,
+            has_active_issue=True,
+            steps_given=True,
+        )
+        if intent.intent is ConversationIntent.ESCALATE_REQUEST:
+            return True
+        if intent.intent is ConversationIntent.CONFIRM:
+            diag = result.get("diagnostic_context") or {}
+            return bool(
+                diag.get("escalation_offered_in_session")
+                or diag.get("live_agent_requested")
+                or result.get("ticket_offered")
+            )
+        return False
 
     async def request_live_agent(
         self, session_id: str, requester: User

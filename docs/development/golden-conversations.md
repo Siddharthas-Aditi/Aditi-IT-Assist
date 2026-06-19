@@ -246,3 +246,126 @@ Ungrounded / cross-domain answer                          → final <= 0.25
 Repeated failures (loop_counter, failed_attempts > 0)     → final reduced
 ```
 Automated in `backend/tests/unit/test_confidence.py`.
+
+---
+
+## Scenario 14: Mid-conversation topic switch (the ITA-000007 regression)
+
+**Expected behavior**: Agent recognizes `NEW_TOPIC`, resets the diagnostic
+context, and asks what the new issue is. **No ticket is created.**
+
+```
+Turn 1: User: "Hi, mailbox is full"
+        Bot:  confirm-understanding ("…just to make sure…")
+Turn 2: User: "yes"
+        Bot:  troubleshooting steps for mailbox-full
+Turn 3: User: "I have an another problem"
+        Expected: NEW_TOPIC intent → reset → "Of course — what's the new issue?"
+        Must NOT: create a ticket, repeat mailbox-full steps, or auto-escalate
+```
+Automated in `backend/tests/unit/test_chat_golden_conversations.py::
+TestMailboxFullThenAnotherProblem`. Intent-layer regressors in
+`tests/unit/test_intent_classifier.py::TestNewTopic`.
+
+---
+
+## Scenario 15: Explicit human handoff creates a ticket
+
+**Expected behavior**: When the user types "connect me with a specialist",
+the supervisor routes to `ESCALATE`, the chat service creates a ticket with
+the structured handoff package, and the queue exposes it for pickup.
+
+```
+Turn 1: User: "VPN keeps disconnecting"
+        Bot:  clarification or grounded steps
+Turn 2: User: "please connect me with a specialist"
+        Expected: ticket created, HandoffPackage v1.0 attached,
+                  user message confirms ticket number
+        Must NOT: silently retry the AI; the user asked for a human
+```
+Automated in `tests/unit/test_chat_golden_conversations.py::
+TestExplicitEscalationCreatesTicket`.
+
+---
+
+## Scenario 16: Atomic claim — no duplicate pickup
+
+**Expected behavior**: Two IT specialists racing to claim the same chat
+end up with exactly one claimer; the other gets HTTP 409.
+
+```
+Setup: ticket T in status 'triaged', assigned_to = NULL
+Action: specialist A and specialist B both POST /specialist-queue/claim
+        with body { ticket_id: T }
+Expected:
+  • exactly one 200 OK with ClaimResponse (assigned_to = winner)
+  • the other gets 409 with the winner's name in the message
+```
+Atomic SQL contract is in `services/specialist_queue_service.py::claim`.
+
+---
+
+## Scenario 17: Specialist resolution → KB improvement candidate
+
+**Expected behavior**: When an IT specialist resolves a chat-derived ticket
+with "Send to KB Improvement queue" checked, a `KnowledgeCandidate` is
+created (state=proposed), NOT a published article.
+
+```
+Action: POST /specialist-queue/resolve
+        { ticket_id, resolution_notes, propose_knowledge_candidate: true }
+Expected:
+  • ticket.status = 'resolved'
+  • new KnowledgeCandidate row, state='proposed',
+    source='specialist_resolution', source_ticket_id=<this>
+  • no row in knowledge_articles
+  • response carries knowledge_candidate_id
+```
+
+---
+
+## Scenario 18: Web fallback gates
+
+**Expected behavior**: Web fallback runs only when the specialist's
+`web_fallback_allowed` is `True`, after the per-specialist soft cap, and
+every kept result becomes a `KnowledgeCandidate`.
+
+```
+Case A: zoom_meetings, 3rd delegation reached, KB confidence 0.4
+        Expected: supervisor → WEB_FALLBACK
+        Service: filters to OFFICIAL + VENDOR + TRUSTED_COMMUNITY tiers
+        Result: each kept result → KnowledgeCandidate (web_fallback)
+
+Case B: outlook (web_fallback_allowed=False), 3rd delegation reached
+        Expected: supervisor → ESCALATE
+        Service: refuses if called directly; logs web_research_blocked
+```
+Registry contract in `tests/unit/test_agent_registry.py`; routing in
+`tests/unit/test_supervisor.py`.
+
+---
+
+## Scenario 19: Supervisor handoff cap
+
+**Expected behavior**: After 8 agent-to-agent handoffs in one session, the
+supervisor escalates rather than continuing to ping between specialists.
+
+```
+SessionMetrics.handoffs = 10 (any further turn)
+Expected: supervisor.decide(...) → NextAction.ESCALATE
+          reason contains "handoff cap"
+```
+Automated in `tests/unit/test_supervisor.py::TestGuardrails`.
+
+---
+
+## Scenario 20: Loop detection
+
+**Expected behavior**: Two consecutive no-progress turns (no new slot
+filled, no new step tried) force escalation.
+
+```
+SessionMetrics.loop_signals = 2
+Expected: supervisor → ESCALATE, reason "loop detected"
+```
+Automated in `tests/unit/test_supervisor.py::TestGuardrails`.

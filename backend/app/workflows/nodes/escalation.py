@@ -11,6 +11,8 @@ from langchain_core.messages import AIMessage
 
 from app.core.logging import get_logger
 from app.services.agents.diagnostic_state import DiagnosticContext
+from app.services.agents.intent_classifier import ConversationIntent
+from app.services.agents.llm_intent import classify_intent_with_llm
 from app.workflows.state import WorkflowState
 
 logger = get_logger(__name__)
@@ -33,10 +35,16 @@ async def escalation_node(state: WorkflowState) -> dict:
 
     diag_ctx = DiagnosticContext.from_dict(state.get("diagnostic_context") or {})
 
-    # NEW: Check if user is confirming escalation (to avoid duplicate message)
+    # NEW: Check if user is confirming escalation (to avoid duplicate message).
+    # Crucially, a bare CONFIRM only counts as escalation-consent when an
+    # offer was already made in a prior turn — otherwise "yes correct" to a
+    # confirm-understanding question would silently spawn a ticket.
     messages = state.get("messages", [])
     latest_message = messages[-1].content if messages else ""
-    is_confirming_escalation = _is_user_confirming_escalation(latest_message)
+    was_offered = bool(diag_ctx.escalation_offered_in_session)
+    is_confirming_escalation = await _is_user_confirming_escalation(
+        latest_message, was_offered=was_offered
+    )
 
     if is_confirming_escalation and diag_ctx.resolution_attempts > 0:
         # User already said yes to escalation → skip asking again, proceed to handoff
@@ -133,9 +141,9 @@ def _build_escalation_message(diag_ctx: DiagnosticContext, reason: str) -> str:
     # NEW: Check if user asked for simpler explanation but it didn't help
     if diag_ctx.last_response_type == "resolve_simplified" and diag_ctx.resolution_attempts >= 2:
         return (
-            f"I understand these steps are complicated. "
-            f"Let me connect you with our IT team — they can walk you through "
-            f"this step-by-step and answer any questions you have."
+            "I understand these steps are complicated. "
+            "Let me connect you with our IT team — they can walk you through "
+            "this step-by-step and answer any questions you have."
         )
 
     if diag_ctx.resolution_attempts >= 2:
@@ -240,18 +248,32 @@ def _suggest_actions(diag_ctx: DiagnosticContext) -> list[str]:
     return actions
 
 
-def _is_user_confirming_escalation(message: str) -> bool:
-    """Check if user is confirming/accepting escalation offer.
+async def _is_user_confirming_escalation(
+    message: str, *, was_offered: bool = False,
+) -> bool:
+    """Check whether the user is confirming an escalation offer.
 
-    Keywords: yes, connect, talk to, agent, specialist, human, etc.
-    This avoids repeating the escalation question when user already said yes.
+    Uses the hybrid LLM+keyword classifier so natural phrasings like
+    "yeah go ahead and route it to IT" are understood without code changes.
+
+    The disambiguation contract is unchanged:
+
+    * ESCALATE_REQUEST always counts — the user explicitly asked for a human.
+    * CONFIRM only counts when ``was_offered`` is True (a prior turn already
+      offered escalation). Without that prior offer, a bare "yes" can mean
+      "yes I have this issue" (confirm-understanding) — must NOT spawn a
+      ticket.
+
+    Everything else (NEW_TOPIC, REPEAT_OR_SIMPLIFY, GRATITUDE, CONTINUE, ...)
+    blocks ticket creation regardless of LLM confidence.
     """
-    keywords = {
-        "yes", "yeah", "yep", "ok", "okay", "sure", "go ahead",
-        "connect", "connect me", "talk to", "talk to someone",
-        "agent", "specialist", "human", "person", "it team",
-        "create ticket", "raise ticket", "ticket", "escalate",
-        "help", "please help",
-    }
-    msg_lower = message.lower().strip()
-    return any(kw in msg_lower for kw in keywords)
+    if not message or not message.strip():
+        return False
+    result = await classify_intent_with_llm(
+        message,
+        awaiting_confirmation=True,
+        has_active_issue=True,
+    )
+    if result.intent is ConversationIntent.ESCALATE_REQUEST:
+        return True
+    return result.intent is ConversationIntent.CONFIRM and was_offered

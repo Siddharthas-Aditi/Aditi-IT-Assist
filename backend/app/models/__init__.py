@@ -25,7 +25,9 @@ from app.models.knowledge import (
     KnowledgeReviewNote,
     KnowledgeTaxonomyTerm,
 )
+from app.models.knowledge_candidate import KnowledgeCandidate
 from app.models.remote_support import RemoteSessionEvent, RemoteSupportConsent, RemoteSupportSession
+from app.models.specialist_chat import SpecialistChatMessage, SpecialistChatSession
 from app.models.sso import IdentityProviderConfig, IdPGroupRoleMapping, SPCertificate
 from app.models.support import Message, SupportSession
 from app.models.ticket import Ticket, TicketComment, TicketEvent
@@ -63,6 +65,10 @@ __all__ = [
     "KnowledgeOwnershipGroup",
     "KnowledgeFeedback",
     "KnowledgeReviewNote",
+    "KnowledgeCandidate",
+    # Live IT-Specialist Chat
+    "SpecialistChatSession",
+    "SpecialistChatMessage",
     # Remote Support
     "RemoteSupportSession",
     "RemoteSupportConsent",

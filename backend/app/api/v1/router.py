@@ -12,6 +12,11 @@ from app.api.v1.ingestion import router as ingestion_router
 from app.api.v1.knowledge import router as knowledge_router
 from app.api.v1.knowledge_admin import router as knowledge_admin_router
 from app.api.v1.remote_support import router as remote_support_router
+from app.api.v1.specialist_chat import (
+    queue_router as specialist_queue_extras_router,
+)
+from app.api.v1.specialist_chat import router as specialist_chat_router
+from app.api.v1.specialist_queue import router as specialist_queue_router
 from app.api.v1.tickets import router as tickets_router
 
 api_router = APIRouter()
@@ -31,3 +36,16 @@ api_router.include_router(analytics_router, prefix="/analytics", tags=["analytic
 api_router.include_router(remote_support_router, prefix="/remote-support", tags=["remote-support"])
 api_router.include_router(admin_router, prefix="/admin", tags=["admin"])
 api_router.include_router(feedback_router, prefix="/feedback", tags=["feedback"])
+# Live IT-specialist features — queue (claim/release/resolve), 'My Assigned',
+# and the human-to-human chat itself. See docs/architecture/live-specialist-chat.md
+api_router.include_router(
+    specialist_queue_router, prefix="/specialist-queue", tags=["specialist-queue"],
+)
+api_router.include_router(
+    specialist_queue_extras_router,
+    prefix="/specialist-queue",
+    tags=["specialist-queue"],
+)
+api_router.include_router(
+    specialist_chat_router, prefix="/specialist-chat", tags=["specialist-chat"],
+)

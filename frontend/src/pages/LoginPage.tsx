@@ -1,7 +1,17 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '@/stores/auth-store';
 import { ROLE_ROUTES } from '@/types/auth';
+
+/** Human-readable banner shown when we land on /login with ?reason=…
+ *  These come from `auth-store.logout({ reason })` which is centralized,
+ *  so the wording is in one place. */
+const REASON_BANNERS: Record<string, string> = {
+  expired: 'Your session expired. Please sign in again.',
+  session_expired: 'Your session expired. Please sign in again.',
+  refresh_failed: 'We could not extend your session. Please sign in again.',
+  auth_required: 'Please sign in to continue.',
+};
 
 export function LoginPage() {
   const [email, setEmail] = useState('');
@@ -10,6 +20,10 @@ export function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
   const { login } = useAuthStore();
+  const [searchParams] = useSearchParams();
+  const reason = searchParams.get('reason');
+  const next = searchParams.get('next');
+  const reasonMessage = reason ? REASON_BANNERS[reason] : null;
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -19,8 +33,12 @@ export function LoginPage() {
     try {
       await login({ email, password });
       const { user } = useAuthStore.getState();
+      // Respect `next=` if it's a same-origin relative path — never a full
+      // URL (open-redirect guard).
+      const safeNext =
+        next && next.startsWith('/') && !next.startsWith('//') ? next : null;
       const defaultRoute = user ? ROLE_ROUTES[user.role] || '/support' : '/support';
-      navigate(defaultRoute);
+      navigate(safeNext ?? defaultRoute, { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
     } finally {
@@ -40,6 +58,12 @@ export function LoginPage() {
             Enterprise IT Support Platform
           </p>
         </div>
+
+        {reasonMessage && !error && (
+          <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+            {reasonMessage}
+          </div>
+        )}
 
         {error && (
           <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
