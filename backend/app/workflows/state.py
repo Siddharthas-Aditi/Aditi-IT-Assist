@@ -130,3 +130,9 @@ class WorkflowState(TypedDict):
     # AI copilot mode (for IT agents)
     copilot_mode: bool  # True when assisting an IT agent
     copilot_suggestions: list[str]  # Suggestions for the agent
+
+    # ── Supervisor (Phase-1 shadow / Phase-2 primary) ─────────────
+    # When the supervisor shadow node runs, it leaves its decision here so
+    # downstream nodes + analytics can join on it. Schema mirrors
+    # ``SupervisorDecision`` minus the inputs snapshot.
+    supervisor_decision: dict | None

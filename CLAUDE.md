@@ -220,36 +220,47 @@ make lint               # Linting (both)
 
 ## Implementation Status
 
-> Last validated: 2026-06-10 — see `docs/development/validation-report.md`
+> Last validated: 2026-06-19 — see `plans/phase1-hardening.md` for the full iteration log.
 
 ### ✅ Fully Implemented
 | Area | Status | Notes |
 |------|--------|-------|
-| FastAPI backend | ✅ | All routes, CORS, lifespan |
-| JWT Auth (local) | ✅ | Login, register, /me, logout |
-| RBAC (5 roles) | ✅ | `require_roles`, `require_permissions` |
+| FastAPI backend | ✅ | All routes, CORS, lifespan + background scheduler |
+| JWT Auth (local) | ✅ | Login, register, /me, logout, **/auth/refresh**, typed 401 error codes |
+| RBAC (5 roles) | ✅ | `require_roles`, `require_permissions`, **typed specialist-chat + KB-promote permissions** |
 | Ticket lifecycle | ✅ | SLA, assignment, events, isolation |
-| LangGraph workflow | ✅ | 6 nodes, state machine, routing |
-| Knowledge retrieval | ✅ | Governed published-only retrieval + citations; YAML keyword fallback |
-| Knowledge Management | ✅ | Structured articles, lifecycle/governance, versioning, taxonomy, indexing, analytics — see `docs/architecture/knowledge-management.md` |
-| LLM integration | ✅ | LiteLLM abstraction, keyword fallback |
+| LangGraph workflow | ✅ | 6 nodes + **supervisor shadow node** (Phase-1 dual-run mode) |
+| Conversational intent classifier | ✅ | Hybrid LLM-first + keyword safety net; 11 typed intents; versioned |
+| Multi-agent registry + supervisor | ✅ | Declarative AGENT_REGISTRY, 7 specialists, pure-function routing decisions, guardrails (handoff cap, loop detection, confidence floor) |
+| Specialist agents (7) | ✅ | Outlook + Access/MFA + Zoom/Meetings + Intune + Sixth Sense + Hardware + Network/VPN. Shared `_progression` helper. |
+| Knowledge retrieval | ✅ | Grounded published-only retrieval + citations; subtype-aware reranking |
+| Knowledge Management | ✅ | Structured articles, lifecycle/governance, versioning, taxonomy, indexing, analytics |
+| Knowledge Improvement Loop | ✅ | `KnowledgeCandidate` model + service; review-gated promotion; six signal sources |
+| Controlled web fallback | ✅ | `ControlledWebResearchAgent`: registry opt-in, trust-tier filter, mandatory candidate creation, audit log |
+| LLM integration | ✅ | LiteLLM abstraction, hybrid intent path, structural-validity guard on LLM picks |
 | Remote support | ✅ | Session, consent, audit trail |
+| Live IT Specialist Chat | ✅ | Dedicated tables, lifecycle state machine, **3-min idle timeout** (configurable), typed end reasons, full transcript persistence |
+| Specialist Queue + My Assigned | ✅ | Atomic claim (DB-level), typed HandoffPackage v1.0, REST API, **frontend UI** wired and verified |
+| Background scheduler | ✅ | Pure-asyncio loop in FastAPI lifespan; idle sweeper every 30 s |
 | Analytics API | ✅ | Dashboard metrics, SLA, workload |
-| Audit logging | ✅ | AuditEvent model, service |
+| Audit logging | ✅ | AuditEvent model + service; every specialist-chat transition audited |
+| Session expiry handling | ✅ | Typed 401 error codes, single API interceptor, refresh-once mutex, proactive idle-tab logout, centralized redirect, `next=` open-redirect guard |
 | Frontend routing | ✅ | Role-aware routes, guards |
-| Frontend auth store | ✅ | Zustand persist, token refresh |
+| Frontend auth store | ✅ | Zustand persist, **refresh_token + tokenExpiresAt persistence**, idle-tab timer, session-expired event listener |
+| Frontend specialist UX | ✅ | `LiveQueuePage`, `AssignedTicketsPage`, `LiveChatPage` — all polling-based, tsc + eslint clean |
 | Docker compose | ✅ | Dev + prod targets, health checks |
-| Alembic migrations | ✅ | 002_enterprise_upgrade |
+| Alembic migrations | ✅ | 002…**008** (007=knowledge_candidates, 008=specialist_chat) |
 
 ### 🚧 Stubbed / Scaffolded (Not Yet Functional)
 | Area | Status | Notes |
 |------|--------|-------|
 | SAML SSO | 🚧 Stub | Endpoints exist; IdP call is `pass` |
 | pgvector search | 🚧 Stub | YAML keyword fallback in use |
-| WebSocket chat | ❌ Not started | HTTP polling only |
-| Knowledge learning agent | ❌ Not started | Async worker not implemented |
-| Human Support Copilot | ❌ Not started | Spec in agents/08-copilot.md |
-| LLM in production | 🚧 Config | Set `LLM_API_KEY` to activate |
+| WebSocket chat | ❌ Phase 2 | HTTP polling currently; API shape supports drop-in upgrade |
+| Knowledge Candidate review UI | ❌ Phase 2 | Backend model + service ready; SME UI deferred |
+| Refresh-token rotation + denylist | ❌ Phase 2 | Single long-lived refresh token currently |
+| Cross-tab BroadcastChannel logout | ❌ Phase 2 | Each tab runs its own idle timer |
+| Human Support Copilot | ❌ Future | Spec in agents/08-copilot.md |
 | Token blacklisting | 🚧 TODO | Redis key storage needed |
 | Rate limiting | 🚧 Config | `RATE_LIMIT_ENABLED=true` (middleware stub) |
 

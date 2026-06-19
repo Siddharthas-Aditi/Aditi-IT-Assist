@@ -22,6 +22,7 @@ import { ProfilePage } from '@/pages/employee/ProfilePage';
 // IT Operations pages
 import { LiveQueuePage } from '@/pages/operations/LiveQueuePage';
 import { AssignedTicketsPage } from '@/pages/operations/AssignedTicketsPage';
+import { LiveChatPage } from '@/pages/operations/LiveChatPage';
 import { TicketWorkspacePage } from '@/pages/operations/TicketWorkspacePage';
 import { RemoteAssistPage } from '@/pages/operations/RemoteAssistPage';
 
@@ -64,6 +65,8 @@ export function App() {
       <Route path="/support" element={<RouteGuard><EmployeeLayout /></RouteGuard>}>
         <Route index element={<SupportChatPage />} />
         <Route path="chat" element={<SupportChatPage />} />
+        {/* Live chat with an IT specialist — same component, role-aware UI. */}
+        <Route path="live-chat/:sessionId" element={<LiveChatPage />} />
         <Route path="tickets" element={<MyTicketsPage />} />
         <Route path="tickets/:id" element={<TicketDetailPage />} />
         <Route path="profile" element={<ProfilePage />} />
@@ -74,6 +77,7 @@ export function App() {
         <Route index element={<LiveQueuePage />} />
         <Route path="queue" element={<LiveQueuePage />} />
         <Route path="assigned" element={<AssignedTicketsPage />} />
+        <Route path="live-chat/:sessionId" element={<LiveChatPage />} />
         <Route path="tickets/:id" element={<TicketWorkspacePage />} />
         <Route path="remote-assist" element={<RemoteAssistPage />} />
       </Route>

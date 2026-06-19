@@ -16,7 +16,11 @@ logger = structlog.get_logger()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """Application lifespan: startup and shutdown events."""
+    """Application lifespan: startup and shutdown events.
+
+    Owns: logging setup, dev-mode schema bootstrap, the in-process
+    background-job scheduler (idle sweeper for live specialist chat).
+    """
     setup_logging()
 
     # Import all models so their metadata is registered with Base
@@ -39,7 +43,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             await conn.run_sync(Base.metadata.create_all)
         logger.info("database_schema_ready", env=settings.APP_ENV)
 
-    yield
+    # Background jobs — the idle sweeper auto-ends abandoned specialist
+    # chat sessions every N seconds. Runs in the same event loop as the
+    # API; the context manager cancels + awaits each task on shutdown.
+    from app.services.scheduler import start_background_jobs
+
+    async with start_background_jobs(
+        idle_sweeper_enabled=settings.IDLE_SWEEPER_ENABLED,
+        idle_sweeper_interval_seconds=settings.IDLE_SWEEPER_INTERVAL_SECONDS,
+    ):
+        yield
 
     # Shutdown
     if settings.APP_ENV == "development":

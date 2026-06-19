@@ -148,6 +148,20 @@ class P(StrEnum):
     CHAT_END_SESSION = "chat:end_session"
     CHAT_REQUEST_LIVE_AGENT = "chat:request_live_agent"
 
+    # ── Specialist Queue + Live Chat (Phase 1) ─────────────
+    # See docs/architecture/human-handoff-and-queue.md
+    SPECIALIST_QUEUE_VIEW = "specialist_queue:view"
+    SPECIALIST_QUEUE_CLAIM = "specialist_queue:claim"
+    SPECIALIST_QUEUE_RESOLVE = "specialist_queue:resolve"
+    SPECIALIST_CHAT_START = "specialist_chat:start"
+    SPECIALIST_CHAT_MESSAGE = "specialist_chat:message"
+    SPECIALIST_CHAT_END = "specialist_chat:end"
+
+    # ── Knowledge Candidate Promotion (Phase 1) ────────────
+    # The two-step approve → promote flow lives behind the same permission;
+    # publish of the resulting article continues to require KNOWLEDGE_PUBLISH.
+    KNOWLEDGE_PROMOTE_CANDIDATE = "knowledge:promote_candidate"
+
     # ── Remote Support ─────────────────────────────────────
     REMOTE_REQUEST_VIEW = "remote:request_view"
     REMOTE_REQUEST_CONTROL = "remote:request_control"
@@ -242,6 +256,13 @@ PERMISSION_REGISTRY: list[PermissionDef] = [
     PermissionDef(P.CHAT_TRANSFER, "Transfer Chat", Resource.CHAT, Action.TRANSFER, Scope.ASSIGNED, audit_required=True),
     PermissionDef(P.CHAT_END_SESSION, "End Chat Session", Resource.CHAT, Action.END, Scope.ASSIGNED),
     PermissionDef(P.CHAT_REQUEST_LIVE_AGENT, "Request Live Agent", Resource.CHAT, Action.REQUEST, Scope.OWN),
+    # ── Specialist queue + live chat ──
+    PermissionDef(P.SPECIALIST_QUEUE_VIEW, "View Specialist Queue", Resource.CHAT, Action.READ, Scope.TEAM),
+    PermissionDef(P.SPECIALIST_QUEUE_CLAIM, "Claim Queue Ticket", Resource.CHAT, Action.ASSIGN, Scope.TEAM, audit_required=True),
+    PermissionDef(P.SPECIALIST_QUEUE_RESOLVE, "Resolve Specialist Ticket", Resource.CHAT, Action.END, Scope.ASSIGNED, audit_required=True),
+    PermissionDef(P.SPECIALIST_CHAT_START, "Start Live Specialist Chat", Resource.CHAT, Action.START, Scope.ASSIGNED, audit_required=True),
+    PermissionDef(P.SPECIALIST_CHAT_MESSAGE, "Send Specialist Chat Message", Resource.CHAT, Action.CREATE, Scope.ASSIGNED, audit_required=True),
+    PermissionDef(P.SPECIALIST_CHAT_END, "End Live Specialist Chat", Resource.CHAT, Action.END, Scope.ASSIGNED, audit_required=True),
     # ── Remote Support ──
     PermissionDef(P.REMOTE_REQUEST_VIEW, "Request Screen View", Resource.REMOTE, Action.REQUEST, Scope.NONE, audit_required=True),
     PermissionDef(P.REMOTE_REQUEST_CONTROL, "Request Screen Control", Resource.REMOTE, Action.REQUEST, Scope.NONE, audit_required=True, high_risk=True),
@@ -271,6 +292,7 @@ PERMISSION_REGISTRY: list[PermissionDef] = [
     PermissionDef(P.KNOWLEDGE_SUBMIT_FEEDBACK, "Submit KB Feedback", Resource.KNOWLEDGE, Action.FEEDBACK, Scope.OWN),
     PermissionDef(P.KNOWLEDGE_INGEST, "Upload & Ingest Documents", Resource.KNOWLEDGE, Action.CREATE, Scope.NONE, audit_required=True),
     PermissionDef(P.KNOWLEDGE_INGEST_REVIEW, "Review & Save Ingestion Candidates", Resource.KNOWLEDGE, Action.UPDATE, Scope.ALL, audit_required=True),
+    PermissionDef(P.KNOWLEDGE_PROMOTE_CANDIDATE, "Promote KB Improvement Candidate", Resource.KNOWLEDGE, Action.APPROVE, Scope.ALL, audit_required=True, high_risk=False),
     # ── Feedback ──
     PermissionDef(P.FEEDBACK_SUBMIT, "Submit Conversation Feedback", Resource.FEEDBACK, Action.SUBMIT, Scope.OWN),
     PermissionDef(P.FEEDBACK_VIEW_OWN, "View Own Feedback", Resource.FEEDBACK, Action.READ, Scope.OWN),
@@ -345,6 +367,13 @@ ROLE_PERMISSIONS: dict[UserRole, list[P]] = {
         P.CHAT_ACCEPT_HANDOFF,
         P.CHAT_TRANSFER,
         P.CHAT_END_SESSION,
+        # Phase 1 — specialist queue + live chat:
+        P.SPECIALIST_QUEUE_VIEW,
+        P.SPECIALIST_QUEUE_CLAIM,
+        P.SPECIALIST_QUEUE_RESOLVE,
+        P.SPECIALIST_CHAT_START,
+        P.SPECIALIST_CHAT_MESSAGE,
+        P.SPECIALIST_CHAT_END,
         P.REMOTE_REQUEST_VIEW,
         P.REMOTE_START_SESSION,
         P.REMOTE_END_SESSION,
@@ -376,6 +405,8 @@ ROLE_PERMISSIONS: dict[UserRole, list[P]] = {
         P.KNOWLEDGE_VIEW_ANALYTICS,
         P.KNOWLEDGE_INGEST,
         P.KNOWLEDGE_INGEST_REVIEW,
+        # Phase 1 — IT_LEAD can promote KB candidates into real articles.
+        P.KNOWLEDGE_PROMOTE_CANDIDATE,
         P.ANALYTICS_VIEW_TEAM,
         P.ANALYTICS_VIEW_ALL,
         P.ANALYTICS_VIEW_AGENT_PERF,

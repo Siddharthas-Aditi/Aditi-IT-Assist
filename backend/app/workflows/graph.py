@@ -6,6 +6,7 @@ from app.workflows.nodes.escalation import escalation_node
 from app.workflows.nodes.policy import policy_enforcement_node
 from app.workflows.nodes.resolution import resolution_node
 from app.workflows.nodes.retrieval import retrieval_node
+from app.workflows.nodes.supervisor_shadow import supervisor_shadow_node
 from app.workflows.nodes.ticketing import ticket_node
 from app.workflows.nodes.triage import triage_node
 from app.workflows.state import WorkflowState
@@ -33,7 +34,10 @@ def route_after_triage(state: WorkflowState) -> str:
     if diag.get("live_agent_requested"):
         return "escalate"
 
-    return "policy"  # Run policy checks before retrieval
+    # Shadow-mode supervisor runs between triage and policy. It logs +
+    # records its decision but never alters routing in Phase 1. See
+    # docs/development/rollout-plan-multi-agent.md for the promotion plan.
+    return "supervisor_shadow"
 
 
 def route_after_policy(state: WorkflowState) -> str:
@@ -103,6 +107,7 @@ def build_support_workflow() -> StateGraph:
 
     # Add nodes
     workflow.add_node("triage", triage_node)
+    workflow.add_node("supervisor_shadow", supervisor_shadow_node)
     workflow.add_node("policy", policy_enforcement_node)
     workflow.add_node("retrieve", retrieval_node)
     workflow.add_node("resolve", resolution_node)
@@ -114,6 +119,11 @@ def build_support_workflow() -> StateGraph:
 
     # Define edges with conditional routing
     workflow.add_conditional_edges("triage", route_after_triage)
+    # supervisor_shadow is a pass-through: it logs the supervisor's decision
+    # then hands off to the policy node so the legacy linear path continues.
+    # Promoting it to a primary routing node (Phase 2) replaces this single
+    # edge with a conditional that branches on supervisor_decision.action.
+    workflow.add_edge("supervisor_shadow", "policy")
     workflow.add_conditional_edges("policy", route_after_policy)
     workflow.add_conditional_edges("retrieve", route_after_retrieval)
     workflow.add_conditional_edges("resolve", route_after_resolution)

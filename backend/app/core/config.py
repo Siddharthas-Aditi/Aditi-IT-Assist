@@ -142,6 +142,21 @@ class Settings(BaseSettings):
     RATE_LIMIT_REQUESTS_PER_MINUTE: int = 60
     RATE_LIMIT_BURST: int = 10
 
+    # Background scheduler — the live-specialist-chat idle sweeper runs in
+    # the same event loop as the API. Turn off in tests or when running
+    # multiple replicas without a distributed lock (see scheduler.py docs).
+    IDLE_SWEEPER_ENABLED: bool = True
+    IDLE_SWEEPER_INTERVAL_SECONDS: int = 30
+
+    # ── Supervisor routing (Phase-1 dual-run) ────────────────────────
+    # When SHADOW is on, the supervisor runs after triage on every turn but
+    # its decision is only LOGGED — the legacy graph still drives routing.
+    # When PRIMARY is on, the supervisor's decision is acted on. We never
+    # set both at once; PRIMARY implies SHADOW for analytics joining.
+    # See docs/development/rollout-plan-multi-agent.md.
+    FEATURE_SUPERVISOR_SHADOW: bool = True
+    FEATURE_SUPERVISOR_PRIMARY: bool = False
+
     # Document Ingestion
     UPLOAD_DIR: str = "/tmp/aditi_uploads"
     MAX_UPLOAD_MB: int = 50

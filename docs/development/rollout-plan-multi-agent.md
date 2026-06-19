@@ -33,22 +33,31 @@ LangGraph** yet — that's Phase 2. This is deliberate: shipping the
 declarative pieces first lets reviewers vet the contracts before behavior
 changes go live.
 
-### Phase 2 — Supervisor-driven graph (next sprint)
-- Add a `FEATURE_SUPERVISOR_ROUTING=true` env flag.
-- In `app/workflows/graph.py`, when the flag is on, route through a new
-  `supervisor_node` that calls `supervisor.decide()` and emits a
-  conditional edge for each `NextAction`. The legacy
-  triage→retrieve→resolve nodes still exist; the supervisor *chooses* to
-  call them.
-- Add a `specialist_dispatch_node` that invokes the right
-  `SpecialistAgent.handle(...)` based on `decision.agent`.
-- Migrate the other six specialists (`access_mfa`, `zoom_meetings`,
-  `device_intune`, `sixth_sense`, `hardware`, `network_vpn`) from "registry
-  declaration only" to full implementations following the Outlook template.
-- Build the IT specialist UI for the queue + handoff package pane.
-- Run **dual-mode evaluation**: every request runs through both the legacy
-  graph and the supervisor graph; differences logged. Promote when delta is
-  within tolerance on the golden set.
+### Phase 1 hardening — COMPLETE (2026-06-19)
+- Supervisor wired into the graph in **shadow mode** behind
+  `FEATURE_SUPERVISOR_SHADOW=true`: logs its decision + writes
+  `supervisor_decision` onto the workflow state without changing routing.
+- All six remaining specialists implemented (`access_mfa`,
+  `zoom_meetings`, `device_intune`, `sixth_sense`, `hardware`,
+  `network_vpn`) via the shared `_progression` helper. Outlook is the
+  reference. `SPECIALIST_REGISTRY` dispatch table populated.
+- Live IT specialist chat: tables + service + API + idle sweeper + audit.
+- Frontend specialist UX: `LiveQueuePage`, `AssignedTicketsPage`,
+  `LiveChatPage` — polling-based, tsc + eslint clean.
+- Migrations `007_knowledge_candidates` + `008_specialist_chat` shipped.
+- Typed permissions for queue/chat/promote; routes migrated.
+
+### Phase 2 — Promote supervisor to primary (next sprint)
+- Run **dual-mode evaluation**: shadow logs are now generating production
+  data; compare supervisor's recommended action against actual graph
+  routing. Promote when diff rate < 2% on the golden conversation set
+  for two weeks.
+- Flip `FEATURE_SUPERVISOR_PRIMARY=true`: rewrite the existing
+  `route_after_triage` to consume `supervisor_decision.action` instead
+  of its own logic; add `specialist_dispatch_node` that invokes the
+  appropriate `SpecialistAgent.handle(...)`.
+- Wire web-fallback path through the supervisor for the two specialists
+  that allow it (`zoom_meetings`, `network_vpn`).
 
 ### Phase 3 — Improvement loop UI + observability (sprint after)
 - SME review queue UI for `KnowledgeCandidate`.
@@ -144,23 +153,36 @@ CI runs all of these on every PR that touches `agents/`, `workflows/`, or
 
 ---
 
-## 7. What's explicitly **deferred** (acknowledged debt)
+## 7. What's explicitly **deferred** (acknowledged debt) — updated
 
-- **Specialist agents 2–7 still delegate to legacy resolution.** They're
-  registered in the registry (so the supervisor routes correctly), but
-  their `handle()` will, for now, call into the existing
-  `resolution_node`. Migration in Phase 2.
-- **Frontend specialist queue UI** — API ships in Phase 1; UI in Phase 2.
-- **Async Knowledge Improvement Agent worker** — service exists; nightly
-  worker job in Phase 3.
-- **LLM-backed response composer** as a separate agent. Phase 4.
-- **Observability dashboards.** Logs exist; Grafana panels in Phase 3.
-- **Migration `003_knowledge_candidates.py`.** Must be written before
-  Phase 2 deploy (the model is in code; the DDL is not).
-- **Permission additions.** New permissions for `specialist_queue:*`
-  routes need to be added to `app.core.permissions` and seeded; the
-  current routes use the existing `ticket:assign` permission as a
-  conservative default.
+Phase 1 has shipped everything below the line in this table.
+
+**Shipped in Phase 1 (was previously deferred):**
+- ✅ Specialist agents 2–7 now have real `handle()` implementations.
+- ✅ Frontend specialist queue UI + live-chat pane.
+- ✅ Migration `007_knowledge_candidates.py` + `008_specialist_chat.py`.
+- ✅ Typed permissions (`specialist_queue:*`, `specialist_chat:*`,
+  `knowledge:promote_candidate`) added, seeded, and routes migrated.
+- ✅ Idle-sweeper background job (asyncio loop in lifespan).
+- ✅ Supervisor wired in shadow mode for dual-run analytics.
+
+**Still deferred (Phase 2+):**
+- **WebSocket push** instead of HTTP polling for live chat. Frontend
+  polling endpoint shape is the upgrade target; backend can stream the
+  same DTO.
+- **Async Knowledge Improvement Agent worker** — service + candidate
+  table exist; nightly job (re-rank, generate suggested KB drafts from
+  recurring candidates) deferred to Phase 3.
+- **LLM-backed response composer** as a separate agent. Currently the
+  specialist's `handle()` renders the message inline. Phase 4.
+- **Observability dashboards.** Structured logs exist with stable event
+  names; Grafana / dashboard wiring is Phase 3.
+- **Knowledge Candidate review UI** — backend ready; SME-facing admin
+  page is Phase 2.
+- **Refresh-token rotation + Redis denylist** — single long-lived
+  refresh token currently; rotation needs Redis lease + token table.
+- **Cross-tab `BroadcastChannel` logout** — each tab independently
+  watches its own JWT exp.
 
 ---
 

@@ -42,13 +42,19 @@ def _queue_service(db: DBDep) -> SpecialistQueueService:
 
 
 QueueDep = Annotated[SpecialistQueueService, Depends(_queue_service)]
-ClaimerDep = Annotated[User, Depends(require_permissions(P.TICKET_ASSIGN))]
+# Listing the queue is broader than claiming/resolving — separate scopes so
+# read-only roles (e.g. it_lead viewing without taking work) don't need the
+# claim permission. The route-level dep here uses claim because every queue
+# endpoint also exposes write actions.
+ClaimerDep = Annotated[User, Depends(require_permissions(P.SPECIALIST_QUEUE_CLAIM))]
+ResolverDep = Annotated[User, Depends(require_permissions(P.SPECIALIST_QUEUE_RESOLVE))]
+QueueViewerDep = Annotated[User, Depends(require_permissions(P.SPECIALIST_QUEUE_VIEW))]
 
 
 @router.get("", response_model=QueueListResponse)
 async def list_queue(
     service: QueueDep,
-    current_user: ClaimerDep,
+    current_user: QueueViewerDep,
     only_unclaimed: bool = Query(False, description="Hide tickets already claimed by anyone."),
     include_mine: bool = Query(True, description="Include tickets already assigned to me."),
     limit: int = Query(50, ge=1, le=200),
@@ -66,7 +72,7 @@ async def list_queue(
 async def get_handoff_package(
     ticket_id: uuid.UUID,
     service: QueueDep,
-    current_user: ClaimerDep,
+    current_user: QueueViewerDep,
     db: DBDep,
 ) -> HandoffPackage:
     """Return the full typed handoff package for a single queue entry."""
@@ -143,7 +149,7 @@ async def release_ticket(
 async def resolve_ticket(
     body: ResolveRequest,
     service: QueueDep,
-    current_user: ClaimerDep,
+    current_user: ResolverDep,
     db: DBDep,
 ) -> ResolveResponse:
     """Mark a ticket resolved + optionally propose a KB improvement candidate.

@@ -50,7 +50,11 @@ router = APIRouter()
 queue_router = APIRouter()  # mounted by the queue router for "/mine"
 
 DBDep = Annotated[AsyncSession, Depends(get_db)]
-SpecialistDep = Annotated[User, Depends(require_permissions(P.TICKET_ASSIGN))]
+# Specialists need to start live chats. The send-message / end endpoints
+# are gated by *participation* on the session (the user is also allowed to
+# message and end), so they use CurrentUser at the route level and the
+# service enforces the actual identity check.
+SpecialistDep = Annotated[User, Depends(require_permissions(P.SPECIALIST_CHAT_START))]
 
 
 def _svc(db: DBDep) -> SpecialistChatService:
@@ -240,10 +244,17 @@ async def end_session(
 
 # ── "My Assigned" — mounted under the queue router ─────────────────────
 
+# "My Assigned" is a queue view (read-only listing of tickets I own); it
+# should be visible to anyone with queue-view permission, not gated by the
+# write-action permissions.
+MyAssignedViewer = Annotated[
+    User, Depends(require_permissions(P.SPECIALIST_QUEUE_VIEW))
+]
+
 
 @queue_router.get("/mine", response_model=MyAssignedResponse)
 async def my_assigned(
-    current_user: SpecialistDep,
+    current_user: MyAssignedViewer,
     db: DBDep,
 ) -> MyAssignedResponse:
     """The specialist's own assigned tickets + live-chat status for each."""
