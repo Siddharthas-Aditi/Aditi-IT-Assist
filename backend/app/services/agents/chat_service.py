@@ -285,7 +285,14 @@ class ChatService:
             requires_escalation=bool(result.get("should_escalate")) and ticket_ref is None,
             escalation_offered=bool(result.get("ticket_offered")) and ticket_ref is None,
             ticket=ticket_ref,
-            follow_up_question=result.get("clarification_question"),
+            # Deduplicate: the triage node returns the confirmation question in
+            # BOTH the AIMessage (→ content) and clarification_question. Only
+            # surface the follow-up box when it adds new information.
+            follow_up_question=(
+                result.get("clarification_question")
+                if result.get("clarification_question") != content
+                else None
+            ),
             quick_replies=quick_replies,
             conversation_phase=result.get("conversation_phase"),
             resolved=bool(result.get("issue_resolved")),
