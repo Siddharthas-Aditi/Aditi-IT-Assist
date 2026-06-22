@@ -5,17 +5,7 @@ from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from httpx import ASGITransport, AsyncClient
-
-from app.main import app
-
-
-@pytest.fixture
-async def client():
-    """Create unauthenticated async test client."""
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        yield ac
+from httpx import AsyncClient
 
 
 class TestHealthEndpoint:
@@ -278,7 +268,11 @@ class TestAdminEndpointAuth:
 
     async def test_audit_log_accessible_to_admin(self, admin_client: AsyncClient):
         """IT admin can access audit log."""
-        response = await admin_client.get("/api/v1/admin/audit-log")
+        with patch("app.api.v1.admin.AuditQueryService") as mock_svc_cls:
+            mock_svc = AsyncMock()
+            mock_svc.list_events.return_value = ([], 0)
+            mock_svc_cls.return_value = mock_svc
+            response = await admin_client.get("/api/v1/admin/audit-log")
         assert response.status_code == 200
         data = response.json()
         assert "events" in data

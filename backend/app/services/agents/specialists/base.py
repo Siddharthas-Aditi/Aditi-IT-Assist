@@ -40,6 +40,7 @@ from typing import TYPE_CHECKING, Protocol, runtime_checkable
 if TYPE_CHECKING:
     from app.services.agents.diagnostic_state import DiagnosticContext
     from app.services.agents.registry import SpecialistAgentSpec, SubAgentSpec
+    from app.services.agents.tools.base import ToolContext
 
 
 @dataclass(frozen=True)
@@ -59,6 +60,10 @@ class SpecialistInput:
     sub_agent: SubAgentSpec | None = None  # set when supervisor picked a sub-agent
     session_id: str = ""
     turn_count: int = 0
+    # Caller identity + authorization for tool calls (Phase 5). When ``None``,
+    # the specialist's tool-use path stays off — tools never run without an
+    # authorized context, even if FEATURE_AGENT_TOOLS is enabled.
+    tool_context: ToolContext | None = None
 
 
 @dataclass(frozen=True)

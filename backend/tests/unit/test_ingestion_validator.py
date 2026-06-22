@@ -20,11 +20,11 @@ def _make(
         "title": title,
         "summary": summary,
         "category": category,
-        "symptoms": symptoms or ["User cannot sync email"],
-        "troubleshooting_steps": troubleshooting or [{"step_number": 1, "instruction": "Check network", "details": ""}],
-        "resolution_steps": resolution or [{"step_number": 1, "instruction": "Restart Outlook", "details": ""}],
+        "symptoms": ["User cannot sync email"] if symptoms is None else symptoms,
+        "troubleshooting_steps": [{"step_number": 1, "instruction": "Check network", "details": ""}] if troubleshooting is None else troubleshooting,
+        "resolution_steps": [{"step_number": 1, "instruction": "Restart Outlook", "details": ""}] if resolution is None else resolution,
         "escalation_criteria": escalation,
-        "tags": tags or ["email", "outlook"],
+        "tags": tags if tags is not None else ["email", "outlook"],
         "confidence": confidence,
     }
 

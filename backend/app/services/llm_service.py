@@ -4,13 +4,23 @@ Uses LiteLLM under the hood for multi-provider support (OpenAI, Azure, Anthropic
 All agent nodes should call this service rather than making direct LLM API calls.
 """
 
+from __future__ import annotations
+
 import json
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from app.core.config import settings
 from app.core.logging import get_logger
+
+# NOTE: tool-calling DTOs are imported lazily (TYPE_CHECKING + inside the
+# parse method). A top-level runtime import would pull in the
+# ``app.services.agents`` package __init__ (which imports chat_service →
+# langchain), creating a circular import because this module is itself imported
+# early by ``app.services.__init__``.
+if TYPE_CHECKING:
+    from app.services.agents.tools.base import LLMToolResponse
 
 logger = get_logger(__name__)
 
@@ -151,6 +161,92 @@ class LLMService:
         except json.JSONDecodeError:
             logger.warning("llm_json_parse_failed", raw_response=raw[:200])
             return {}
+
+    async def complete_with_tools(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+    ) -> LLMToolResponse:
+        """Run a tool-use completion and normalize the provider response.
+
+        Passes OpenAI/LiteLLM-style ``tools`` definitions to the model and
+        returns a provider-agnostic :class:`LLMToolResponse`: either final
+        ``text`` (no tool calls) or one or more :class:`ToolInvocation` the
+        caller's tool runtime will validate and dispatch. This method never
+        executes a tool itself — selection here, enforcement in the runtime.
+
+        Args:
+            messages: Full chat message list (system/user/assistant/tool roles).
+            tools: Tool definitions, e.g. ``ToolSpec.to_llm_tool()`` output.
+            temperature: Override default temperature.
+            max_tokens: Override default max tokens.
+
+        Raises:
+            RuntimeError: If the LLM service is not configured.
+        """
+        if not self.is_available:
+            raise RuntimeError("LLM service not configured — set LLM_API_KEY in environment")
+
+        import litellm
+
+        response = await litellm.acompletion(
+            model=self.model,
+            messages=messages,
+            tools=tools or None,
+            tool_choice="auto" if tools else None,
+            temperature=temperature if temperature is not None else self.temperature,
+            max_tokens=max_tokens or self.max_tokens,
+            api_key=settings.effective_llm_api_key,
+            **(
+                {
+                    "api_base": settings.AZURE_OPENAI_ENDPOINT,
+                    "api_version": settings.AZURE_OPENAI_API_VERSION,
+                }
+                if settings.is_azure
+                else {}
+            ),
+        )
+        return self._parse_tool_response(response)
+
+    @staticmethod
+    def _parse_tool_response(response: Any) -> LLMToolResponse:
+        """Normalize a LiteLLM completion into an :class:`LLMToolResponse`.
+
+        Defensive about provider shape differences: ``tool_calls`` may be
+        absent, ``arguments`` may be a JSON string or already a dict.
+        """
+        from app.services.agents.tools.base import LLMToolResponse, ToolInvocation
+
+        message = response.choices[0].message
+        raw_calls = getattr(message, "tool_calls", None) or []
+        invocations: list[ToolInvocation] = []
+        for call in raw_calls:
+            fn = getattr(call, "function", None)
+            name = getattr(fn, "name", "") if fn else ""
+            raw_args = getattr(fn, "arguments", "") if fn else ""
+            if isinstance(raw_args, str):
+                try:
+                    parsed = json.loads(raw_args) if raw_args.strip() else {}
+                except json.JSONDecodeError:
+                    logger.warning("llm_tool_args_parse_failed", tool=name, raw=raw_args[:200])
+                    parsed = {}
+            elif isinstance(raw_args, dict):
+                parsed = raw_args
+            else:
+                parsed = {}
+            invocations.append(
+                ToolInvocation(
+                    tool_name=name,
+                    raw_args=parsed,
+                    call_id=getattr(call, "id", "") or "",
+                )
+            )
+        return LLMToolResponse(
+            text=getattr(message, "content", None),
+            tool_calls=tuple(invocations),
+        )
 
 
 # Singleton instance — used via dependency injection

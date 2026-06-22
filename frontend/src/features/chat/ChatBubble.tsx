@@ -143,6 +143,20 @@ export function ChatBubble({ message, index }: ChatBubbleProps) {
               </div>
               <div>Phase: {message.debug.conversation_phase ?? '—'}</div>
               <div>Loop counter: {message.debug.loop_counter ?? 0}</div>
+              {message.debug.routed_specialist && (
+                <div>Routed specialist: {message.debug.routed_specialist}</div>
+              )}
+              {message.debug.retrieval_source && (
+                <div>Retrieval: {message.debug.retrieval_source}</div>
+              )}
+              {message.debug.citations && message.debug.citations.length > 0 && (
+                <div>
+                  Citations:{' '}
+                  {message.debug.citations
+                    .map((c) => c.title ?? c.citation_label ?? '—')
+                    .join(', ')}
+                </div>
+              )}
               {message.confidence !== undefined && (
                 <div>Resolution confidence: {Math.round(message.confidence * 100)}%</div>
               )}

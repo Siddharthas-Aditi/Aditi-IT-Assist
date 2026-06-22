@@ -1,0 +1,65 @@
+# Retrieval evaluation dataset (Phase 6).
+#
+# A small, self-contained corpus + labelled queries used to measure retrieval
+# quality deterministically (no DB, no live embedding provider). The harness
+# (tests/unit/test_retrieval_eval.py) runs the shared `ranking` module over the
+# corpus and computes recall@k:
+#
+#   * keyword-only ranking establishes the baseline (must meet the target);
+#   * a hybrid pass with constructed query/article embeddings must do at least
+#     as well as keyword (the "vector never regresses keyword" gate) and is
+#     expected to recover a semantically-related case keyword misses.
+#
+# `embedding` vectors here are illustrative 4-dim vectors chosen so semantically
+# related items point in similar directions — they exercise the cosine + blend
+# plumbing, not a real embedding model. Real-corpus recall with the production
+# model runs in the embedding-gated CI job.
+#
+# Bump `version` when corpus/queries change; CI joins eval results on it.
+version: "1.0.0"
+recall_k: 3
+keyword_recall_target: 0.75
+
+corpus:
+  - key: outlook-mailbox-full
+    text: "Outlook mailbox is full and cannot send or receive email; free up space by clearing Deleted Items and archiving."
+    tags: ["outlook", "mailbox", "quota", "storage"]
+    embedding: [0.9, 0.1, 0.0, 0.0]
+  - key: outlook-password-prompt
+    text: "Outlook keeps prompting for your password repeatedly; clear cached credentials and re-authenticate."
+    tags: ["outlook", "password", "credentials", "authentication"]
+    embedding: [0.1, 0.9, 0.0, 0.0]
+  - key: vpn-not-connecting
+    text: "VPN will not connect; check the client, network, and credentials to restore the tunnel."
+    tags: ["vpn", "network", "connectivity"]
+    embedding: [0.0, 0.0, 0.9, 0.1]
+  - key: zoom-no-audio
+    text: "No audio in Zoom meetings; select the correct speaker and microphone devices."
+    tags: ["zoom", "audio", "meeting"]
+    embedding: [0.0, 0.0, 0.1, 0.9]
+  - key: mailbox-storage-cleanup
+    text: "Reduce Exchange storage usage by removing large attachments and emptying junk to stay under quota."
+    tags: ["exchange", "storage", "cleanup", "quota"]
+    embedding: [0.85, 0.05, 0.0, 0.1]
+
+queries:
+  # Direct keyword matches — baseline must catch these.
+  - id: q-mailbox-full
+    query: "outlook mailbox full cannot send email"
+    expected: ["outlook-mailbox-full"]
+    query_embedding: [0.9, 0.1, 0.0, 0.0]
+  - id: q-password
+    query: "outlook keeps asking password repeatedly"
+    expected: ["outlook-password-prompt"]
+    query_embedding: [0.1, 0.9, 0.0, 0.0]
+  - id: q-vpn
+    query: "vpn will not connect"
+    expected: ["vpn-not-connecting"]
+    query_embedding: [0.0, 0.0, 0.9, 0.1]
+  # Semantic case: query wording overlaps weakly with the lexical text but is
+  # clearly related to mailbox storage — hybrid should surface the cleanup
+  # article via the vector signal.
+  - id: q-storage-semantic
+    query: "running out of mailbox space quota"
+    expected: ["outlook-mailbox-full", "mailbox-storage-cleanup"]
+    query_embedding: [0.88, 0.08, 0.0, 0.05]

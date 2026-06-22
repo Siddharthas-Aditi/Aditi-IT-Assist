@@ -71,6 +71,49 @@ retrieve relevant knowledge, guide troubleshooting, and escalate when needed.
 - **Escalation → ticket → live agent**: when grounded help is exhausted (or the user asks for a human), the agent *offers* to raise a ticket; a real ticket is persisted **only on explicit confirmation** ("Connect with a specialist" → `POST /chat/request-live-agent`, or typed "yes"), and always **before** the human handoff. Persistence is in the service layer (`ChatService._handle_ticketing` / `request_live_agent`), not the workflow nodes — `ticketing.py` only builds a draft + offer. Idempotent per session. See `docs/architecture/escalation-and-live-agent-handoff.md`.
 - Docs: `docs/architecture/chat-grounding-rules.md`, `docs/architecture/retrieval-guardrails.md`, `docs/architecture/troubleshooting-state-machine.md`, `docs/architecture/escalation-and-live-agent-handoff.md`, `docs/development/chat-debugging-guide.md`, `docs/development/golden-conversations.md`
 
+### Agent Tool Calling (Phase 5 — behind `FEATURE_AGENT_TOOLS`, default off)
+- Lets specialists *act*, not just return canned steps. Every tool is a typed, versioned, declarative `ToolSpec` (Pydantic args/result, `side_effect`, `required_permissions`, `approval`); nothing callable that isn't declared. Mirrors the `AGENT_REGISTRY` discipline.
+- **Single enforcement point**: `app/services/agents/tools/runtime.py` `AgentToolRuntime.dispatch` runs every call through allow-list → existence → arg validation → RBAC → **approval gate** → execute, and audits every path (including rejections). `run_loop` is the bounded (≤8) LLM tool-use loop. Read-only/no-dependency on LLM or DB → fully unit-testable.
+- **Tool registry**: `app/services/agents/tools/registry.py` `TOOL_REGISTRY` + `TOOL_REGISTRY_VERSION`, enumerated not dynamic. Phase-5 tools (all read-only, no approval): `kb_search`, `mailbox_quota_estimate`, `ticket_draft`. `ticket_draft` never persists.
+- **Per-agent allow-list**: `SpecialistAgentSpec.allowed_tools` (`REGISTRY_VERSION` → `1.1.0`). Outlook is the reference: tool path activates only when the flag is on, an LLM is configured, AND an authorized `SpecialistInput.tool_context` is supplied — otherwise the deterministic step path runs unchanged. Tool-path failure falls back to deterministic (never regresses).
+- **LLM**: `LLMService.complete_with_tools` does tool *selection* only; enforcement is the runtime's job. Write/destructive + `human` approval machinery is implemented and tested (synthetic `reset_mfa` probe) but unused until Phase 8.
+- Eval/gate: `backend/tests/data/tool_routing_eval.yaml` + `tests/unit/test_tool_routing_eval.py` (0-unauthorized gate, contract pins); unit tests `tests/unit/test_agent_tools.py`, `tests/unit/test_outlook_tool_path.py`.
+- Docs: `docs/architecture/agent-tooling.md`; roadmap `plans/agentic-ops-platform-evolution.md` (Phase 5).
+
+### Semantic + Hybrid Retrieval (Phase 6 — behind `FEATURE_VECTOR_RETRIEVAL`, default off)
+- Replaces keyword-only ranking with a **hybrid blend** (vector + keyword + usage + quality) when an embedding provider is configured; otherwise unchanged keyword path.
+- **Pure ranking core**: `app/services/knowledge/ranking.py` (`RANKING_VERSION`) — `cosine_similarity`, `keyword_overlap_score`, `hybrid_score`, `rank()`. Weights sum to 1.0, tunable via `HYBRID_WEIGHT_*` config. **Keyword floor**: with no vector signal the vector weight folds into keyword, so hybrid never scores below keyword.
+- **Vector query**: `KnowledgeRepository.article_vector_scores` — pgvector `cosine_distance` aggregated to best-chunk similarity per published article. `KnowledgeRetrievalService.search` embeds the query, blends, sets `source=db_hybrid` (else `db_keyword`). Degrades to keyword on no provider / embed error / no embedded chunks; invalid weights fall back to defaults — never fails a request.
+- **Honest indexing**: `indexing.py` marks a chunk `indexed` only when it actually has a vector (else `pending`); article `indexed` only when all chunks embedded. `backfill_embeddings()` + `scripts/backfill_embeddings.py` populate vectors for pre-existing content.
+- Eval/gate: `backend/tests/data/retrieval_eval.yaml` + `tests/unit/test_retrieval_eval.py` (keyword baseline recall@k target; **hybrid ≥ keyword** recall@k). Unit: `test_hybrid_ranking.py`, `test_vector_retrieval.py`.
+- Docs: `docs/architecture/retrieval-and-indexing.md`; roadmap `plans/agentic-ops-platform-evolution.md` (Phase 6).
+
+### MCP Integrations (Phase 7 — behind `FEATURE_MCP_TOOLS`, per-server, default off)
+- Agents *consume* external systems (Microsoft Graph for Entra/Intune/Exchange, ServiceNow) as MCP-backed tools, surfaced into the same `AgentToolRuntime` as local tools — identical allow-list/RBAC/approval/audit. Read-only in Phase 7; writes are Phase 8.
+- **Declarative server allow-list**: `app/services/agents/mcp/profiles.py` `MCP_SERVER_REGISTRY` (`MCP_PROFILE_VERSION`) — transport, trust tier, per-server `allowed_tools`, `side_effect_ceiling`, `auth_secret_ref` (never the secret). Only allow-listed tool names become callable; `build_mcp_tools` rejects bindings exceeding the ceiling.
+- **Session abstraction**: `mcp/session.py` `McpSession` protocol (the tool layer depends on this, not the SDK) + lazy `SdkMcpSession` + injectable provider — fully unit-testable with a fake session.
+- **Typed tools**: `mcp/tools.py` — `entra_account_status`, `intune_device_compliance`, `mailbox_quota_status` (msgraph), `servicenow_incident_lookup` (servicenow). Pydantic args/result; server responses mapped to typed results (unknowns under `raw`, identifiers backfilled). Time-bounded (`MCP_TOOL_TIMEOUT_SECONDS`); timeout/error → typed ERROR → agent degrades to KB-only.
+- **RBAC**: typed perms `integration:directory_read`, `integration:ticketing_read` (granted it_agent+). **Audit**: runtime now records `args_hash`/`result_hash` on every tool call.
+- Enablement: `build_default_runtime(include_mcp=True)` merges enabled MCP tools; specialists declare them in `allowed_tools` (`outlook`→mailbox_quota_status, `access_mfa`→entra_account_status, `device_intune`→intune_device_compliance). `REGISTRY_VERSION` → `1.2.0`. Re-run `seed_enterprise` for the new permissions.
+- Eval/gate: `backend/tests/data/mcp_contract_eval.yaml` + `tests/unit/test_mcp_contract_eval.py` (typed-spec + allow-list + ceiling + 0-unauthorized). Unit: `tests/unit/test_mcp_tools.py`.
+- Docs: `docs/architecture/mcp-integrations.md`; roadmap `plans/agentic-ops-platform-evolution.md` (Phase 7).
+
+### Gated Write Actions & Background Agents (Phase 8 — behind `FEATURE_AGENT_WRITE_ACTIONS` / `FEATURE_BACKGROUND_AGENTS`, default off)
+- **Write tools** (MCP-backed, all `side_effect=write`, `approval=human`): `entra_unlock_account`, `reset_mfa` (perm `integration:directory_write`), `servicenow_create_incident` (perm `integration:ticketing_write`); each takes an `idempotency_key`. Write perms granted to `it_lead`+ (higher bar than Phase-7 reads). No destructive tools.
+- **Two independent gates**: build gate (`FEATURE_AGENT_WRITE_ACTIONS` — `build_mcp_tools` only constructs write tools when on; Phase-7 stays read-only otherwise) and execution gate (runtime returns `needs_approval` and **never executes** a human-gated tool without an approval token — always on).
+- **Propose→approve→execute**: `AgentToolRuntime` surfaces `ProposedAction`s + `pending_approvals`; `execute_approved(proposed, ctx, approver_id=…)` re-dispatches the exact captured invocation through the full gate (allow-list, RBAC, audit w/ hashes, idempotency). Approval never bypasses RBAC. **0 unapproved executions** (eval-asserted). Queue-UI affordance is a follow-up.
+- **Background agents**: `app/services/agents/tasks/` — typed `AgentTask` + `AgentTaskStore` (in-memory; DB-backed is the seam for multi-instance) + `AgentTaskRunner` (bounded concurrency, retry-then-fail, audit, `run_once`/`run_forever`). Reference handlers: `knowledge_improvement_sweep` (never auto-publishes), `proactive_diagnostics`. Started in the lifespan via `start_background_jobs(background_agents_enabled=…)`. Background actions still flow through `AgentToolRuntime`.
+- Eval/gate: `tests/data/action_safety_eval.yaml` + `test_action_safety_eval.py` (0-unapproved gate, RBAC-no-bypass, build gating); `test_agent_task_runner.py`.
+- Docs: `docs/architecture/agent-write-actions-and-tasks.md`; roadmap `plans/agentic-ops-platform-evolution.md` (Phase 8).
+
+### Agent Operability Surfaces (API + UI) — for local testing & ops
+- **Agent-ops API** `app/api/v1/agent_ops.py` (`/agent-ops`): `GET /status` (flags + retrieval mode + MCP servers + versions; it_agent+), approval queue `GET/POST /approvals` + `POST /approvals/{id}/approve|reject` (propose = it_agent+, approve/reject = it_lead+), background tasks `GET/POST /tasks` (it_lead+). Schemas `app/schemas/agent_ops.py`.
+- **Approval queue** `app/services/agents/approvals.py` — in-memory singleton (`get_approval_queue()`); segregation of duties: propose validates + parks (no RBAC), approve runs `AgentToolRuntime.execute_approved` (RBAC enforced against approver, 0 unapproved executions). **Shared task runner** singleton `tasks/factory.py::get_task_runner()` used by both the lifespan loop and the API.
+- **Mock MCP** `mcp/mock_session.py` — `MCP_USE_MOCK` (default true in dev) makes `default_session_provider` return a mock session so all MCP read/write tools work locally with full governance and no real Graph/ServiceNow.
+- **Chat agent activity**: `ChatDebugInfo` now carries `routed_specialist` (supervisor shadow), `retrieval_source`, and `citations` (IT/admin debug view only).
+- **Frontend**: `features/agent-ops/` (React Query), Operations **Approvals** page (`/operations/approvals`), Admin **Agent Operations** page (`/dashboard/agent-ops`), chat debug additions in `features/chat/ChatBubble.tsx`.
+- **Local-dev flags** live in `.env`/`.env.example` (all default off in code). **Run/exercise guide: `docs/development/agentic-local-testing.md`.**
+
 ### Admin Console
 - Admin-focused shell (no cross-workspace "profile switch"). Sections: Analytics, Team Queue, Knowledge Base, User Management, Audit Logs. Routes under `/dashboard/*` (AdminLayout) + `/audit/*`.
 - Backend `app/api/v1/admin.py` → services in `app/services/admin/` (`AdminUserService`, `AuditQueryService`, `AdminStatsService`) + `app/schemas/admin.py`. RBAC via `require_permissions` (`admin:manage_users`, `admin:assign_roles`, `admin:view_audit_log`). Every user/role mutation is audit-logged with before/after diffs. Service-layer rule: a user always keeps ≥1 role.
@@ -241,11 +284,14 @@ make lint               # Linting (both)
 | Conversational intent classifier | ✅ | Hybrid LLM-first + keyword safety net; 11 typed intents; versioned |
 | Multi-agent registry + supervisor | ✅ | Declarative AGENT_REGISTRY, 7 specialists, pure-function routing decisions, guardrails (handoff cap, loop detection, confidence floor) |
 | Specialist agents (7) | ✅ | Outlook + Access/MFA + Zoom/Meetings + Intune + Sixth Sense + Hardware + Network/VPN. Shared `_progression` helper. |
-| Knowledge retrieval | ✅ | Grounded published-only retrieval + citations; subtype-aware reranking |
+| Knowledge retrieval | ✅ | Grounded published-only retrieval + citations; subtype-aware reranking; **hybrid vector+keyword ranking (Phase 6) behind `FEATURE_VECTOR_RETRIEVAL`** |
 | Knowledge Management | ✅ | Structured articles, lifecycle/governance, versioning, taxonomy, indexing, analytics |
 | Knowledge Improvement Loop | ✅ | `KnowledgeCandidate` model + service; review-gated promotion; six signal sources |
 | Controlled web fallback | ✅ | `ControlledWebResearchAgent`: registry opt-in, trust-tier filter, mandatory candidate creation, audit log |
-| LLM integration | ✅ | LiteLLM abstraction, hybrid intent path, structural-validity guard on LLM picks |
+| Agent tool calling (Phase 5) | ✅ behind flag | Typed `TOOL_REGISTRY` + `AgentToolRuntime` (allow-list, RBAC, approval gate, audit w/ arg+result hashes, bounded loop); 3 local read-only tools; `LLMService.complete_with_tools`; Outlook wired behind `FEATURE_AGENT_TOOLS` (default off). Docs: `docs/architecture/agent-tooling.md` |
+| MCP integrations (Phase 7) | ✅ behind flag | Agents consume external systems (Graph: Entra/Intune/Exchange; ServiceNow) as governed MCP-backed read tools behind `FEATURE_MCP_TOOLS` (per-server, default off). Declarative `MCP_SERVER_REGISTRY`, typed tools, typed `integration:*` perms, timeout+degrade. Docs: `docs/architecture/mcp-integrations.md` |
+| Gated write actions + background agents (Phase 8) | ✅ behind flag | Human-approved write tools (unlock account, reset MFA, create incident) behind `FEATURE_AGENT_WRITE_ACTIONS`; propose→approve→execute via `AgentToolRuntime` (0 unapproved executions). Async `AgentTaskRunner` for autonomous agents behind `FEATURE_BACKGROUND_AGENTS`. Docs: `docs/architecture/agent-write-actions-and-tasks.md` |
+| LLM integration | ✅ | LiteLLM abstraction, hybrid intent path, structural-validity guard on LLM picks, **tool-calling (`complete_with_tools`)** |
 | Remote support | ✅ | Session, consent, audit trail |
 | Live IT Specialist Chat | ✅ | Dedicated tables, lifecycle state machine, **3-min idle timeout** (configurable), typed end reasons, full transcript persistence |
 | Specialist Queue + My Assigned | ✅ | Atomic claim (DB-level), typed HandoffPackage v1.0, REST API, **frontend UI** wired and verified |
@@ -263,7 +309,7 @@ make lint               # Linting (both)
 | Area | Status | Notes |
 |------|--------|-------|
 | SAML SSO | 🚧 Stub | Endpoints exist; IdP call is `pass` |
-| pgvector search | 🚧 Stub | YAML keyword fallback in use |
+| pgvector semantic search | ✅ behind flag | Phase 6: hybrid vector+keyword retrieval wired behind `FEATURE_VECTOR_RETRIEVAL` (default off). `AzureOpenAIEmbeddingClient` + pgvector `cosine_distance`; needs an embedding provider configured + `scripts/backfill_embeddings.py` run. Falls back to keyword otherwise. Docs: `docs/architecture/retrieval-and-indexing.md` |
 | WebSocket chat | ❌ Phase 2 | HTTP polling currently; API shape supports drop-in upgrade |
 | Knowledge Candidate review UI | ❌ Phase 2 | Backend model + service ready; SME UI deferred |
 | Refresh-token rotation + denylist | ❌ Phase 2 | Single long-lived refresh token currently |

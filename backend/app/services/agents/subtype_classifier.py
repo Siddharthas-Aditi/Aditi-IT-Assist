@@ -79,7 +79,7 @@ _OUTLOOK_RULES: tuple[SubtypeRule, ...] = (
         keywords=(
             "can't send", "cannot send", "can not send", "unable to send",
             "not sending", "won't send", "will not send", "stuck in outbox",
-            "stuck in the outbox", "emails not going out", "send failed",
+            "stuck in the outbox", "stuck in my outbox", "emails not going out", "send failed",
             "sending failed", "failed to send",
         ),
     ),

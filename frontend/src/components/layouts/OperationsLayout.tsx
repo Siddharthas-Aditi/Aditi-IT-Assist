@@ -9,6 +9,7 @@ import {
   LogOut,
   Headset,
   ArrowLeft,
+  ShieldCheck,
 } from 'lucide-react';
 
 import { useAuthStore } from '@/stores/auth-store';
@@ -17,6 +18,7 @@ const NAV = [
   { to: '/operations/queue', label: 'Live Queue', icon: Inbox },
   { to: '/operations/assigned', label: 'My Assigned', icon: ClipboardList },
   { to: '/operations/remote-assist', label: 'Remote Assist', icon: Monitor },
+  { to: '/operations/approvals', label: 'Approvals', icon: ShieldCheck },
 ];
 
 export function OperationsLayout() {

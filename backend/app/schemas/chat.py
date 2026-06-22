@@ -43,6 +43,12 @@ class ChatDebugInfo(BaseModel):
     confidence_breakdown: dict | None = None
     retrieval_trace: dict | None = None
     escalation_reason: str | None = None
+    # Agent-activity surfacing (operability): which specialist the supervisor
+    # would route to (shadow mode), the retrieval engine used, and the grounded
+    # citations behind the answer.
+    routed_specialist: str | None = None
+    retrieval_source: str | None = None          # db_hybrid | db_keyword | yaml_fallback
+    citations: list[dict] = []
 
 
 class TicketRef(BaseModel):

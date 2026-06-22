@@ -11,7 +11,6 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from httpx import AsyncClient
 
-from app.core.permissions import UserRole, get_effective_permissions
 from app.schemas.admin import (
     AuditEventDetail,
     SystemStats,
@@ -21,17 +20,7 @@ from app.schemas.admin import (
 BASE = "/api/v1/admin"
 
 
-async def _effective(self, user):  # patched onto AuthService.get_user_permissions
-    try:
-        return {str(p) for p in get_effective_permissions(UserRole(user.primary_role))}
-    except ValueError:
-        return set()
-
-
-@pytest.fixture(autouse=True)
-def _patch_permissions():
-    with patch("app.services.auth.service.AuthService.get_user_permissions", new=_effective):
-        yield
+# Permission resolution is handled by the global autouse fixture in conftest.py.
 
 
 def _sample_user_detail() -> UserDetail:

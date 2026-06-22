@@ -60,7 +60,8 @@ class AzureOpenAIEmbeddingClient(EmbeddingClient):
 
     def __init__(self) -> None:
         super().__init__(store_type=settings.VECTOR_STORE_TYPE)
-        self.model = settings.effective_embedding_model           # e.g. "azure/text-embedding-3-large"
+        # e.g. "azure/text-embedding-3-large"
+        self.model = settings.effective_embedding_model
         self.api_key = settings.AZURE_OPENAI_API_KEY
         self.api_base = settings.AZURE_OPENAI_ENDPOINT
         self.api_version = settings.AZURE_OPENAI_API_VERSION
@@ -182,16 +183,22 @@ class KnowledgeIndexingService:
             or existing_chunks[c.chunk_index].content != c.content
         ]
 
+        embedded_now = 0
         if new_chunks_to_embed:
             vectors = await self.embedder.embed([c.content for c in new_chunks_to_embed])
             if vectors:
                 for chunk, vector in zip(new_chunks_to_embed, vectors, strict=False):
                     chunk.embedding = vector
                     chunk.embedding_status = "indexed"
+                    embedded_now += 1
             else:
-                # No-op client (dev without API key) — mark indexed without vectors
+                # No provider wired (dev without an embedding key): keep these
+                # chunks 'pending'. We do NOT pretend they are indexed —
+                # keyword retrieval still works, and a later backfill (or a
+                # configured provider) populates the vectors honestly.
                 for chunk in new_chunks_to_embed:
-                    chunk.embedding_status = "indexed"
+                    if chunk.embedding is None:
+                        chunk.embedding_status = "pending"
         else:
             logger.info(
                 "knowledge_index_skip_embed",
@@ -199,12 +206,15 @@ class KnowledgeIndexingService:
                 reason="all chunks unchanged",
             )
 
-        # Mark all chunks (including unchanged) at the new version.
+        # Bump version and set each chunk's status to reflect REALITY: a chunk is
+        # 'indexed' only when it actually carries a vector; otherwise 'pending'.
         article.index_version += 1
         for chunk in chunks:
-            chunk.embedding_status = "indexed"
             chunk.index_version = article.index_version
-        article.embedding_status = "indexed"
+            chunk.embedding_status = "indexed" if chunk.embedding is not None else "pending"
+
+        all_embedded = bool(chunks) and all(c.embedding is not None for c in chunks)
+        article.embedding_status = "indexed" if all_embedded else "pending"
         article.indexed_at = datetime.now(UTC)
 
         logger.info(
@@ -212,11 +222,40 @@ class KnowledgeIndexingService:
             article_id=str(article.id),
             chunks=chunk_count,
             reembedded=len(new_chunks_to_embed),
+            embedded_now=embedded_now,
+            fully_embedded=all_embedded,
             index_version=article.index_version,
             vector_store=self.embedder.store_type,
             real_embeddings=self.embedder.available,
         )
         return chunk_count
+
+    async def backfill_embeddings(self, *, batch_size: int = 64) -> dict:
+        """Populate vectors for published chunks that have none (Phase 6).
+
+        Targets chunks of published articles whose ``embedding`` is NULL and
+        embeds them in batches. No-op (and honest about it) when no embedding
+        provider is configured. Returns a summary for the backfill script/admin.
+        """
+        if not self.embedder.available:
+            logger.info("knowledge_backfill_skipped", reason="no embedding provider")
+            return {"embedded": 0, "skipped_no_provider": True, "remaining": None}
+
+        pending = await self.repo.list_chunks_missing_embeddings(limit=batch_size)
+        embedded = 0
+        for start in range(0, len(pending), batch_size):
+            batch = pending[start : start + batch_size]
+            vectors = await self.embedder.embed([c.content for c in batch])
+            if not vectors:
+                break
+            for chunk, vector in zip(batch, vectors, strict=False):
+                chunk.embedding = vector
+                chunk.embedding_status = "indexed"
+                embedded += 1
+
+        remaining = len(await self.repo.list_chunks_missing_embeddings(limit=1))
+        logger.info("knowledge_backfill_done", embedded=embedded, remaining=remaining)
+        return {"embedded": embedded, "skipped_no_provider": False, "remaining": remaining}
 
     async def remove_from_index(self, article: KnowledgeArticle) -> None:
         """Remove an article from the retrieval index (on archive)."""

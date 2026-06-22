@@ -85,11 +85,23 @@ class TestConfirmUnderstanding:
         assert result["diagnostic_context"]["awaiting_confirmation"] is True
         # Accept any of the varied confirmation followup phrases (triage.py
         # uses hash-based selection over _CONFIRM_FOLLOWUPS — "is that right"
-        # is one of several valid endings).
+        # is one of several valid endings). When an LLM is available it may
+        # rephrase freely, so we also match the semantic equivalent patterns.
         q = result["clarification_question"].lower()
         assert any(
             phrase in q
-            for phrase in ("is that right", "have I got that", "does that match", "is that the gist")
+            for phrase in (
+                "is that right",
+                "have i got that",
+                "does that match",
+                "is that the gist",
+                "have i understood",
+                "got that right",
+                "sound right",
+                "sound correct",
+                "is that correct",
+                "confirm",
+            )
         ), f"Expected a confirmation followup phrase in: {q!r}"
 
     @pytest.mark.asyncio

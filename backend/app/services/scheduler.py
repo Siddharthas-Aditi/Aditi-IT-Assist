@@ -97,6 +97,8 @@ async def start_background_jobs(
     *,
     idle_sweeper_enabled: bool = True,
     idle_sweeper_interval_seconds: int = _IDLE_SWEEPER_INTERVAL_SECONDS,
+    background_agents_enabled: bool = False,
+    background_agents_poll_seconds: int = 60,
 ) -> AsyncIterator[None]:
     """Async context manager — start jobs on enter, cancel on exit.
 
@@ -120,6 +122,19 @@ async def start_background_jobs(
                     idle_sweeper_interval_seconds,
                 ),
                 name="specialist_chat.idle_sweeper",
+            )
+        )
+
+    if background_agents_enabled:
+        # Phase 8 — autonomous agent task runner (nightly knowledge improvement,
+        # proactive diagnostics). Its own poll loop; failures stay isolated.
+        from app.services.agents.tasks.factory import get_task_runner
+
+        runner = get_task_runner()
+        tasks.append(
+            asyncio.create_task(
+                runner.run_forever(poll_seconds=background_agents_poll_seconds),
+                name="agents.task_runner",
             )
         )
 

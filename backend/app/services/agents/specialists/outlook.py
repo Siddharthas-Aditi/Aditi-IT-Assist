@@ -28,8 +28,10 @@ so behavior is unchanged when the supervisor delegates to this specialist.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
+from app.core.config import settings
+from app.core.logging import get_logger
 from app.services.agents.registry import AGENT_REGISTRY, SpecialistAgentSpec
 from app.services.agents.specialists.base import (
     KnowledgeImprovementHint,
@@ -40,6 +42,9 @@ from app.services.agents.specialists.base import (
 
 if TYPE_CHECKING:  # pragma: no cover
     from app.services.agents.diagnostic_state import DiagnosticContext
+    from app.services.agents.tools.runtime import AgentToolRuntime
+
+logger = get_logger(__name__)
 
 # Pull the spec from the registry at import time. If it's missing, registry
 # is misconfigured — fail loudly.
@@ -81,9 +86,32 @@ _OPENERS = {
 
 
 class OutlookSpecialist:
-    """Specialist agent for Microsoft Outlook + Exchange + M365 email."""
+    """Specialist agent for Microsoft Outlook + Exchange + M365 email.
+
+    Two behaviours:
+
+    * **Deterministic (default):** batch grounded KB steps — unchanged, fully
+      tested, the production path.
+    * **Tool-augmented (Phase 5, opt-in):** when ``FEATURE_AGENT_TOOLS`` is on,
+      an LLM is configured, and an authorized ``tool_context`` is supplied, run
+      a bounded tool-use loop via :class:`AgentToolRuntime`. Falls back to the
+      deterministic path on any failure, so enabling the flag can never make
+      the specialist worse than today.
+
+    ``llm`` and ``tool_runtime`` are injectable for testing; both default to the
+    process singletons resolved lazily at call time.
+    """
 
     spec = _SPEC
+
+    def __init__(
+        self,
+        *,
+        llm: Any | None = None,
+        tool_runtime: AgentToolRuntime | None = None,
+    ) -> None:
+        self._llm = llm
+        self._tool_runtime = tool_runtime
 
     def can_handle(self, inp: SpecialistInput) -> bool:
         """Defense in depth — the supervisor already filtered by category."""
@@ -93,10 +121,38 @@ class OutlookSpecialist:
             or (ctx.normalized_system or "") in self.spec.systems
         )
 
+    def _tools_enabled(self, inp: SpecialistInput) -> bool:
+        """All conditions that must hold for the tool-use path to run."""
+        return bool(
+            settings.FEATURE_AGENT_TOOLS
+            and self.spec.allowed_tools
+            and inp.tool_context is not None
+            and self._resolve_llm() is not None
+            and self._resolve_llm().is_available
+        )
+
+    def _resolve_llm(self) -> Any | None:
+        if self._llm is None:
+            from app.services.llm_service import get_llm_service
+
+            self._llm = get_llm_service()
+        return self._llm
+
+    def _resolve_runtime(self) -> AgentToolRuntime:
+        if self._tool_runtime is None:
+            from app.services.agents.tools.registry import build_default_runtime
+
+            # Include MCP-backed tools (e.g. real mailbox_quota_status) when the
+            # MCP feature is enabled; the runtime governs them identically.
+            self._tool_runtime = build_default_runtime(
+                include_mcp=settings.FEATURE_MCP_TOOLS
+            )
+        return self._tool_runtime
+
     async def handle(self, inp: SpecialistInput) -> SpecialistOutput:
         """Produce the specialist's turn.
 
-        Algorithm:
+        Algorithm (deterministic path):
           1. Collect candidate steps from grounded articles, scoped to the
              active subtype where possible (no cross-subtype bleed).
           2. Drop steps already presented or marked failed.
@@ -105,6 +161,12 @@ class OutlookSpecialist:
           5. If no steps remain, signal escalation with a knowledge hint so
              the Improvement Agent knows the KB is short.
         """
+        if self._tools_enabled(inp):
+            try:
+                return await self._handle_with_tools(inp)
+            except Exception as exc:  # noqa: BLE001 — never regress below deterministic
+                logger.warning("outlook_tool_path_failed_fallback", error=str(exc))
+
         diag_ctx = inp.diag_ctx
         ordered, remaining = _advance_steps(inp)
 
@@ -158,6 +220,72 @@ class OutlookSpecialist:
                 "sub_agent": inp.sub_agent.name if inp.sub_agent else None,
                 "steps_count": len(steps),
                 "remaining_after": max(0, len(remaining) - len(batch)),
+            },
+        )
+
+    async def _handle_with_tools(self, inp: SpecialistInput) -> SpecialistOutput:
+        """Bounded LLM tool-use turn (Phase 5, opt-in).
+
+        The model may call only the specialist's ``allowed_tools`` (kb_search,
+        mailbox_quota_estimate, ticket_draft) — the runtime rejects anything
+        else and enforces RBAC + approval. The grounding contract is preserved:
+        the system prompt forbids inventing steps, and the only path to KB
+        content is ``kb_search`` over the published base.
+        """
+        runtime = self._resolve_runtime()
+        llm = self._resolve_llm()
+        ctx = inp.tool_context
+        assert ctx is not None  # guaranteed by _tools_enabled
+
+        system_prompt = (
+            "You are the Outlook/Exchange IT specialist for Aditi's internal "
+            "help desk. You may ONLY use the provided tools to gather facts. "
+            "Always call kb_search before recommending steps, and ground every "
+            "recommendation in the returned articles — never invent steps. If "
+            "the knowledge base has nothing relevant, say so plainly and that "
+            "you'll escalate to a human. Keep the reply concise and friendly."
+        )
+        messages: list[dict[str, Any]] = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": inp.user_message},
+        ]
+
+        loop = await runtime.run_loop(
+            messages=messages,
+            allowed_tools=self.spec.allowed_tools,
+            llm=llm,
+            context=ctx,
+            max_iters=settings.AGENT_TOOLS_MAX_ITERS,
+        )
+
+        executed = [o.tool_name for o in loop.outcomes if o.executed]
+        kb_used = "kb_search" in executed
+        # Confidence stays conservative and can't be high without grounding.
+        confidence = 0.6 if kb_used else 0.3
+
+        hints: tuple[KnowledgeImprovementHint, ...] = ()
+        if not kb_used:
+            hints = (
+                KnowledgeImprovementHint(
+                    reason="tool turn produced an answer without grounding in kb_search",
+                    issue_subtype=inp.diag_ctx.issue_subtype,
+                    notes="Outlook tool loop did not consult the KB; review for hallucination.",
+                    confidence=0.5,
+                ),
+            )
+
+        return SpecialistOutput(
+            message=loop.message or "",
+            steps=(),
+            confidence=confidence,
+            knowledge_hints=hints,
+            audit={
+                "event": "specialist.outlook.tool_handled",
+                "subtype": inp.diag_ctx.issue_subtype,
+                "tools_executed": executed,
+                "pending_approvals": [o.tool_name for o in loop.pending_approvals],
+                "iterations": loop.iterations,
+                "stopped_reason": loop.stopped_reason,
             },
         )
 

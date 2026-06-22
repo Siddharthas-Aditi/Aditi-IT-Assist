@@ -23,6 +23,9 @@ export interface ChatDebugInfo {
   confidence_breakdown?: Record<string, number> | null;
   retrieval_trace?: Record<string, unknown> | null;
   escalation_reason?: string | null;
+  routed_specialist?: string | null;
+  retrieval_source?: string | null;
+  citations?: { title?: string; category?: string; citation_label?: string }[];
 }
 
 export interface ChatMessage {

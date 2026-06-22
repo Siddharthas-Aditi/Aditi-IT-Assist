@@ -67,7 +67,9 @@ class TestClassifyIssue:
         ctx = DiagnosticContext()
         result = await _classify_issue("My Outlook is slow", ctx)
         assert result["category"] == "email/outlook"
-        assert result["_method"] in ("keyword", "entity", "entity_keyword")
+        # If LLM is configured in the test environment, it may use LLM;
+        # the contract is that the category is correct regardless of method.
+        assert result["_method"] in ("keyword", "entity", "entity_keyword", "llm")
 
     @pytest.mark.asyncio
     async def test_classify_email_issue(self):

@@ -1,0 +1,39 @@
+# MCP tool contract evaluation (Phase 7 gate).
+#
+# Pins every MCP-backed tool's contract so a careless change to a binding,
+# profile, or side-effect class fails CI. The harness
+# (tests/unit/test_mcp_contract_eval.py) asserts, for each entry:
+#   1. a typed ToolSpec exists with that name and mcp_server set;
+#   2. the side effect matches and is within the server's profile ceiling;
+#   3. the tool is listed in its server's profile allowed_tools (allow-list);
+#   4. the declared RBAC permission matches;
+#   5. dispatching it without that permission is rejected (0-unauthorized gate).
+#
+# Bump `version` when the MCP tool surface changes.
+version: "1.0.0"
+profile_version: "1.0.0"
+tools:
+  - name: entra_account_status
+    server: msgraph
+    side_effect: read
+    approval: none
+    permission: "integration:directory_read"
+    valid_args: { user_principal_name: "alice@aditi.com" }
+  - name: intune_device_compliance
+    server: msgraph
+    side_effect: read
+    approval: none
+    permission: "integration:directory_read"
+    valid_args: { user_principal_name: "alice@aditi.com" }
+  - name: mailbox_quota_status
+    server: msgraph
+    side_effect: read
+    approval: none
+    permission: "integration:directory_read"
+    valid_args: { mailbox: "alice@aditi.com" }
+  - name: servicenow_incident_lookup
+    server: servicenow
+    side_effect: read
+    approval: none
+    permission: "integration:ticketing_read"
+    valid_args: { number: "INC0012345" }

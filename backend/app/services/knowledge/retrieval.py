@@ -20,16 +20,40 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from app.core.config import settings
 from app.core.logging import get_logger
 from app.repositories.knowledge_repository import KnowledgeRepository
+from app.services.knowledge import ranking
 from app.services.knowledge_service import get_knowledge_service
 
 if TYPE_CHECKING:
     import uuid
 
     from app.models.knowledge import KnowledgeArticle
+    from app.services.knowledge.indexing import EmbeddingClient
 
 logger = get_logger(__name__)
+
+
+def _weights_from_settings() -> ranking.HybridWeights:
+    """Build hybrid weights from configuration.
+
+    Misconfigured weights (not summing to 1.0) must never break retrieval: log
+    and fall back to the validated defaults rather than raising into the request
+    path.
+    """
+    w = ranking.HybridWeights(
+        vector=settings.HYBRID_WEIGHT_VECTOR,
+        keyword=settings.HYBRID_WEIGHT_KEYWORD,
+        usage=settings.HYBRID_WEIGHT_USAGE,
+        quality=settings.HYBRID_WEIGHT_QUALITY,
+    )
+    try:
+        w.validate()
+    except ValueError as exc:
+        logger.warning("hybrid_weights_invalid_using_defaults", error=str(exc))
+        return ranking.DEFAULT_WEIGHTS
+    return w
 
 #: Below this composite score, the orchestrator should consider escalation.
 LOW_CONFIDENCE_THRESHOLD = 0.45
@@ -65,9 +89,22 @@ class GovernedRetrievalResult:
 class KnowledgeRetrievalService:
     """Read-only retrieval over governed (published) knowledge content."""
 
-    def __init__(self, db) -> None:
+    def __init__(self, db, *, repo: KnowledgeRepository | None = None,
+                 embedder: EmbeddingClient | None = None) -> None:
         self.db = db
-        self.repo = KnowledgeRepository(db)
+        self.repo = repo or KnowledgeRepository(db)
+        # Embedder is resolved lazily (only when the vector path is taken) so
+        # keyword-only deployments never construct a provider client.
+        self._embedder = embedder
+        self._embedder_resolved = embedder is not None
+
+    def _get_embedder(self) -> EmbeddingClient:
+        if not self._embedder_resolved:
+            from app.services.knowledge.indexing import get_embedding_client
+
+            self._embedder = get_embedding_client()
+            self._embedder_resolved = True
+        return self._embedder  # type: ignore[return-value]
 
     # ── Scope resolution ────────────────────────────────────────
 
@@ -105,7 +142,8 @@ class KnowledgeRetrievalService:
         if not candidates:
             return await self._yaml_fallback(query, category, limit)
 
-        scored = self._rank(query, candidates)[:limit]
+        vector_scores, source = await self._maybe_vector_scores(query, candidates)
+        scored = self._rank(query, candidates, vector_scores=vector_scores)[:limit]
         confidence = self._confidence(scored)
         logger.info(
             "knowledge_db_retrieved",
@@ -113,13 +151,50 @@ class KnowledgeRetrievalService:
             count=len(scored),
             confidence=confidence,
             audiences=audiences,
+            source=source,
+            ranking_version=ranking.RANKING_VERSION,
         )
         return GovernedRetrievalResult(
             items=scored,
             confidence=confidence,
-            source="db_keyword",
+            source=source,
             published_only=is_employee_facing or not can_view_internal,
         )
+
+    async def _maybe_vector_scores(
+        self, query: str, candidates: list[KnowledgeArticle]
+    ) -> tuple[dict[str, float] | None, str]:
+        """Compute per-candidate semantic similarity when the vector path is on.
+
+        Returns ``(vector_scores_by_key, source_label)``. Any failure or missing
+        provider degrades silently to keyword (``vector_scores=None``), so the
+        flag is safe to enable before embeddings exist.
+        """
+        if not settings.FEATURE_VECTOR_RETRIEVAL:
+            return None, "db_keyword"
+        embedder = self._get_embedder()
+        if not getattr(embedder, "available", False):
+            return None, "db_keyword"
+        try:
+            vectors = await embedder.embed([query])
+        except Exception as exc:  # noqa: BLE001 — never fail retrieval on embedding error
+            logger.warning("knowledge_query_embed_failed", error=str(exc))
+            return None, "db_keyword"
+        if not vectors:
+            return None, "db_keyword"
+
+        article_ids = [a.id for a in candidates]
+        try:
+            by_id = await self.repo.article_vector_scores(vectors[0], article_ids)
+        except Exception as exc:  # noqa: BLE001 — degrade to keyword on DB/vector error
+            logger.warning("knowledge_vector_search_failed", error=str(exc))
+            return None, "db_keyword"
+        if not by_id:
+            # No embedded chunks yet → effectively keyword, but flag the gap.
+            return None, "db_keyword"
+
+        scores = {str(aid): sim for aid, sim in by_id.items()}
+        return scores, "db_hybrid"
 
     async def retrieve_for_category(
         self,
@@ -139,24 +214,46 @@ class KnowledgeRetrievalService:
 
     # ── Scoring ─────────────────────────────────────────────────
 
-    def _rank(self, query: str, articles: list[KnowledgeArticle]) -> list[ScoredArticle]:
-        terms = {t for t in query.lower().split() if len(t) > 2}
+    def _rank(
+        self,
+        query: str,
+        articles: list[KnowledgeArticle],
+        *,
+        vector_scores: dict[str, float] | None = None,
+    ) -> list[ScoredArticle]:
+        """Rank candidates via the shared hybrid ranker.
+
+        ``vector_scores`` (keyed by str(article.id)) blends semantic similarity
+        on top of the keyword signal; when ``None`` this is exactly the legacy
+        keyword ranking. Articles are mapped to :class:`ranking.RankCandidate`
+        so all scoring lives in the pure, unit-tested ranking module.
+        """
+        by_key: dict[str, KnowledgeArticle] = {str(a.id): a for a in articles}
+        candidates = [
+            ranking.RankCandidate(
+                key=str(a.id),
+                text=(a.retrieval_text or a.title or ""),
+                tags=tuple(str(t) for t in (a.tags or [])),
+                usage_count=int(a.usage_count or 0),
+                quality_score=float(a.quality_score or 0.0),
+            )
+            for a in articles
+        ]
+        ranked = ranking.rank(
+            query,
+            candidates,
+            vector_scores=vector_scores,
+            weights=_weights_from_settings(),
+        )
         scored: list[ScoredArticle] = []
-        for art in articles:
-            haystack = (art.retrieval_text or art.title or "").lower()
-            tag_text = " ".join(str(t) for t in (art.tags or [])).lower()
-            overlap = sum(1 for t in terms if t in haystack or t in tag_text)
-            base = overlap / len(terms) if terms else 0.3
-            # Boost well-performing, frequently-used content.
-            usage_boost = min(0.15, (art.usage_count or 0) / 200)
-            quality_boost = 0.15 * (art.quality_score or 0.0)
-            score = min(1.0, base + usage_boost + quality_boost)
-            if score <= 0 and terms:
+        for item in ranked:
+            art = by_key[item.key]
+            # Drop pure-noise hits (no keyword and no vector signal).
+            if item.score <= 0 and item.vector_score is None:
                 continue
             scored.append(
-                ScoredArticle(article=art, score=round(score, 3), snippet=self._snippet(art))
+                ScoredArticle(article=art, score=round(item.score, 3), snippet=self._snippet(art))
             )
-        scored.sort(key=lambda s: s.score, reverse=True)
         return scored
 
     @staticmethod

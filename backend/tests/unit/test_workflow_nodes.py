@@ -39,11 +39,11 @@ class TestOrchestrator:
         state = {"needs_clarification": False, "issue_category": None}
         assert route_after_triage(state) == "escalate"
 
-    def test_route_after_triage_runs_policy_with_category(self):
-        # Classified issues route through the policy node before retrieval
-        # (RBAC/consent/max-turn enforcement), which then routes to "retrieve".
+    def test_route_after_triage_runs_supervisor_shadow_with_category(self):
+        # Classified issues now route through the supervisor shadow node
+        # (Phase 1: dual-run analytics), which passes through to policy → retrieval.
         state = {"needs_clarification": False, "issue_category": "email/outlook"}
-        assert route_after_triage(state) == "policy"
+        assert route_after_triage(state) == "supervisor_shadow"
 
     def test_route_after_retrieval_escalates_with_no_results(self):
         state = {"knowledge_results": [], "knowledge_confidence": 0.0}

@@ -17,6 +17,7 @@ import {
   LogOut,
   ChevronDown,
   LifeBuoy,
+  Bot,
 } from 'lucide-react';
 
 import { useAuthStore } from '@/stores/auth-store';
@@ -59,6 +60,7 @@ const NAV: NavItem[] = [
     icon: Shield,
     can: (u) => hasPermission(u, P.ADMIN_VIEW_AUDIT_LOG),
   },
+  { to: '/dashboard/agent-ops', label: 'Agent Operations', icon: Bot, can: isLeadOrAbove },
 ];
 
 export function AdminLayout() {

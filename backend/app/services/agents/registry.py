@@ -55,7 +55,9 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 
 # Bump on any registry change (new agent, scope change, threshold change).
-REGISTRY_VERSION = "1.0.0"
+# 1.1.0 — Phase 5: specialists may declare ``allowed_tools`` (tool-calling).
+# 1.2.0 — Phase 7: specialists may declare MCP-backed diagnostic tools.
+REGISTRY_VERSION = "1.2.0"
 
 
 class AgentRole(StrEnum):
@@ -160,6 +162,11 @@ class SpecialistAgentSpec(AgentSpec):
     )
     # Whether this specialist is allowed to use the web-research fallback.
     web_fallback_allowed: bool = False
+    # Tools (by name in TOOL_REGISTRY) this specialist may invoke. Empty = none.
+    # The AgentToolRuntime rejects any call to a tool not listed here, so this
+    # is the per-agent capability allow-list. Active only behind
+    # ``FEATURE_AGENT_TOOLS`` (Phase 5). See app/services/agents/tools/.
+    allowed_tools: tuple[str, ...] = field(default_factory=tuple)
 
 
 # ── The registry ───────────────────────────────────────────────────────────
@@ -268,6 +275,13 @@ _OUTLOOK = SpecialistAgentSpec(
     kb_domain_filter=("email/outlook",),
     sub_agents=_OUTLOOK_SUB_AGENTS,
     web_fallback_allowed=False,  # mature internal coverage; no web fallback needed
+    # Phase 5: Outlook is the reference specialist for tool calling. Local tools
+    # are read-only/no-approval; the loop is dormant unless FEATURE_AGENT_TOOLS.
+    # Phase 7: mailbox_quota_status is MCP-backed (real Exchange usage), live
+    # only when FEATURE_MCP_TOOLS + the msgraph server are enabled.
+    allowed_tools=(
+        "kb_search", "mailbox_quota_estimate", "ticket_draft", "mailbox_quota_status",
+    ),
 )
 
 _ACCESS_SUB_AGENTS: tuple[SubAgentSpec, ...] = (
@@ -303,6 +317,9 @@ _ACCESS_MFA = SpecialistAgentSpec(
     required_slots=("normalized_system",),
     kb_domain_filter=("access/permissions",),
     sub_agents=_ACCESS_SUB_AGENTS,
+    # Phase 7: MCP-backed Entra read for sign-in/lock diagnostics (capability
+    # declared; runs once this specialist gains the tool-use loop).
+    allowed_tools=("kb_search", "entra_account_status"),
 )
 
 _ZOOM = SpecialistAgentSpec(
@@ -324,6 +341,8 @@ _DEVICE_INTUNE = SpecialistAgentSpec(
     subtypes=("non-compliant", "enrollment-failure"),
     required_slots=("normalized_system", "platform_os"),
     kb_domain_filter=("device-management/intune",),
+    # Phase 7: MCP-backed Intune compliance read (capability declared).
+    allowed_tools=("kb_search", "intune_device_compliance"),
 )
 
 _SIXTH_SENSE = SpecialistAgentSpec(

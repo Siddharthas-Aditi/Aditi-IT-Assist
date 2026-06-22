@@ -157,6 +157,61 @@ class Settings(BaseSettings):
     FEATURE_SUPERVISOR_SHADOW: bool = True
     FEATURE_SUPERVISOR_PRIMARY: bool = False
 
+    # ── Agent tool calling (Phase 5) ─────────────────────────────────
+    # When on, specialists with a non-empty ``allowed_tools`` may run a
+    # bounded LLM tool-use loop via AgentToolRuntime. Default OFF: the
+    # deterministic step path is unchanged until this is enabled and an LLM
+    # is configured. Per-tool RBAC + approval gates apply regardless.
+    # Max tool calls the agent may make in a single turn.
+    # See docs/architecture/agent-tooling.md.
+    FEATURE_AGENT_TOOLS: bool = False
+    AGENT_TOOLS_MAX_ITERS: int = 4
+
+    # ── Semantic / hybrid retrieval (Phase 6) ────────────────────────
+    # When on AND an embedding provider is configured, the governed
+    # retrieval service embeds the query and blends pgvector semantic
+    # similarity with the keyword signal (hybrid). Default OFF: pure
+    # keyword retrieval (unchanged). Falls back to keyword automatically
+    # when no provider/embedding is available, so flipping this on is safe.
+    # Weights are tunable in one place and must sum to 1.0 (validated).
+    # See docs/architecture/retrieval-and-indexing.md.
+    FEATURE_VECTOR_RETRIEVAL: bool = False
+    HYBRID_WEIGHT_VECTOR: float = 0.60
+    HYBRID_WEIGHT_KEYWORD: float = 0.30
+    HYBRID_WEIGHT_USAGE: float = 0.07
+    HYBRID_WEIGHT_QUALITY: float = 0.03
+
+    # ── MCP integrations (Phase 7) ───────────────────────────────────
+    # Agents consume external systems (Entra/Intune/Exchange via Graph,
+    # ServiceNow) as MCP-backed, read-only tools. Master switch + an explicit
+    # per-server allow-list; nothing is reachable unless the flag is on AND the
+    # server id is listed. All Phase-7 tools are read-only and time-bounded.
+    # See docs/architecture/mcp-integrations.md.
+    FEATURE_MCP_TOOLS: bool = False
+    MCP_ENABLED_SERVERS: list[str] = []        # e.g. ["msgraph", "servicenow"]
+    MCP_TOOL_TIMEOUT_SECONDS: float = 8.0
+    # Dev/demo: use an in-memory mock MCP session (no real Graph/ServiceNow).
+    # Leave True locally to exercise diagnostics + write approvals end-to-end;
+    # set False in production once real MCP servers are reachable.
+    MCP_USE_MOCK: bool = True
+    # Auth material for MCP servers — referenced by McpServerProfile.auth_secret_ref.
+    # Empty by default; populate from the secrets manager in production.
+    MCP_MSGRAPH_TOKEN: str = ""
+    MCP_SERVICENOW_TOKEN: str = ""
+
+    # ── Write actions + background agents (Phase 8) ──────────────────
+    # Gate for write/destructive agent tools (reset MFA, unlock account,
+    # create incident). Every such tool is human-approved at execution
+    # regardless of this flag; the flag controls whether the tools are even
+    # built/exposed. Default OFF.
+    FEATURE_AGENT_WRITE_ACTIONS: bool = False
+    # Async task runner for autonomous/background agents (nightly knowledge
+    # improvement, proactive diagnostics). Default OFF.
+    FEATURE_BACKGROUND_AGENTS: bool = False
+    AGENT_BACKGROUND_CONCURRENCY: int = 2      # max background tasks in flight
+    AGENT_BACKGROUND_POLL_SECONDS: int = 60    # runner poll interval
+    AGENT_TASK_MAX_ATTEMPTS: int = 3           # retry budget per task
+
     # Document Ingestion
     UPLOAD_DIR: str = "/tmp/aditi_uploads"
     MAX_UPLOAD_MB: int = 50

@@ -507,6 +507,10 @@ class ChatService:
             confidence_breakdown=result.get("confidence_breakdown"),
             retrieval_trace=result.get("retrieval_trace"),
             escalation_reason=result.get("escalation_reason") or diag.get("escalation_reason"),
+            routed_specialist=(result.get("supervisor_decision") or {}).get("specialist")
+            or (result.get("supervisor_decision") or {}).get("agent"),
+            retrieval_source=(result.get("retrieval_trace") or {}).get("source"),
+            citations=result.get("knowledge_citations") or [],
         )
 
     def _error_response(self, session_id: str) -> ChatMessageResponse:

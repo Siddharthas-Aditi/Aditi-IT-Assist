@@ -1,0 +1,29 @@
+# Action-safety evaluation (Phase 8 gate).
+#
+# The core safety contract for write actions: every write/destructive agent
+# tool MUST be human-approval-gated, and MUST NOT execute without an explicit
+# approval token — even when the caller holds the required permission and the
+# tool is in the agent's allow-list. The harness (test_action_safety_eval.py)
+# asserts, for each write tool:
+#   1. side_effect == write (no destructive tools in Phase 8) and approval == human;
+#   2. dispatch WITHOUT approval → needs_approval, and the underlying action does
+#      NOT run (0 unapproved executions);
+#   3. dispatch WITH approval + permission → executes.
+#
+# Bump `version` when the write-tool surface changes.
+version: "1.0.0"
+write_tools:
+  - name: entra_unlock_account
+    server: msgraph
+    permission: "integration:directory_write"
+    valid_args: { user_principal_name: "alice@aditi.com", idempotency_key: "unlock-alice-001" }
+  - name: reset_mfa
+    server: msgraph
+    permission: "integration:directory_write"
+    valid_args: { user_principal_name: "alice@aditi.com", idempotency_key: "resetmfa-alice-001" }
+  - name: servicenow_create_incident
+    server: servicenow
+    permission: "integration:ticketing_write"
+    valid_args:
+      short_description: "Laptop won't boot"
+      idempotency_key: "inc-create-001"

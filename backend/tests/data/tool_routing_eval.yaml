@@ -1,0 +1,57 @@
+# Tool-routing evaluation dataset (Phase 5).
+#
+# Each case pins the expected tool for a scenario plus the contract that tool
+# must satisfy (side effect + approval gate). The deterministic harness
+# (tests/unit/test_tool_routing_eval.py) asserts, for every case:
+#   1. the expected tool is declared in the specialist's allowed_tools;
+#   2. the tool's registered spec matches expected_side_effect / expected_approval;
+#   3. dispatching that tool (with valid args + the listed permissions) EXECUTES;
+#   4. dispatching it WITHOUT the listed permissions is rejected (0 unauthorized).
+#
+# An optional LLM-in-the-loop accuracy check (skipped unless an LLM is
+# configured) verifies the model actually selects expected_tool.
+#
+# Bump `version` when cases change; CI joins eval results on it.
+version: "1.0.0"
+specialist: outlook
+cases:
+  - id: mailbox-full-grounding
+    user_message: "My Outlook mailbox is full and I can't send or receive email."
+    expected_tool: kb_search
+    expected_side_effect: read
+    expected_approval: none
+    valid_args:
+      query: "Outlook mailbox full cannot send email"
+      category: "email/outlook"
+    required_permissions: ["knowledge:read"]
+
+  - id: quota-estimate
+    user_message: "My mailbox shows 49 GB used out of 50 GB — am I about to hit the limit?"
+    expected_tool: mailbox_quota_estimate
+    expected_side_effect: read
+    expected_approval: none
+    valid_args:
+      used_gb: 49
+      quota_gb: 50
+    required_permissions: []
+
+  - id: draft-ticket-on-exhaustion
+    user_message: "Nothing worked, please raise a ticket for my Outlook crash."
+    expected_tool: ticket_draft
+    expected_side_effect: read
+    expected_approval: none
+    valid_args:
+      subject: "Outlook crashes on launch"
+      summary: "Outlook closes immediately after opening; safe mode tried."
+      category: "email/outlook"
+      urgency: "high"
+    required_permissions: []
+
+  - id: search-before-steps
+    user_message: "Outlook keeps asking for my password over and over."
+    expected_tool: kb_search
+    expected_side_effect: read
+    expected_approval: none
+    valid_args:
+      query: "Outlook repeated password prompt"
+    required_permissions: ["knowledge:read"]

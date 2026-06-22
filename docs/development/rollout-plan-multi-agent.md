@@ -84,6 +84,11 @@ changes go live.
 | `FEATURE_WEB_FALLBACK` | `false` | Phase 2. Enables the controlled web-research path. |
 | `FEATURE_QUEUE_UI` | `false` | Phase 2. Exposes the specialist UI; the API can ship sooner. |
 | `FEATURE_KB_CANDIDATES` | `true` after migration | Phase 2/3. Opt-in candidate creation from resolutions. |
+| `FEATURE_AGENT_TOOLS` | `false` | Phase 5. Bounded LLM tool-use loop for specialists with `allowed_tools` (read-only tools first). See `docs/architecture/agent-tooling.md` and `plans/agentic-ops-platform-evolution.md`. |
+| `FEATURE_VECTOR_RETRIEVAL` | `false` | Phase 6. Hybrid vector+keyword retrieval (needs an embedding provider; degrades to keyword otherwise). See `docs/architecture/retrieval-and-indexing.md`. |
+| `FEATURE_MCP_TOOLS` | `false` | Phase 7. MCP-backed read-only diagnostics (Entra/Intune/Exchange, ServiceNow); per-server via `MCP_ENABLED_SERVERS`. See `docs/architecture/mcp-integrations.md`. |
+| `FEATURE_AGENT_WRITE_ACTIONS` | `false` | Phase 8. Build/expose human-approved write tools (unlock account, reset MFA, create incident). Execution is human-approved regardless. See `docs/architecture/agent-write-actions-and-tasks.md`. |
+| `FEATURE_BACKGROUND_AGENTS` | `false` | Phase 8. Start the autonomous `AgentTaskRunner` (nightly knowledge improvement, proactive diagnostics). |
 
 All flags read from `app.core.config.Settings`; default values keep
 production behavior unchanged.

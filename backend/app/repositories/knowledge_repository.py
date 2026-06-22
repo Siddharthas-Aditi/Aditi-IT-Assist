@@ -239,6 +239,52 @@ class KnowledgeRepository:
         )
         return list((await self.db.execute(q)).scalars().all())
 
+    async def article_vector_scores(
+        self,
+        query_embedding: list[float],
+        article_ids: list[uuid.UUID],
+    ) -> dict[uuid.UUID, float]:
+        """Best-chunk cosine similarity per article (Phase 6, pgvector).
+
+        For each article in ``article_ids`` that has at least one embedded chunk,
+        returns ``{article_id: similarity}`` where similarity = ``1 - cosine
+        distance`` of the *closest* chunk to the query embedding. Articles with
+        no embedded chunk are simply absent from the result (the caller treats a
+        missing key as "no vector signal" and falls back to keyword for it).
+
+        Uses pgvector's ``cosine_distance`` comparator; only chunks with a
+        non-null embedding participate.
+        """
+        if not query_embedding or not article_ids:
+            return {}
+        distance = KnowledgeChunk.embedding.cosine_distance(query_embedding)
+        q = (
+            select(KnowledgeChunk.article_id, func.min(distance).label("distance"))
+            .where(
+                KnowledgeChunk.article_id.in_(article_ids),
+                KnowledgeChunk.embedding.is_not(None),
+            )
+            .group_by(KnowledgeChunk.article_id)
+        )
+        rows = (await self.db.execute(q)).all()
+        return {article_id: 1.0 - float(distance) for article_id, distance in rows}
+
+    async def list_chunks_missing_embeddings(
+        self, *, limit: int = 500
+    ) -> list[KnowledgeChunk]:
+        """Chunks of published articles that have no embedding yet (backfill)."""
+        q = (
+            select(KnowledgeChunk)
+            .join(KnowledgeArticle, KnowledgeChunk.article_id == KnowledgeArticle.id)
+            .where(
+                KnowledgeArticle.status == "published",
+                KnowledgeChunk.embedding.is_(None),
+            )
+            .order_by(KnowledgeChunk.article_id, KnowledgeChunk.chunk_index)
+            .limit(limit)
+        )
+        return list((await self.db.execute(q)).scalars().all())
+
     async def count_chunks(self) -> int:
         return int(
             (await self.db.execute(select(func.count()).select_from(KnowledgeChunk))).scalar_one()

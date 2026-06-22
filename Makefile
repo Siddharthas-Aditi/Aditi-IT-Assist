@@ -69,8 +69,11 @@ db-reset: ## Drop and recreate database (destructive!)
 	docker compose exec postgres psql -U aditi -c "CREATE DATABASE aditi_assist;"
 	@echo "✅ Database reset. Run: make db-migrate"
 
-seed: ## Seed knowledge base into database
-	cd backend && $(UV) run python -m scripts.seed_data
+seed: ## Seed enterprise data (users, roles, permissions, KB articles)
+	docker compose exec backend uv run python -m scripts.seed_enterprise
+
+seed-local: ## Seed enterprise data (local backend, no Docker)
+	cd backend && $(UV) run python -m scripts.seed_enterprise
 
 # ─── Testing ────────────────────────────────────
 

@@ -3,6 +3,7 @@
 from fastapi import APIRouter
 
 from app.api.v1.admin import router as admin_router
+from app.api.v1.agent_ops import router as agent_ops_router
 from app.api.v1.analytics import router as analytics_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.chat import router as chat_router
@@ -49,3 +50,6 @@ api_router.include_router(
 api_router.include_router(
     specialist_chat_router, prefix="/specialist-chat", tags=["specialist-chat"],
 )
+# Agentic platform operability — status (MCP/RAG/flags), write-action approval
+# queue, background-task monitor. See docs/architecture/agent-write-actions-and-tasks.md
+api_router.include_router(agent_ops_router, prefix="/agent-ops", tags=["agent-ops"])

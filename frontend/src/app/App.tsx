@@ -25,6 +25,7 @@ import { AssignedTicketsPage } from '@/pages/operations/AssignedTicketsPage';
 import { LiveChatPage } from '@/pages/operations/LiveChatPage';
 import { TicketWorkspacePage } from '@/pages/operations/TicketWorkspacePage';
 import { RemoteAssistPage } from '@/pages/operations/RemoteAssistPage';
+import { ApprovalsPage } from '@/pages/operations/ApprovalsPage';
 
 // Admin/Lead pages
 import { DashboardPage } from '@/pages/admin/DashboardPage';
@@ -45,6 +46,7 @@ import { KnowledgeUploadPage } from '@/pages/admin/knowledge/KnowledgeUploadPage
 import { CandidateReviewPage } from '@/pages/admin/knowledge/CandidateReviewPage';
 import { CandidateEditorPage } from '@/pages/admin/knowledge/CandidateEditorPage';
 import { FeedbackReviewPage } from '@/pages/admin/FeedbackReviewPage';
+import { AgentOperationsPage } from '@/pages/admin/AgentOperationsPage';
 
 function HomeRedirect() {
   const { user, isAuthenticated } = useAuthStore();
@@ -82,6 +84,7 @@ export function App() {
         <Route path="live-chat/:sessionId" element={<LiveChatPage />} />
         <Route path="tickets/:id" element={<TicketWorkspacePage />} />
         <Route path="remote-assist" element={<RemoteAssistPage />} />
+        <Route path="approvals" element={<ApprovalsPage />} />
       </Route>
 
       {/* Admin/Lead dashboard */}
@@ -103,6 +106,7 @@ export function App() {
         <Route path="users" element={<UserManagementPage />} />
         <Route path="users/:id" element={<UserDetailPage />} />
         <Route path="feedback/review" element={<FeedbackReviewPage />} />
+        <Route path="agent-ops" element={<AgentOperationsPage />} />
       </Route>
 
       {/* Audit (admin + auditor) */}

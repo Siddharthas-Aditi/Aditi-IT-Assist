@@ -52,7 +52,7 @@ _PRODUCT_RE = re.compile(
 # A line is a heading candidate if it matches one of these.
 _HEADING_PATTERNS: list[re.Pattern] = [
     re.compile(r"^#{1,3}\s+.+$"),                              # Markdown heading
-    re.compile(r"^[A-Z][A-Z\s\-/]{4,}$"),                    # ALL-CAPS heading ≥ 5 chars
+    re.compile(r"^[A-Z][A-Z\s\-/]{4,60}$"),                  # ALL-CAPS heading 5–61 chars
     re.compile(r"^\d+[\.\)]\s+[A-Z].+$"),                    # Numbered: "1. Title" or "1) Title"
     re.compile(r"^(?:Issue|Problem|Topic|Section|Title):\s*.+$", re.I),  # Labelled heading
 ]
@@ -138,15 +138,42 @@ def _is_heading(line: str) -> bool:
     stripped = line.strip()
     if not stripped:
         return False
+    # Section labels (Troubleshooting, Resolution, Symptoms, etc.) look like
+    # headings but are NOT topic boundaries — they divide subsections within
+    # the same topic. Exclude them so segmentation doesn't split mid-article.
+    if _TROUBLESHOOT_SECTION.match(stripped):
+        return False
+    if _RESOLUTION_SECTION.match(stripped):
+        return False
+    if _SYMPTOM_SECTION.match(stripped):
+        return False
+    if _ESCALATION_SECTION.match(stripped):
+        return False
     return any(p.match(stripped) for p in _HEADING_PATTERNS)
+
+
+def _is_topic_heading(line: str) -> bool:
+    """Check whether *line* is a **topic-level** heading (document segmentation).
+
+    Unlike ``_is_heading`` this purposefully excludes numbered / bulleted step
+    lines (``1. Open Outlook``, ``- Click File``) which are steps *within* a
+    topic, not boundaries between topics.
+    """
+    stripped = line.strip()
+    if not stripped:
+        return False
+    # Step-lead lines are intra-topic instructions, not topic boundaries.
+    if _STEP_LEAD.match(stripped):
+        return False
+    return _is_heading(stripped)
 
 
 def _segment_into_topics(text: str) -> list[str]:
     """Split *text* into topic segments.
 
     Strategy:
-    - Split on lines that look like headings.
-    - Merge tiny segments (< 50 chars) into the previous one.
+    - Split on lines that look like **topic** headings (not numbered steps).
+    - Merge tiny segments (< 30 chars) into the previous one.
     - If no headings are found, treat the whole document as one segment.
     """
     lines = text.splitlines()
@@ -154,7 +181,7 @@ def _segment_into_topics(text: str) -> list[str]:
     current: list[str] = []
 
     for line in lines:
-        if _is_heading(line) and current:
+        if _is_topic_heading(line) and current:
             segments.append(current)
             current = [line]
         else:
@@ -169,7 +196,7 @@ def _segment_into_topics(text: str) -> list[str]:
         seg = "\n".join(seg_lines).strip()
         if not seg:
             continue
-        if merged and len(seg) < 60:
+        if merged and len(seg) < 30:
             merged[-1] = merged[-1] + "\n" + seg
         else:
             merged.append(seg)
@@ -266,8 +293,11 @@ def _extract_steps(lines: list[str]) -> tuple[list[dict], list[dict]]:
         if _RESOLUTION_SECTION.match(line):
             mode = "resolution"
             continue
-        if _is_heading(line) and mode:
-            # Any new heading ends the current step section
+        # A true topic heading (but NOT a numbered step) ends the current
+        # step section. Without the _STEP_LEAD guard, "1. Open Outlook"
+        # would incorrectly terminate the section because it matches the
+        # numbered-heading pattern in _is_heading.
+        if _is_heading(line) and mode and not _STEP_LEAD.match(line):
             mode = None
             continue
 

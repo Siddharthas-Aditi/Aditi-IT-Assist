@@ -51,6 +51,7 @@ class Resource(StrEnum):
     ANALYTICS = "analytics"
     ADMIN = "admin"
     FEEDBACK = "feedback"
+    INTEGRATION = "integration"  # external systems reached via MCP (Phase 7)
 
 
 class Action(StrEnum):
@@ -220,6 +221,15 @@ class P(StrEnum):
     FEEDBACK_VIEW_ANALYTICS = "feedback:view_analytics"
     FEEDBACK_REVIEW = "feedback:review"
 
+    # ── External integrations (MCP, Phase 7 read / Phase 8 write) ─────
+    # Read-only diagnostics against external systems via MCP-backed agent tools.
+    # Write actions are higher-risk and human-approved at execution time.
+    # See docs/architecture/mcp-integrations.md and agent-write-actions-and-tasks.md.
+    INTEGRATION_DIRECTORY_READ = "integration:directory_read"     # Entra/Intune/Exchange read
+    INTEGRATION_TICKETING_READ = "integration:ticketing_read"     # ServiceNow read
+    INTEGRATION_DIRECTORY_WRITE = "integration:directory_write"   # unlock account, reset MFA
+    INTEGRATION_TICKETING_WRITE = "integration:ticketing_write"   # create ServiceNow incident
+
 
 # ─── Permission Registry ───────────────────────────────────────────────────────
 #
@@ -298,6 +308,11 @@ PERMISSION_REGISTRY: list[PermissionDef] = [
     PermissionDef(P.FEEDBACK_VIEW_OWN, "View Own Feedback", Resource.FEEDBACK, Action.READ, Scope.OWN),
     PermissionDef(P.FEEDBACK_VIEW_ANALYTICS, "View Feedback Analytics", Resource.FEEDBACK, Action.VIEW, Scope.ALL),
     PermissionDef(P.FEEDBACK_REVIEW, "Review Flagged Feedback", Resource.FEEDBACK, Action.REVIEW, Scope.ALL, audit_required=True),
+    # ── External integrations (MCP) ──
+    PermissionDef(P.INTEGRATION_DIRECTORY_READ, "Read Directory/Device State (Entra/Intune)", Resource.INTEGRATION, Action.READ, Scope.ALL, audit_required=True),
+    PermissionDef(P.INTEGRATION_TICKETING_READ, "Read External Tickets (ServiceNow)", Resource.INTEGRATION, Action.READ, Scope.ALL, audit_required=True),
+    PermissionDef(P.INTEGRATION_DIRECTORY_WRITE, "Write Directory Actions (Unlock/Reset MFA)", Resource.INTEGRATION, Action.UPDATE, Scope.ALL, audit_required=True, high_risk=True),
+    PermissionDef(P.INTEGRATION_TICKETING_WRITE, "Create External Tickets (ServiceNow)", Resource.INTEGRATION, Action.CREATE, Scope.ALL, audit_required=True),
     # ── Analytics ──
     PermissionDef(P.ANALYTICS_VIEW_OWN, "View Own Stats", Resource.ANALYTICS, Action.VIEW, Scope.OWN),
     PermissionDef(P.ANALYTICS_VIEW_TEAM, "View Team Analytics", Resource.ANALYTICS, Action.VIEW, Scope.TEAM),
@@ -386,6 +401,9 @@ ROLE_PERMISSIONS: dict[UserRole, list[P]] = {
         P.KNOWLEDGE_SUBMIT_FEEDBACK,
         P.KNOWLEDGE_VIEW_INTERNAL,
         P.ANALYTICS_VIEW_OWN,
+        # External read-only diagnostics (MCP, Phase 7).
+        P.INTEGRATION_DIRECTORY_READ,
+        P.INTEGRATION_TICKETING_READ,
     ],
     UserRole.IT_LEAD: [
         # Inherits all IT_AGENT permissions, plus:
@@ -412,6 +430,9 @@ ROLE_PERMISSIONS: dict[UserRole, list[P]] = {
         P.ANALYTICS_VIEW_AGENT_PERF,
         P.FEEDBACK_VIEW_ANALYTICS,
         P.FEEDBACK_REVIEW,
+        # Phase 8 — approve/execute external write actions (higher bar than read).
+        P.INTEGRATION_DIRECTORY_WRITE,
+        P.INTEGRATION_TICKETING_WRITE,
     ],
     UserRole.IT_ADMIN: [
         # Inherits all IT_LEAD permissions, plus:

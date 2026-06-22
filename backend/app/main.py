@@ -1,7 +1,7 @@
 """Aditi IT Assist — FastAPI Application Entry Point."""
 
 from collections.abc import AsyncGenerator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 import structlog
 from fastapi import FastAPI
@@ -33,13 +33,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         from app.models.base import Base
 
         async with engine.begin() as conn:
-            # Enable pgvector extension (safe to run multiple times)
-            try:
+            # Enable pgvector extension (safe to run multiple times); if it's
+            # not available, skip — vector search falls back to keyword.
+            with suppress(Exception):
                 await conn.execute(
                     __import__("sqlalchemy").text("CREATE EXTENSION IF NOT EXISTS vector")
                 )
-            except Exception:
-                pass  # pgvector not available — skip, vector search will fall back to keyword
             await conn.run_sync(Base.metadata.create_all)
         logger.info("database_schema_ready", env=settings.APP_ENV)
 
@@ -51,6 +50,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     async with start_background_jobs(
         idle_sweeper_enabled=settings.IDLE_SWEEPER_ENABLED,
         idle_sweeper_interval_seconds=settings.IDLE_SWEEPER_INTERVAL_SECONDS,
+        background_agents_enabled=settings.FEATURE_BACKGROUND_AGENTS,
+        background_agents_poll_seconds=settings.AGENT_BACKGROUND_POLL_SECONDS,
     ):
         yield
 

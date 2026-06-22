@@ -7,13 +7,37 @@ Provides:
 """
 
 import uuid
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from app.core.permissions import UserRole, get_effective_permissions
 from app.main import app
 from app.services.auth.dependencies import get_current_active_user
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Permission resolution patch — mock users don't have real DB role IDs,
+# so we resolve permissions from the canonical registry instead.
+# ─────────────────────────────────────────────────────────────────────
+
+
+async def _resolve_permissions_from_role(self, user):
+    """Patched AuthService.get_user_permissions for test users."""
+    try:
+        return {str(p) for p in get_effective_permissions(UserRole(user.primary_role))}
+    except ValueError:
+        return set()
+
+
+@pytest.fixture(autouse=True)
+def _patch_permission_resolution():
+    with patch(
+        "app.services.auth.service.AuthService.get_user_permissions",
+        new=_resolve_permissions_from_role,
+    ):
+        yield
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -97,7 +121,7 @@ async def employee_client(mock_employee):
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
-    app.dependency_overrides.clear()
+    app.dependency_overrides.pop(get_current_active_user, None)
 
 
 @pytest.fixture
@@ -107,7 +131,7 @@ async def agent_client(mock_it_agent):
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
-    app.dependency_overrides.clear()
+    app.dependency_overrides.pop(get_current_active_user, None)
 
 
 @pytest.fixture
@@ -117,7 +141,7 @@ async def lead_client(mock_it_lead):
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
-    app.dependency_overrides.clear()
+    app.dependency_overrides.pop(get_current_active_user, None)
 
 
 @pytest.fixture
@@ -127,7 +151,7 @@ async def admin_client(mock_it_admin):
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
-    app.dependency_overrides.clear()
+    app.dependency_overrides.pop(get_current_active_user, None)
 
 
 @pytest.fixture
@@ -137,4 +161,4 @@ async def auditor_client(mock_auditor):
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
-    app.dependency_overrides.clear()
+    app.dependency_overrides.pop(get_current_active_user, None)
