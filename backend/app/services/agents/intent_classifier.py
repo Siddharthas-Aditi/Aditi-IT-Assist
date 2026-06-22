@@ -243,6 +243,14 @@ _POSITIVE_FEEDBACK_PHRASES: tuple[str, ...] = (
     "showing now", "showing up now",
     "figured it out", "that did it", "yes it worked", "yep that worked",
     "thanks that worked", "yes that resolved", "yes that fixed",
+    # "Able to" / success confirmation patterns
+    "able to", "was able to", "i was able", "im able to", "i'm able to",
+    "managed to", "i managed to", "i can now", "can now",
+    "logged in successfully", "signed in successfully",
+    "updated successfully", "changed successfully", "reset successfully",
+    "password updated", "password changed", "password reset",
+    "it's working again", "its working again", "working again",
+    "up and running", "back up", "good to go", "all set",
 )
 
 # Negation prefixes to recognize "not resolved", "still not working", etc.

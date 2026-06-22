@@ -92,6 +92,17 @@ _POSITIVE_FEEDBACK = (
     "done", "all done", "completed", "finished",
     "that did it", "yes it worked", "yep that worked", "yeah that worked",
     "thanks that worked", "yes that resolved", "yes that fixed",
+    # "Able to" / success patterns — user confirms they can do the thing
+    "able to", "was able to", "i was able", "im able to", "i'm able to",
+    "managed to", "i managed to", "i can now", "can now",
+    "i can log in", "i can login", "i can sign in",
+    "i can access", "i can connect", "i can send", "i can receive",
+    "i can see", "i can open", "i can update", "i can change",
+    "logged in successfully", "signed in successfully", "connected successfully",
+    "updated successfully", "changed successfully", "reset successfully",
+    "password updated", "password changed", "password reset",
+    "it's working again", "its working again", "working again",
+    "up and running", "back up", "good to go", "all set",
 )
 
 # Pure gratitude / closure phrases — when steps have already been given, these
@@ -324,6 +335,35 @@ async def triage_node(state: WorkflowState) -> dict:
             or "User explicitly requested a live IT specialist."
         )
         return _escalate_request_handoff(state, diag_ctx)
+
+    # POSITIVE_FEEDBACK: the user says the steps we gave worked (e.g. "yes,
+    # I was able to update the password", "it's working now"). Close out.
+    # This must run BEFORE the keyword-based _is_positive_feedback check
+    # because the LLM understands phrasings the keyword list doesn't cover.
+    if (
+        intent_result.intent is ConversationIntent.POSITIVE_FEEDBACK
+        and intent_result.confidence >= 0.6
+        and bool(diag_ctx.suggested_steps)
+    ):
+        diag_ctx.issue_resolved = True
+        diag_ctx.last_response_type = "resolved"
+        diag_ctx.resolved_steps.extend(diag_ctx.suggested_steps)
+        logger.info(
+            "resolution_confirmed_via_intent",
+            session_id=state.get("session_id"),
+            intent_confidence=intent_result.confidence,
+            matched=intent_result.matched,
+        )
+        return _resolved_message(diag_ctx)
+
+    # GRATITUDE after steps: user is satisfied and closing out.
+    if (
+        intent_result.intent is ConversationIntent.GRATITUDE
+        and bool(diag_ctx.suggested_steps)
+    ):
+        diag_ctx.issue_resolved = True
+        diag_ctx.last_response_type = "resolved"
+        return _gratitude_close_message(diag_ctx)
 
     # ── Step 0a: Post-resolution handling ────────────────────────
     # The previous issue was resolved. Two cases:
