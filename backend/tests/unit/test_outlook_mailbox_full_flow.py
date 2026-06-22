@@ -207,14 +207,24 @@ class TestTriageClarifyThenClassify:
         # affirmative turn proceeds to the grounded solution.
         assert result["needs_clarification"] is True
         assert result["diagnostic_context"]["awaiting_confirmation"] is True
-        # Accept any of the varied confirmation followup phrases (triage.py
-        # uses hash-based selection over _CONFIRM_FOLLOWUPS — "is that right"
-        # is one of several valid endings).
+        # Confirmation messages are now LLM-generated for natural variety.
+        # We check structural invariants: it must be a question and reference
+        # the issue (mailbox/inbox/full/email).
         q = result["clarification_question"].lower()
+        is_question = (
+            "?" in q
+            or any(p in q for p in (
+                "is that right", "have i got that", "does that match",
+                "is that the gist", "have i understood", "got that right",
+                "sound right", "sound correct", "is that correct", "confirm",
+                "did i get that", "does that sound", "is that what",
+                "am i on the right track", "do i have that right",
+            ))
+        )
+        assert is_question, f"Expected a confirmation question, got: {q!r}"
         assert any(
-            phrase in q
-            for phrase in ("is that right", "have i got that", "does that match", "is that the gist")
-        ), f"Expected a confirmation followup phrase in: {q!r}"
+            word in q for word in ("mailbox", "full", "inbox", "email", "mail")
+        ), f"Expected issue context in confirmation, got: {q!r}"
 
     @pytest.mark.asyncio
     async def test_negative_feedback_marks_failure_and_does_not_reclarify(self):

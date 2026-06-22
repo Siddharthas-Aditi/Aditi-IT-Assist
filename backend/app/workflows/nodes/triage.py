@@ -28,6 +28,14 @@ from app.services.agents.intent_classifier import (
     classify_intent,
 )
 from app.services.agents.llm_intent import classify_intent_with_llm
+from app.services.agents.conversation_messages import (
+    generate_confirmation,
+    generate_gratitude_close,
+    generate_greeting,
+    generate_new_topic,
+    generate_reclarification,
+    generate_resolved,
+)
 from app.services.agents.playbooks import get_playbook, get_playbook_for_entity  # noqa: F401
 from app.services.agents.sentiment_analyzer import SentimentAnalyzerService
 from app.services.agents.subtype_classifier import classify_subtype
@@ -322,7 +330,7 @@ async def triage_node(state: WorkflowState) -> dict:
         diag_ctx.entity_confidence = 0.0
         diag_ctx.affected_system = None
         diag_ctx.topic_shifts += 1
-        return _new_topic_message(diag_ctx, intent_result.matched)
+        return await _new_topic_message(diag_ctx, intent_result.matched)
 
     # ESCALATE_REQUEST: the user explicitly asked for a human / ticket. Set the
     # live-agent flag so the routing layer takes the escalation path, and mark
@@ -354,7 +362,7 @@ async def triage_node(state: WorkflowState) -> dict:
             intent_confidence=intent_result.confidence,
             matched=intent_result.matched,
         )
-        return _resolved_message(diag_ctx)
+        return await _resolved_message(diag_ctx)
 
     # GRATITUDE after steps: user is satisfied and closing out.
     if (
@@ -363,7 +371,7 @@ async def triage_node(state: WorkflowState) -> dict:
     ):
         diag_ctx.issue_resolved = True
         diag_ctx.last_response_type = "resolved"
-        return _gratitude_close_message(diag_ctx)
+        return await _gratitude_close_message(diag_ctx)
 
     # ── Step 0a: Post-resolution handling ────────────────────────
     # The previous issue was resolved. Two cases:
@@ -373,7 +381,7 @@ async def triage_node(state: WorkflowState) -> dict:
     #     as a fresh issue, not a continuation of the old playbook.
     if diag_ctx.issue_resolved:
         if _is_gratitude(user_message):
-            return _gratitude_close_message(diag_ctx)
+            return await _gratitude_close_message(diag_ctx)
         # Not gratitude → start fresh
         diag_ctx.reset_issue_context()
 
@@ -386,7 +394,7 @@ async def triage_node(state: WorkflowState) -> dict:
         or diag_ctx.suggested_steps
     )
     if not in_active_issue and _is_greeting(user_message):
-        return _greeting_message(diag_ctx)
+        return await _greeting_message(diag_ctx)
 
     # ── Step 1: Entity Normalization (every turn) ────────────────
     entity_match = normalize_entity(user_message)
@@ -461,13 +469,13 @@ async def triage_node(state: WorkflowState) -> dict:
         diag_ctx.issue_resolved = True
         diag_ctx.last_response_type = "resolved"
         diag_ctx.resolved_steps.extend(diag_ctx.suggested_steps)
-        return _resolved_message(diag_ctx)
+        return await _resolved_message(diag_ctx)
 
     # Pure gratitude after steps = user is satisfied; close gracefully.
     if steps_were_given and _is_gratitude(user_message):
         diag_ctx.issue_resolved = True
         diag_ctx.last_response_type = "resolved"
-        return _gratitude_close_message(diag_ctx)
+        return await _gratitude_close_message(diag_ctx)
 
     if steps_were_given and _is_negative_feedback(user_message):
         diag_ctx.last_resolution_failed = True
@@ -496,7 +504,7 @@ async def triage_node(state: WorkflowState) -> dict:
             diag_ctx.subtype_confidence = 0.0
             diag_ctx.issue_subcategory = None
             diag_ctx.exact_problem_statement = None
-            return _open_clarification(diag_ctx)
+            return await _open_clarification(diag_ctx)
         else:
             # The user gave more detail instead of yes/no — fold it in and
             # re-confirm with the updated understanding (handled below).
@@ -607,7 +615,7 @@ async def triage_node(state: WorkflowState) -> dict:
         diag_ctx.awaiting_confirmation = True
         diag_ctx.last_response_type = "confirm"
         diag_ctx.phase = DiagnosticPhase.CLARIFYING
-        question = _confirmation_message(diag_ctx)
+        question = await generate_confirmation(diag_ctx)
         return {
             "current_node": "triage",
             "issue_category": diag_ctx.issue_category,
@@ -729,13 +737,10 @@ def _infer_urgency(ctx: DiagnosticContext) -> str:
     return "medium"
 
 
-def _resolved_message(diag_ctx: DiagnosticContext) -> dict:
+async def _resolved_message(diag_ctx: DiagnosticContext) -> dict:
     """Return a closing message when the user confirms the issue is resolved."""
     diag_ctx.phase = DiagnosticPhase.CONFIRMING
-    content = (
-        "Great — glad that resolved it! 🎉 "
-        "If anything else comes up, just start a new chat and I'll be happy to help."
-    )
+    content = await generate_resolved(diag_ctx)
     return {
         "current_node": "triage",
         "issue_category": diag_ctx.issue_category,
@@ -753,13 +758,10 @@ def _resolved_message(diag_ctx: DiagnosticContext) -> dict:
     }
 
 
-def _gratitude_close_message(diag_ctx: DiagnosticContext) -> dict:
+async def _gratitude_close_message(diag_ctx: DiagnosticContext) -> dict:
     """Return a warm closing when the user says thanks after receiving steps."""
     diag_ctx.phase = DiagnosticPhase.CONFIRMING
-    content = (
-        "You're welcome! 😊 Hope that helps sort things out. "
-        "If you run into anything else, feel free to start a new chat — I'm always here."
-    )
+    content = await generate_gratitude_close()
     return {
         "current_node": "triage",
         "issue_category": diag_ctx.issue_category,
@@ -870,7 +872,7 @@ _NEW_TOPIC_OPENERS: tuple[str, ...] = (
 )
 
 
-def _new_topic_message(diag_ctx: DiagnosticContext, matched: str) -> dict:
+async def _new_topic_message(diag_ctx: DiagnosticContext, matched: str) -> dict:
     """Handle a NEW_TOPIC intent.
 
     The user switched to an unrelated issue mid-session. We've already reset
@@ -878,9 +880,7 @@ def _new_topic_message(diag_ctx: DiagnosticContext, matched: str) -> dict:
     Critically, we do NOT create a ticket — that bug ("I have another problem"
     → ticket ITA-000007) was the original reason this layer exists.
     """
-    # Pick a deterministic but varied opener — hash the matched phrase so the
-    # same trigger always picks the same opener (helps tests pin output).
-    opener = _NEW_TOPIC_OPENERS[hash(matched) % len(_NEW_TOPIC_OPENERS)]
+    opener = await generate_new_topic()
     diag_ctx.phase = DiagnosticPhase.INTAKE
     diag_ctx.last_response_type = "new_topic"
     return {
@@ -938,13 +938,9 @@ def _escalate_request_handoff(state: WorkflowState, diag_ctx: DiagnosticContext)
     }
 
 
-def _greeting_message(diag_ctx: DiagnosticContext) -> dict:
+async def _greeting_message(diag_ctx: DiagnosticContext) -> dict:
     """Warm greeting that invites the user to describe their issue."""
-    content = (
-        "Hi there! 👋 I'm the Aditi IT Support Assistant. I can help with things "
-        "like Outlook and email, VPN and network, Zoom/Teams, hardware, and account "
-        "or sign-in issues. What can I help you with today?"
-    )
+    content = await generate_greeting()
     return {
         "current_node": "triage",
         "needs_clarification": True,
@@ -960,12 +956,9 @@ def _greeting_message(diag_ctx: DiagnosticContext) -> dict:
     }
 
 
-def _open_clarification(diag_ctx: DiagnosticContext) -> dict:
+async def _open_clarification(diag_ctx: DiagnosticContext) -> dict:
     """Ask the user to describe the problem again after we misunderstood."""
-    content = (
-        "No problem — thanks for putting me right. Could you tell me a bit more "
-        "about what's actually happening, so I can point you to the right fix?"
-    )
+    content = await generate_reclarification()
     diag_ctx.clarification_count += 1
     diag_ctx.phase = DiagnosticPhase.CLARIFYING
     return {

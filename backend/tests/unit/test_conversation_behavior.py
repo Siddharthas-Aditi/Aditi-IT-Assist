@@ -83,26 +83,25 @@ class TestConfirmUnderstanding:
             })
         assert result["needs_clarification"] is True
         assert result["diagnostic_context"]["awaiting_confirmation"] is True
-        # Accept any of the varied confirmation followup phrases (triage.py
-        # uses hash-based selection over _CONFIRM_FOLLOWUPS — "is that right"
-        # is one of several valid endings). When an LLM is available it may
-        # rephrase freely, so we also match the semantic equivalent patterns.
+        # The confirmation message is now LLM-generated for natural variety.
+        # We only assert structural invariants: it must be a question (contains
+        # a question-like phrase or ends with "?") and reference the issue.
         q = result["clarification_question"].lower()
+        is_question = (
+            "?" in q
+            or any(p in q for p in (
+                "is that right", "have i got that", "does that match",
+                "is that the gist", "have i understood", "got that right",
+                "sound right", "sound correct", "is that correct", "confirm",
+                "did i get that", "does that sound", "is that what",
+                "am i on the right track", "do i have that right",
+            ))
+        )
+        assert is_question, f"Expected a confirmation question, got: {q!r}"
+        # Must reference the issue in some way (mailbox/full/inbox/email)
         assert any(
-            phrase in q
-            for phrase in (
-                "is that right",
-                "have i got that",
-                "does that match",
-                "is that the gist",
-                "have i understood",
-                "got that right",
-                "sound right",
-                "sound correct",
-                "is that correct",
-                "confirm",
-            )
-        ), f"Expected a confirmation followup phrase in: {q!r}"
+            word in q for word in ("mailbox", "full", "inbox", "email", "mail")
+        ), f"Expected issue context in confirmation, got: {q!r}"
 
     @pytest.mark.asyncio
     async def test_affirmation_proceeds_to_solution(self):

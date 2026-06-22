@@ -83,3 +83,4 @@ data/uploads/*
 data/exports/*
 !data/uploads/.gitkeep
 !data/exports/.gitkeep
+.fuse_hidden*
