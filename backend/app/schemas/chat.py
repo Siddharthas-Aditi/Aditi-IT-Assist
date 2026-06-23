@@ -96,11 +96,41 @@ class LiveAgentRequest(BaseModel):
 
 
 class LiveAgentResponse(BaseModel):
-    """Result of a live-agent handoff: the ticket that was created/queued."""
+    """Result of a live-agent handoff: the ticket that was created/queued.
+
+    ``ticket`` is None when the handoff was gated by the no-direct-connect
+    policy (the user must describe their issue first); the ``message`` then
+    carries the request for a problem description.
+    """
 
     session_id: str
     message: str
-    ticket: TicketRef
+    ticket: TicketRef | None = None
+
+
+class CancelWaitingRequest(BaseModel):
+    """Employee cancels waiting for a live specialist."""
+
+    session_id: str
+
+
+class CancelWaitingResponse(BaseModel):
+    """Acknowledgement that the waiting state was cleared."""
+
+    session_id: str
+    message: str
+    cancelled: bool = True
+
+
+class WaitingStatusResponse(BaseModel):
+    """Status of the employee's live-agent wait queue position."""
+
+    session_id: str
+    waiting: bool
+    ticket_number: str | None = None
+    waited_seconds: int = 0
+    specialist_available: bool = True
+    fallback_message: str | None = None
 
 
 class SessionSummary(BaseModel):

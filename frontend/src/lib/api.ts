@@ -336,6 +336,22 @@ export const chatApi = {
       method: 'POST',
       body: { session_id: sessionId },
     }),
+
+  cancelWaiting: (sessionId: string) =>
+    apiRequest<{ session_id: string; message: string; cancelled: boolean }>(
+      '/chat/cancel-waiting',
+      { method: 'POST', body: { session_id: sessionId } },
+    ),
+
+  getWaitingStatus: (sessionId: string) =>
+    apiRequest<{
+      session_id: string;
+      waiting: boolean;
+      ticket_number: string | null;
+      waited_seconds: number;
+      specialist_available: boolean;
+      fallback_message: string | null;
+    }>(`/chat/waiting-status/${sessionId}`),
 };
 
 const REMOTE = '/remote-support';

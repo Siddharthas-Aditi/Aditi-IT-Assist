@@ -1,5 +1,6 @@
 """Chat service — orchestrates the support conversation flow."""
 
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from langchain_core.messages import AIMessage, HumanMessage
@@ -15,6 +16,11 @@ from app.schemas.chat import (
     TicketRef,
 )
 from app.services.agents.context_summarizer import ContextSummarizerService
+from app.services.agents.diagnostic_state import DiagnosticContext
+from app.services.agents.escalation_policy import (
+    GATHER_PROBLEM_PROMPT,
+    handoff_context_sufficient,
+)
 from app.services.agents.intent_classifier import ConversationIntent
 from app.services.agents.llm_intent import classify_intent_with_llm
 from app.services.llm_service import get_llm_service
@@ -29,6 +35,13 @@ _sessions: dict[str, dict] = {}
 # Ensures multi-turn escalation / repeated "Connect" clicks reuse one ticket
 # instead of spawning duplicates. Production: persist alongside the session.
 _session_tickets: dict[str, dict] = {}
+
+# Track when each session started waiting for a specialist (for timeout logic).
+_waiting_since: dict[str, datetime] = {}
+
+# After this many seconds of waiting without a specialist joining, we surface
+# a fallback message offering async ticket/email resolution.
+WAIT_TIMEOUT_SECONDS: int = 900  # 15 minutes
 
 
 class ChatService:
@@ -410,13 +423,20 @@ class ChatService:
 
     async def request_live_agent(
         self, session_id: str, requester: User
-    ) -> tuple[str, TicketRef]:
+    ) -> tuple[str, TicketRef | None]:
         """Explicit 'Connect with a specialist' action from the UI.
 
         Guarantees the ticket-before-handoff invariant: ensures a ticket exists
         (creating one from the session's drafted context, or a minimal draft if
         none), queues it for a human, and returns a confirmation message + ref.
         Idempotent: repeated clicks reuse the same ticket.
+
+        No-direct-connect policy (defense-in-depth): if we have a known session
+        whose AI conversation never reached an escalation offer AND lacks a
+        minimally-useful problem statement, we do NOT create a ticket — we ask
+        the user to describe the issue first and return ``ticket=None``. The
+        frontend only surfaces the "Connect" CTA after an offer, so this guard
+        only trips on direct/cold API calls; it never blocks the normal flow.
         """
         if self.ticket_service is None:
             raise ValueError("Live-agent handoff is unavailable (no ticket backend).")
@@ -430,14 +450,106 @@ class ChatService:
                 ref,
             )
 
-        state = _sessions.get(session_id) or {}
+        state = _sessions.get(session_id)
+        if state is not None and not self._handoff_allowed(state):
+            return (GATHER_PROBLEM_PROMPT, None)
+
+        state = state or {}
         draft = state.get("ticket_draft") or self._minimal_draft(state, requester)
         ref = await self._persist_and_queue(session_id, draft, requester)
+
+        # Record the waiting start time for timeout tracking
+        _waiting_since[session_id] = datetime.now(UTC)
+
         return (
             f"✅ I've created ticket **{ref.ticket_number}** and connected it to our IT "
             f"specialists. They'll review the conversation and follow up with you directly.",
             ref,
         )
+
+    async def cancel_waiting(self, session_id: str, requester: User) -> str:
+        """Cancel the user's waiting state for a live specialist.
+
+        The ticket remains open for async follow-up, but the user is no
+        longer in the active live-connection queue.
+        """
+        _waiting_since.pop(session_id, None)
+
+        ticket_cache = _session_tickets.get(session_id)
+        if not ticket_cache:
+            return (
+                "You're not currently waiting for a specialist. "
+                "I'm here to help — describe your issue and I'll assist you."
+            )
+
+        ticket_number = ticket_cache.get("ticket_number", "")
+        return (
+            f"I've cancelled the live connection request. Your ticket "
+            f"**{ticket_number}** is still open and our team will follow up "
+            f"asynchronously via email. Feel free to continue chatting with me "
+            f"or describe a new issue."
+        )
+
+    async def get_waiting_status(
+        self, session_id: str, requester: User
+    ) -> "WaitingStatusResponse":
+        """Check waiting status with specialist-unavailable fallback.
+
+        After WAIT_TIMEOUT_SECONDS (default 15 minutes), the system
+        signals that no specialist is immediately available and suggests
+        a ticket/email fallback path.
+        """
+        from app.schemas.chat import WaitingStatusResponse
+
+        ticket_cache = _session_tickets.get(session_id)
+        waiting_start = _waiting_since.get(session_id)
+
+        if not ticket_cache or not waiting_start:
+            return WaitingStatusResponse(
+                session_id=session_id,
+                waiting=False,
+                specialist_available=True,
+            )
+
+        waited_seconds = int((datetime.now(UTC) - waiting_start).total_seconds())
+        specialist_available = waited_seconds < WAIT_TIMEOUT_SECONDS
+
+        fallback_message = None
+        if not specialist_available:
+            fallback_message = (
+                "It's been a while and no specialist is available right now. "
+                f"Your ticket **{ticket_cache['ticket_number']}** is still "
+                "active and our team will follow up via email. You can also "
+                "try again later or continue troubleshooting with me."
+            )
+
+        return WaitingStatusResponse(
+            session_id=session_id,
+            waiting=True,
+            ticket_number=ticket_cache.get("ticket_number"),
+            waited_seconds=waited_seconds,
+            specialist_available=specialist_available,
+            fallback_message=fallback_message,
+        )
+
+    @staticmethod
+    def _handoff_allowed(state: dict) -> bool:
+        """Whether a known session has enough context to hand off to a human.
+
+        Allowed when the AI already drafted/offered escalation (the only way
+        the UI surfaces the CTA) OR the diagnostic context clears the shared
+        handoff bar. A present ``ticket_draft`` is itself proof the workflow
+        reached an offer, since only the ticketing node builds one.
+        """
+        diag_dict = state.get("diagnostic_context") or {}
+        if (
+            state.get("ticket_draft")
+            or state.get("ticket_offered")
+            or diag_dict.get("escalation_offered_in_session")
+        ):
+            return True
+        diag = DiagnosticContext.from_dict(diag_dict)
+        return handoff_context_sufficient(diag)
 
     async def _persist_and_queue(
         self, session_id: str, draft: dict, requester: User

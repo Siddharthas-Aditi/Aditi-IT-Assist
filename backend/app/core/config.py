@@ -147,6 +147,10 @@ class Settings(BaseSettings):
     # multiple replicas without a distributed lock (see scheduler.py docs).
     IDLE_SWEEPER_ENABLED: bool = True
     IDLE_SWEEPER_INTERVAL_SECONDS: int = 30
+    # Live-chat idle policy: warn the user after WARNING seconds of silence, then
+    # auto-end after END seconds. Default = 7-minute warning + 2-minute grace.
+    LIVE_CHAT_IDLE_WARNING_SECONDS: int = 420
+    LIVE_CHAT_IDLE_END_SECONDS: int = 540
 
     # ── Supervisor routing (Phase-1 dual-run) ────────────────────────
     # When SHADOW is on, the supervisor runs after triage on every turn but

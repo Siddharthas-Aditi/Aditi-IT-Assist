@@ -25,6 +25,7 @@ import {
   SESSION_EXPIRED_EVENT,
   type SessionExpiredDetail,
 } from '@/lib/api';
+import { clearAllChatSessions } from '@/lib/chat-session-sync';
 
 // API_BASE is the base URL for API calls, should include /api/v1 prefix
 // In dev (npm run dev):    http://localhost:8000/api/v1
@@ -149,6 +150,7 @@ export const useAuthStore = create<AuthStore>()(
 
       logout: ({ redirect = false, reason, next } = {}) => {
         clearIdleTimer();
+        clearAllChatSessions();
         set({
           user: null,
           token: null,
@@ -259,5 +261,89 @@ if (typeof window !== 'undefined') {
       reason: detail?.reason ?? 'expired',
       next: detail?.next,
     });
+  });
+
+  // ── Cross-tab session synchronization ──────────────────────────────
+  // When the user logs out (or in) in one tab, the localStorage change fires
+  // a `storage` event in every *other* tab in the same browser. We listen
+  // for changes to the `aditi-auth` key and rehydrate the Zustand store so
+  // all tabs stay in sync — logout in one tab logs out everywhere, and login
+  // in one tab picks up the session in every other open tab.
+  window.addEventListener('storage', (event: StorageEvent) => {
+    if (event.key !== 'aditi-auth') return;
+
+    const store = useAuthStore.getState();
+
+    if (event.newValue === null) {
+      // Key was removed (logout cleared it) — force logout in this tab too.
+      if (store.isAuthenticated) {
+        clearIdleTimer();
+        useAuthStore.setState({
+          user: null,
+          token: null,
+          refreshToken: null,
+          tokenExpiresAt: null,
+          isAuthenticated: false,
+        });
+        window.location.replace('/login?reason=logged_out_other_tab');
+      }
+      return;
+    }
+
+    // Parse the new value and sync state
+    try {
+      const persisted = JSON.parse(event.newValue) as {
+        state?: {
+          token?: string | null;
+          refreshToken?: string | null;
+          tokenExpiresAt?: number | null;
+          user?: AuthUser | null;
+        };
+      };
+      const newState = persisted?.state;
+      if (!newState) return;
+
+      const wasAuthenticated = store.isAuthenticated;
+      const newToken = newState.token ?? null;
+      const isNowAuthenticated = Boolean(newToken);
+
+      if (!wasAuthenticated && isNowAuthenticated && newState.user) {
+        // Another tab logged in — pick up the session here too.
+        useAuthStore.setState({
+          user: newState.user,
+          token: newToken,
+          refreshToken: newState.refreshToken ?? null,
+          tokenExpiresAt: newState.tokenExpiresAt ?? null,
+          isAuthenticated: true,
+        });
+        scheduleIdleLogout(newState.tokenExpiresAt ?? null, () =>
+          useAuthStore.getState().logout({ redirect: true, reason: 'expired' }),
+        );
+      } else if (wasAuthenticated && !isNowAuthenticated) {
+        // Another tab logged out — clear this tab too.
+        clearIdleTimer();
+        useAuthStore.setState({
+          user: null,
+          token: null,
+          refreshToken: null,
+          tokenExpiresAt: null,
+          isAuthenticated: false,
+        });
+        window.location.replace('/login?reason=logged_out_other_tab');
+      } else if (wasAuthenticated && isNowAuthenticated && newState.user) {
+        // Token refresh from another tab — pick up the new token silently.
+        useAuthStore.setState({
+          user: newState.user,
+          token: newToken,
+          refreshToken: newState.refreshToken ?? null,
+          tokenExpiresAt: newState.tokenExpiresAt ?? null,
+        });
+        scheduleIdleLogout(newState.tokenExpiresAt ?? null, () =>
+          useAuthStore.getState().logout({ redirect: true, reason: 'expired' }),
+        );
+      }
+    } catch {
+      // Malformed JSON — ignore.
+    }
   });
 }

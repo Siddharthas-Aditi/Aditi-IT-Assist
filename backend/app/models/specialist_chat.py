@@ -146,8 +146,8 @@ class SpecialistChatSession(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     # Tunable thresholds (seconds). Defaulted in the service but persisted
     # so per-session override is possible (e.g. critical incidents keep the
     # session longer).
-    idle_warning_seconds: Mapped[int] = mapped_column(Integer, default=120)  # 2 min
-    idle_end_seconds: Mapped[int] = mapped_column(Integer, default=180)      # 3 min
+    idle_warning_seconds: Mapped[int] = mapped_column(Integer, default=420)  # 7 min
+    idle_end_seconds: Mapped[int] = mapped_column(Integer, default=540)      # 7 + 2 min grace
 
     # Free-form snapshot of context at the end (for export / learning).
     final_snapshot: Mapped[dict | None] = mapped_column(JSONB, nullable=True)

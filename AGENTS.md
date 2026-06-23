@@ -16,6 +16,15 @@
 >   — the typed conversational intent layer (fixes the `ITA-000007`-style bugs).
 > - [`docs/architecture/human-handoff-and-queue.md`](docs/architecture/human-handoff-and-queue.md)
 >   — IT specialist queue + structured `HandoffPackage`.
+> - [`docs/architecture/chat-to-live-handoff.md`](docs/architecture/chat-to-live-handoff.md)
+>   — AI→live flow + the **no-direct-connect policy** (a problem statement is
+>   required before any live-agent handoff; gate in `escalation_policy.py`).
+> - [`docs/architecture/live-chat-session-lifecycle.md`](docs/architecture/live-chat-session-lifecycle.md)
+>   — live specialist-chat state machine, duplicate-claim prevention, resume.
+> - [`docs/architecture/idle-timeout-and-typing-indicators.md`](docs/architecture/idle-timeout-and-typing-indicators.md)
+>   — 7-min idle warning + 2-min grace, and both-way typing indicators.
+> - [`docs/product/chat-and-live-support-flow.md`](docs/product/chat-and-live-support-flow.md)
+>   — the end-to-end employee + specialist product flow.
 > - [`docs/architecture/knowledge-improvement-loop.md`](docs/architecture/knowledge-improvement-loop.md)
 >   — KnowledgeCandidate review pipeline.
 > - [`docs/architecture/controlled-web-fallback.md`](docs/architecture/controlled-web-fallback.md)

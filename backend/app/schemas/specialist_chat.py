@@ -35,8 +35,9 @@ class StartLiveChatRequest(BaseModel):
     """Body for starting a live specialist chat after a ticket claim."""
 
     ticket_id: UUID
-    idle_warning_seconds: int = Field(120, ge=30, le=600)
-    idle_end_seconds: int = Field(180, ge=60, le=1200)
+    # Default = 7-minute idle warning + 2-minute grace before auto-end.
+    idle_warning_seconds: int = Field(420, ge=30, le=1800)
+    idle_end_seconds: int = Field(540, ge=60, le=3600)
 
 
 class SpecialistChatMessageOut(BaseModel):
@@ -69,7 +70,16 @@ class SpecialistChatSessionOut(BaseModel):
     end_reason: SpecialistChatEndReason | None = None
     idle_warning_seconds: int
     idle_end_seconds: int
+    # Roles currently typing, EXCLUDING the caller — so the client can render
+    # "User is typing…" / "Specialist is typing…" without echoing itself.
+    typing: list[SpecialistMessageRole] = Field(default_factory=list)
     messages: list[SpecialistChatMessageOut] = Field(default_factory=list)
+
+
+class TypingRequest(BaseModel):
+    """Heartbeat that the caller is (or has stopped) typing."""
+
+    is_typing: bool = True
 
 
 class SendSpecialistMessageRequest(BaseModel):

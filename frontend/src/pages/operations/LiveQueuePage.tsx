@@ -10,11 +10,16 @@
  * the queue can refresh independently of the rest of the operations UI.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { type QueueEntry, liveChatApi, queueApi } from '@/features/specialist-chat/api';
 import { ApiError } from '@/lib/api';
+import {
+  notifyDesktop,
+  playNotificationChime,
+  requestNotificationPermission,
+} from '@/lib/notification-sound';
 
 type Filter = 'all' | 'unclaimed' | 'mine';
 
@@ -25,6 +30,13 @@ export function LiveQueuePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [claimingId, setClaimingId] = useState<string | null>(null);
+  const [soundOn, setSoundOn] = useState(true);
+  // Unclaimed ticket IDs we've already seen — so the chime fires once per new
+  // handoff, not on every 15s poll. `null` until the first load so we don't
+  // chime for the queue that already existed when the page opened.
+  const seenUnclaimedRef = useRef<Set<string> | null>(null);
+  const soundOnRef = useRef(soundOn);
+  soundOnRef.current = soundOn;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -36,6 +48,27 @@ export function LiveQueuePage() {
         limit: 100,
       });
       setEntries(resp.entries);
+
+      // Detect newly-arrived unclaimed handoffs and alert once each.
+      const currentUnclaimed = resp.entries.filter((e) => !e.claimed_at);
+      const currentIds = new Set(currentUnclaimed.map((e) => e.ticket_id));
+      const seen = seenUnclaimedRef.current;
+      if (seen === null) {
+        // First load — prime the baseline silently.
+        seenUnclaimedRef.current = currentIds;
+      } else {
+        const fresh = currentUnclaimed.filter((e) => !seen.has(e.ticket_id));
+        if (fresh.length > 0 && soundOnRef.current) {
+          playNotificationChime();
+          notifyDesktop(
+            'New live support request',
+            fresh.length === 1
+              ? `${fresh[0].ticket_number}: ${fresh[0].summary.issue_one_liner || fresh[0].title}`
+              : `${fresh.length} new chat handoffs are waiting.`,
+          );
+        }
+        seenUnclaimedRef.current = currentIds;
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load queue');
     } finally {
@@ -84,7 +117,25 @@ export function LiveQueuePage() {
             Incoming chat handoffs from the AI assistant.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              const next = !soundOn;
+              setSoundOn(next);
+              if (next) {
+                requestNotificationPermission();
+                playNotificationChime(); // also unlocks audio via the click gesture
+              }
+            }}
+            title={soundOn ? 'Mute new-request sound' : 'Enable new-request sound'}
+            className={`px-3 py-1.5 text-xs rounded-full font-medium ${
+              soundOn
+                ? 'bg-emerald-100 text-emerald-700'
+                : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+            }`}
+          >
+            {soundOn ? '🔔 Sound on' : '🔕 Muted'}
+          </button>
           {(['all', 'unclaimed', 'mine'] as Filter[]).map((f) => (
             <button
               key={f}

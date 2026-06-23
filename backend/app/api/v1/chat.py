@@ -10,12 +10,15 @@ from app.core.database import get_db
 from app.core.permissions import P
 from app.models.auth import User
 from app.schemas.chat import (
+    CancelWaitingRequest,
+    CancelWaitingResponse,
     ChatMessageRequest,
     ChatMessageResponse,
     LiveAgentRequest,
     LiveAgentResponse,
     SessionDetail,
     SessionSummary,
+    WaitingStatusResponse,
 )
 from app.services.agents.chat_service import ChatService, get_chat_service
 from app.services.auth.dependencies import CurrentUser, require_permissions
@@ -85,6 +88,37 @@ async def request_live_agent(
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     return LiveAgentResponse(session_id=data.session_id, message=message, ticket=ticket)
+
+
+@router.post("/cancel-waiting", response_model=CancelWaitingResponse)
+async def cancel_waiting(
+    data: CancelWaitingRequest,
+    current_user: CurrentUser,
+    service: ChatServiceDep,
+) -> CancelWaitingResponse:
+    """Cancel the user's waiting state for a live specialist.
+
+    This allows users to stop waiting and return to the AI-assisted chat
+    flow. The ticket remains open but is no longer prioritized for live
+    pickup (status reverts to 'triaged' for async handling).
+    """
+    message = await service.cancel_waiting(data.session_id, current_user)
+    return CancelWaitingResponse(session_id=data.session_id, message=message)
+
+
+@router.get("/waiting-status/{session_id}", response_model=WaitingStatusResponse)
+async def get_waiting_status(
+    session_id: str,
+    current_user: CurrentUser,
+    service: ChatServiceDep,
+) -> WaitingStatusResponse:
+    """Check the current waiting-for-specialist status.
+
+    Returns whether the user is still waiting, how long they've been waiting,
+    and whether a specialist is likely available. After a configurable timeout
+    (default 15 minutes), offers a fallback path (ticket/email).
+    """
+    return await service.get_waiting_status(session_id, current_user)
 
 
 @router.get("/sessions", response_model=list[SessionSummary])

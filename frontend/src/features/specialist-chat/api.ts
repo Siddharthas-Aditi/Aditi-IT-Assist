@@ -146,6 +146,8 @@ export interface SpecialistChatSessionOut {
   end_reason?: SpecialistChatEndReason | null;
   idle_warning_seconds: number;
   idle_end_seconds: number;
+  /** Roles currently typing, excluding the caller (drives the typing banner). */
+  typing?: SpecialistMessageRole[];
   messages: SpecialistChatMessageOut[];
 }
 
@@ -208,15 +210,26 @@ export const liveChatApi = {
   start: (ticketId: string, opts?: { idleWarningSeconds?: number; idleEndSeconds?: number }) =>
     apiRequest<SpecialistChatSessionOut>('/specialist-chat/start', {
       method: 'POST',
+      // Omit idle thresholds unless overridden — the backend default (7-minute
+      // warning + 2-minute grace) is the source of truth.
       body: {
         ticket_id: ticketId,
-        idle_warning_seconds: opts?.idleWarningSeconds ?? 120,
-        idle_end_seconds: opts?.idleEndSeconds ?? 180,
+        ...(opts?.idleWarningSeconds != null
+          ? { idle_warning_seconds: opts.idleWarningSeconds }
+          : {}),
+        ...(opts?.idleEndSeconds != null ? { idle_end_seconds: opts.idleEndSeconds } : {}),
       },
     }),
 
   get: (sessionId: string) =>
     apiRequest<SpecialistChatSessionOut>(`/specialist-chat/${sessionId}`),
+
+  /** Heartbeat the caller's typing state (ephemeral; does not reset idle). */
+  typing: (sessionId: string, isTyping: boolean) =>
+    apiRequest<{ role: SpecialistMessageRole; is_typing: boolean }>(
+      `/specialist-chat/${sessionId}/typing`,
+      { method: 'POST', body: { is_typing: isTyping } },
+    ),
 
   send: (sessionId: string, content: string) =>
     apiRequest<SpecialistChatMessageOut>(`/specialist-chat/${sessionId}/message`, {

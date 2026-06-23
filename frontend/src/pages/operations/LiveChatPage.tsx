@@ -37,6 +37,37 @@ export function LiveChatPage() {
   const [sending, setSending] = useState(false);
   const [ending, setEnding] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  // Typing-indicator heartbeat: throttle "typing=true" pings and schedule a
+  // "typing=false" once the user pauses, so we never spam the network.
+  const lastTypingPingRef = useRef(0);
+  const typingStopTimerRef = useRef<number | null>(null);
+
+  const signalTyping = useCallback(
+    (typing: boolean) => {
+      if (!sessionId) return;
+      if (typingStopTimerRef.current) {
+        window.clearTimeout(typingStopTimerRef.current);
+        typingStopTimerRef.current = null;
+      }
+      if (typing) {
+        const now = Date.now();
+        // At most one ping every 2.5s while composing.
+        if (now - lastTypingPingRef.current > 2500) {
+          lastTypingPingRef.current = now;
+          void liveChatApi.typing(sessionId, true).catch(() => {});
+        }
+        // Auto-clear if the user stops typing for 3s.
+        typingStopTimerRef.current = window.setTimeout(() => {
+          lastTypingPingRef.current = 0;
+          void liveChatApi.typing(sessionId, false).catch(() => {});
+        }, 3000);
+      } else {
+        lastTypingPingRef.current = 0;
+        void liveChatApi.typing(sessionId, false).catch(() => {});
+      }
+    },
+    [sessionId],
+  );
 
   const poll = useCallback(async () => {
     if (!sessionId) return;
@@ -73,6 +104,7 @@ export function LiveChatPage() {
     setSending(true);
     setError(null);
     try {
+      signalTyping(false);
       await liveChatApi.send(sessionId, input.trim());
       setInput('');
       await poll();
@@ -118,8 +150,8 @@ export function LiveChatPage() {
 
       {session.status === 'idle_warning' && !isEnded && (
         <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
-          This chat has been quiet for a while. A message keeps it open;
-          otherwise it'll end automatically in about a minute.
+          This chat has been quiet for a few minutes. A message keeps it open;
+          otherwise it'll end automatically in about {graceMinutes(session)}.
         </div>
       )}
 
@@ -160,12 +192,24 @@ export function LiveChatPage() {
         )}
       </div>
 
+      {!isEnded && session.typing && session.typing.length > 0 && (
+        <div className="mt-2 h-4 text-xs text-gray-500 italic">
+          {session.typing.includes('specialist')
+            ? `${session.specialist_name || 'IT specialist'} is typing…`
+            : `${session.user_name || 'User'} is typing…`}
+        </div>
+      )}
+
       {!isEnded && (
         <>
           <div className="mt-3 flex gap-2">
             <input
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={(e) => {
+                setInput(e.target.value);
+                signalTyping(e.target.value.trim().length > 0);
+              }}
+              onBlur={() => signalTyping(false)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
@@ -294,4 +338,11 @@ function Bubble({
 function formatTime(iso: string): string {
   const d = new Date(iso);
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+/** Human label for the grace window between the idle warning and auto-end. */
+function graceMinutes(session: SpecialistChatSessionOut): string {
+  const secs = Math.max(60, session.idle_end_seconds - session.idle_warning_seconds);
+  const mins = Math.max(1, Math.round(secs / 60));
+  return `${mins} minute${mins === 1 ? '' : 's'}`;
 }

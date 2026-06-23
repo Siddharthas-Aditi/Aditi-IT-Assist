@@ -37,6 +37,7 @@ from app.schemas.specialist_chat import (
     SpecialistChatMessageOut,
     SpecialistChatSessionOut,
     StartLiveChatRequest,
+    TypingRequest,
 )
 from app.services.auth.dependencies import CurrentUser, require_permissions
 from app.services.knowledge.improvement import KnowledgeImprovementService
@@ -44,6 +45,7 @@ from app.services.specialist_chat_service import (
     LiveChatPermissionError,
     LiveChatStateError,
     SpecialistChatService,
+    typing_roles,
 )
 
 router = APIRouter()
@@ -67,6 +69,7 @@ SvcDep = Annotated[SpecialistChatService, Depends(_svc)]
 def _to_out(
     session: SpecialistChatSession,
     ticket_number: str | None = None,
+    typing: list[str] | None = None,
 ) -> SpecialistChatSessionOut:
     return SpecialistChatSessionOut(
         id=session.id,
@@ -85,6 +88,7 @@ def _to_out(
         end_reason=session.end_reason,  # type: ignore[arg-type]
         idle_warning_seconds=session.idle_warning_seconds,
         idle_end_seconds=session.idle_end_seconds,
+        typing=typing or [],  # type: ignore[arg-type]
         messages=[
             SpecialistChatMessageOut(
                 id=m.id,
@@ -180,7 +184,37 @@ async def get_session(
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     await db.commit()
     ticket = await db.get(Ticket, session.ticket_id)
-    return _to_out(session, ticket_number=ticket.ticket_number if ticket else None)
+    # Surface the OTHER party's typing state (exclude the caller's own role).
+    caller_role = "user" if current_user.id == session.user_id else "specialist"
+    typing = typing_roles(session_id, exclude_role=caller_role)
+    return _to_out(
+        session,
+        ticket_number=ticket.ticket_number if ticket else None,
+        typing=typing,
+    )
+
+
+@router.post("/{session_id}/typing")
+async def set_typing(
+    session_id: uuid.UUID,
+    body: TypingRequest,
+    current_user: CurrentUser,
+    svc: SvcDep,
+) -> dict:
+    """Heartbeat the caller's typing state (ephemeral; no DB write, no audit).
+
+    The client calls this every few seconds while composing and once with
+    ``is_typing=false`` on blur/send. Does NOT reset the idle timer.
+    """
+    try:
+        role = await svc.mark_typing(
+            session_id, sender=current_user, is_typing=body.is_typing,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except LiveChatPermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    return {"role": role, "is_typing": body.is_typing}
 
 
 @router.post("/{session_id}/message", response_model=SpecialistChatMessageOut)

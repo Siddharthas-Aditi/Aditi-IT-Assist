@@ -11,6 +11,14 @@ This upgraded triage node:
 from langchain_core.messages import AIMessage
 
 from app.core.logging import get_logger
+from app.services.agents.conversation_messages import (
+    generate_confirmation,
+    generate_gratitude_close,
+    generate_greeting,
+    generate_new_topic,
+    generate_reclarification,
+    generate_resolved,
+)
 from app.services.agents.diagnostic_engine import (
     ClarifyOrAnswerDecision,
     evaluate_clarify_or_answer,
@@ -23,19 +31,15 @@ from app.services.agents.entity_normalizer import (
     detect_issue_intent,
     normalize_entity,
 )
+from app.services.agents.escalation_policy import (
+    GATHER_PROBLEM_PROMPT,
+    handoff_context_sufficient,
+)
 from app.services.agents.intent_classifier import (
     ConversationIntent,
     classify_intent,
 )
 from app.services.agents.llm_intent import classify_intent_with_llm
-from app.services.agents.conversation_messages import (
-    generate_confirmation,
-    generate_gratitude_close,
-    generate_greeting,
-    generate_new_topic,
-    generate_reclarification,
-    generate_resolved,
-)
 from app.services.agents.playbooks import get_playbook, get_playbook_for_entity  # noqa: F401
 from app.services.agents.sentiment_analyzer import SentimentAnalyzerService
 from app.services.agents.subtype_classifier import classify_subtype
@@ -337,6 +341,14 @@ async def triage_node(state: WorkflowState) -> dict:
     # the escalation as confirmed so the service layer is allowed to persist
     # the ticket (without this flag, the workflow only OFFERS a ticket).
     if intent_result.intent is ConversationIntent.ESCALATE_REQUEST:
+        # No-direct-connect policy: we never hand off to a human (or create the
+        # anchoring ticket) until we've captured a minimally-useful problem
+        # statement. If the user asks for a human before describing the issue,
+        # gather a short description first so the specialist gets real context
+        # and the supervisor can route correctly. Once they describe it, the
+        # normal AI-first flow runs and they can re-request a human any time.
+        if not handoff_context_sufficient(diag_ctx):
+            return await _gather_problem_before_handoff(state, diag_ctx)
         diag_ctx.live_agent_requested = True
         diag_ctx.escalation_reason = (
             diag_ctx.escalation_reason
@@ -899,6 +911,41 @@ async def _new_topic_message(diag_ctx: DiagnosticContext, matched: str) -> dict:
             "event": "triage.new_topic_reset",
             "matched": matched,
             "topic_shifts": diag_ctx.topic_shifts,
+        }],
+    }
+
+
+async def _gather_problem_before_handoff(
+    state: WorkflowState, diag_ctx: DiagnosticContext
+) -> dict:
+    """No-direct-connect gate: ask for a short problem description first.
+
+    Fired when the user asks for a human (ESCALATE_REQUEST) before we have a
+    minimally-useful problem statement. We deliberately do NOT set
+    ``should_escalate`` / ``escalation_confirmed`` and we leave
+    ``live_agent_requested`` False — so no ticket is created and no handoff
+    happens until the user gives us something a specialist can act on.
+    """
+    diag_ctx.live_agent_requested = False
+    diag_ctx.phase = DiagnosticPhase.CLARIFYING
+    diag_ctx.last_response_type = "clarify"
+    content = GATHER_PROBLEM_PROMPT
+    return {
+        "current_node": "triage",
+        "issue_category": diag_ctx.issue_category,
+        "issue_subcategory": diag_ctx.issue_subcategory,
+        "issue_subtype": diag_ctx.issue_subtype,
+        "issue_resolved": False,
+        "needs_clarification": True,
+        "clarification_question": content,
+        "quick_replies": None,
+        "diagnostic_context": diag_ctx.to_dict(),
+        "conversation_phase": diag_ctx.phase.value,
+        "should_escalate": False,
+        "escalation_confirmed": False,
+        "messages": [AIMessage(content=content)],
+        "audit_trail": [{
+            "event": "triage.handoff_gated_need_problem_statement",
         }],
     }
 

@@ -195,6 +195,20 @@ async def node_name(state: WorkflowState) -> WorkflowState:
   Chat service no longer resets context between non-clarification turns.
 - **Escalation policy**: only escalate after meaningful diagnostic attempt —
   never on first symptom mention. Include entity context in handoff summary.
+- **No-direct-connect**: a user cannot reach a live specialist (or create the
+  ticket) before a minimally-useful problem statement exists. Shared gate
+  `app/services/agents/escalation_policy.py::handoff_context_sufficient`, fired
+  in triage (`_gather_problem_before_handoff`) and `ChatService.request_live_agent`.
+- **Live specialist chat**: same-window handoff with a "please wait" state;
+  typing indicators both ways (`POST /specialist-chat/{id}/typing`, ephemeral
+  in-memory, no idle reset); idle = 7-min warning + 2-min grace → auto-end;
+  specialist queue plays a chime + desktop notification on new handoffs
+  (`frontend/src/lib/notification-sound.ts`).
+- Live-chat docs: `docs/architecture/chat-to-live-handoff.md`,
+  `docs/architecture/live-chat-session-lifecycle.md`,
+  `docs/architecture/idle-timeout-and-typing-indicators.md`,
+  `docs/product/chat-and-live-support-flow.md`,
+  `docs/development/live-chat-qa-checklist.md`.
 - Docs: `docs/architecture/intent-analysis.md`,
   `docs/architecture/entity-normalization.md`,
   `docs/architecture/chat-playbooks.md`,

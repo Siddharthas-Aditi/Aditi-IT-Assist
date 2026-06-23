@@ -6,12 +6,14 @@
  * Teams webhook fires automatically when the backend signals escalation.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertTriangle, Bot, CheckCircle2, ChevronRight, Headset, Send, Ticket, User } from 'lucide-react';
+import { AlertTriangle, Bot, CheckCircle2, ChevronRight, Headset, Send, Ticket, User, X } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { WelcomeCategories } from '@/features/chat/WelcomeCategories';
 import { liveChatApi } from '@/features/specialist-chat/api';
+import { chatApi } from '@/lib/api';
+import { restoreChatSession, saveChatSession } from '@/lib/chat-session-sync';
 
 // Teams Webhook
 // Set VITE_TEAMS_WEBHOOK_URL in your .env to enable Teams notifications on
@@ -151,6 +153,19 @@ export function SupportChatPage() {
   const { user, token } = useAuthStore();
   const navigate = useNavigate();
   const firstName = user?.full_name?.split(' ')[0] ?? 'there';
+  const userId = user?.id ?? '';
+
+  const makeWelcome = useCallback(
+    (): ChatMessage => ({
+      id: 'welcome',
+      role: 'assistant',
+      content:
+        `Welcome, ${firstName}! I'm your Aditi IT Support Assistant.\n\n` +
+        `Select a topic below to get started, or type your issue directly.`,
+      timestamp: new Date(),
+    }),
+    [firstName],
+  );
 
   // Live-chat handoff: poll for an active specialist session so the employee
   // is offered a one-click join the moment a specialist picks up their ticket.
@@ -159,25 +174,82 @@ export function SupportChatPage() {
     ticketNumber?: string | null;
   } | null>(null);
 
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: 'welcome',
-      role: 'assistant',
-      content:
-        `Welcome, ${firstName}! I'm your Aditi IT Support Assistant.\n\n` +
-        `Select a topic below to get started, or type your issue directly.`,
-      timestamp: new Date(),
-    },
-  ]);
+  // ── Restore chat state from localStorage (cross-tab sync) ──────────
+  const restored = userId ? restoreChatSession(userId) : null;
+
+  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+    if (restored && restored.messages.length > 0) {
+      return restored.messages.map((m) => ({
+        ...m,
+        timestamp: new Date(m.timestamp),
+      }));
+    }
+    return [makeWelcome()];
+  });
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [connecting, setConnecting] = useState(false);
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [teamsNotified, setTeamsNotified] = useState(false);
+  // True once a live-agent handoff has been queued — drives the "please wait
+  // while I connect you" banner until a specialist actually joins (liveSession).
+  const [waitingForSpecialist, setWaitingForSpecialist] = useState(
+    () => restored?.waitingForSpecialist ?? false,
+  );
+  // Specialist-unavailable fallback: shown after 15 minutes of waiting
+  const [specialistUnavailable, setSpecialistUnavailable] = useState(false);
+  const [cancellingWait, setCancellingWait] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(
+    () => restored?.sessionId ?? null,
+  );
+  const [teamsNotified, setTeamsNotified] = useState(
+    () => restored?.teamsNotified ?? false,
+  );
   const bottomRef = useRef<HTMLDivElement>(null);
 
   // Show category tiles only on the welcome screen (no real conversation yet)
   const isWelcomeScreen = messages.length === 1 && messages[0].id === 'welcome';
+
+  // ── Persist chat state to localStorage on every change ─────────────
+  useEffect(() => {
+    if (!userId) return;
+    saveChatSession(userId, {
+      sessionId,
+      messages: messages.map((m) => ({
+        ...m,
+        timestamp: m.timestamp.toISOString(),
+      })) as Parameters<typeof saveChatSession>[1]['messages'],
+      waitingForSpecialist,
+      teamsNotified,
+    });
+  }, [userId, sessionId, messages, waitingForSpecialist, teamsNotified]);
+
+  // ── Cross-tab sync: listen for chat state changes from other tabs ──
+  useEffect(() => {
+    if (!userId) return;
+    const key = `aditi-chat-session:${userId}`;
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== key || !e.newValue) return;
+      try {
+        const snap = JSON.parse(e.newValue) as {
+          sessionId: string | null;
+          messages: ChatMessage[];
+          waitingForSpecialist: boolean;
+          teamsNotified: boolean;
+        };
+        // Sync state from the other tab
+        setSessionId(snap.sessionId);
+        setMessages(
+          snap.messages.map((m: ChatMessage) => ({
+            ...m,
+            timestamp: new Date(m.timestamp),
+          })),
+        );
+        setWaitingForSpecialist(snap.waitingForSpecialist);
+        setTeamsNotified(snap.teamsNotified);
+      } catch { /* ignore parse errors */ }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, [userId]);
 
   // Auto-scroll to latest message
   useEffect(() => {
@@ -194,6 +266,8 @@ export function SupportChatPage() {
           setLiveSession(
             r.session_id ? { id: r.session_id, ticketNumber: r.ticket_number } : null,
           );
+          // A specialist joined — the join banner takes over from "waiting".
+          if (r.session_id) setWaitingForSpecialist(false);
         }
       } catch {
         /* transient — keep polling */
@@ -206,6 +280,37 @@ export function SupportChatPage() {
       window.clearInterval(t);
     };
   }, []);
+
+  // Poll waiting status — detect specialist-unavailable timeout (15 min).
+  useEffect(() => {
+    if (!waitingForSpecialist || !sessionId || liveSession) return;
+    let active = true;
+    const poll = async () => {
+      try {
+        const status = await chatApi.getWaitingStatus(sessionId);
+        if (active && !status.specialist_available) {
+          setSpecialistUnavailable(true);
+          if (status.fallback_message) {
+            setMessages((prev) => {
+              // Prevent duplicate fallback messages
+              if (prev.some((m) => m.id === 'specialist-unavailable')) return prev;
+              return [
+                ...prev,
+                {
+                  id: 'specialist-unavailable',
+                  role: 'assistant' as const,
+                  content: status.fallback_message!,
+                  timestamp: new Date(),
+                },
+              ];
+            });
+          }
+        }
+      } catch { /* transient */ }
+    };
+    const t = window.setInterval(poll, 30000); // check every 30s
+    return () => { active = false; window.clearInterval(t); };
+  }, [waitingForSpecialist, sessionId, liveSession]);
 
   /** Core send — accepts an overrideText so category tiles can fire without typing. */
   const sendMessage = async (overrideText?: string) => {
@@ -350,12 +455,22 @@ export function SupportChatPage() {
         return;
       }
 
+      // ticket === undefined means the no-direct-connect policy asked for a
+      // problem description first — surface the message, do NOT enter waiting.
+      const handedOff = Boolean(data.ticket);
+      if (handedOff) setWaitingForSpecialist(true);
+      const waitLine = handedOff
+        ? '\n\nPlease wait while I connect you to a live IT specialist. ' +
+          "I'll bring them into this chat as soon as one is available — you can keep this window open."
+        : '';
       setMessages((prev) => [
         ...prev,
         {
           id: `agent-${Date.now()}`,
           role: 'assistant',
-          content: data.message ?? 'A support ticket has been created and queued for our IT team.',
+          content:
+            (data.message ?? 'A support ticket has been created and queued for our IT team.') +
+            waitLine,
           timestamp: new Date(),
           ticket: data.ticket,
         },
@@ -410,6 +525,46 @@ export function SupportChatPage() {
             Join <ChevronRight size={15} />
           </span>
         </button>
+      )}
+
+      {/* ── Waiting-for-specialist banner ───────────────────────── */}
+      {waitingForSpecialist && !liveSession && (
+        <div className="flex items-center justify-between gap-3 border-b border-amber-200 bg-amber-50 px-6 py-3">
+          <div className="flex items-center gap-3">
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-amber-400 border-t-transparent" />
+            <span className="text-sm font-medium text-amber-800">
+              {specialistUnavailable
+                ? 'No specialist is available right now. Your ticket is still active and the team will follow up via email.'
+                : 'Please wait while I connect you to a live IT specialist. You\'re in the queue — keep this window open.'}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={async () => {
+              if (!sessionId || cancellingWait) return;
+              setCancellingWait(true);
+              try {
+                const res = await chatApi.cancelWaiting(sessionId);
+                setWaitingForSpecialist(false);
+                setSpecialistUnavailable(false);
+                setMessages((prev) => [
+                  ...prev,
+                  {
+                    id: `cancel-${Date.now()}`,
+                    role: 'assistant',
+                    content: res.message,
+                    timestamp: new Date(),
+                  },
+                ]);
+              } catch { /* non-critical */ }
+              finally { setCancellingWait(false); }
+            }}
+            disabled={cancellingWait}
+            className="shrink-0 flex items-center gap-1 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-100 disabled:opacity-50"
+          >
+            <X size={12} /> Cancel
+          </button>
+        </div>
       )}
 
       {/* ── Message thread ──────────────────────────────────────── */}

@@ -34,6 +34,43 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
+class TestIdleDefaults:
+    """The default idle policy is 7-minute warning + 2-minute grace. These
+    pin the contract so a regression to the old 2/3-min values is caught."""
+
+    def test_start_request_defaults_are_7_and_9_minutes(self) -> None:
+        import uuid
+
+        from app.schemas.specialist_chat import StartLiveChatRequest
+
+        req = StartLiveChatRequest(ticket_id=uuid.uuid4())
+        assert req.idle_warning_seconds == 420  # 7 min
+        assert req.idle_end_seconds == 540       # 7 + 2 min grace
+
+    def test_warning_at_7min_not_before(self) -> None:
+        svc = SpecialistChatService(db=MagicMock())
+        session = _FakeSession(
+            last_activity_at=_now() - timedelta(seconds=400),  # < 420
+            idle_warning_seconds=420,
+            idle_end_seconds=540,
+        )
+        assert svc.evaluate_idle(session, now=_now()).is_idle_warning is False
+        # Past 7 min: warning fires, end does not (still in the 2-min grace).
+        session.last_activity_at = _now() - timedelta(seconds=480)
+        ev = svc.evaluate_idle(session, now=_now())
+        assert ev.is_idle_warning is True
+        assert ev.is_idle_end is False
+
+    def test_auto_end_after_grace(self) -> None:
+        svc = SpecialistChatService(db=MagicMock())
+        session = _FakeSession(
+            last_activity_at=_now() - timedelta(seconds=541),  # > 540
+            idle_warning_seconds=420,
+            idle_end_seconds=540,
+        )
+        assert svc.evaluate_idle(session, now=_now()).is_idle_end is True
+
+
 class TestIdleEvaluation:
     """The deterministic idle math is what the polling endpoint AND the
     background sweeper share. One source of truth — pin it."""

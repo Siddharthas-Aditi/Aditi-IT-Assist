@@ -46,6 +46,48 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
+# ── Typing indicators ──────────────────────────────────────────────────
+# Typing state is transient, high-churn, and worthless to persist, so it lives
+# in-memory keyed by session id: ``{session_id: {role: last_heartbeat}}``. A
+# role counts as "typing" only while its heartbeat is within TYPING_TTL_SECONDS;
+# the client sends a heartbeat every few seconds while composing and a stop on
+# blur/send. This keeps the 3-second poll cheap and avoids flicker. (Single
+# instance / dev; a multi-replica deployment would move this to Redis pub/sub
+# alongside the WebSocket upgrade.)
+TYPING_TTL_SECONDS = 8
+_typing_state: dict[str, dict[str, datetime]] = {}
+
+
+def set_typing(session_id: uuid.UUID, role: str, *, is_typing: bool) -> None:
+    """Record (or clear) that ``role`` is currently typing in this session."""
+    key = str(session_id)
+    roles = _typing_state.setdefault(key, {})
+    if is_typing:
+        roles[role] = datetime.now(UTC)
+    else:
+        roles.pop(role, None)
+
+
+def typing_roles(
+    session_id: uuid.UUID, *, exclude_role: str | None = None
+) -> list[str]:
+    """Roles typing within the TTL window, optionally excluding the caller's."""
+    roles = _typing_state.get(str(session_id))
+    if not roles:
+        return []
+    now = datetime.now(UTC)
+    return [
+        role
+        for role, seen in roles.items()
+        if role != exclude_role
+        and (now - seen).total_seconds() <= TYPING_TTL_SECONDS
+    ]
+
+
+def clear_typing(session_id: uuid.UUID) -> None:
+    """Drop all typing state for a session (called when it ends)."""
+    _typing_state.pop(str(session_id), None)
+
 
 @dataclass(frozen=True)
 class IdleEvaluation:
@@ -80,8 +122,8 @@ class SpecialistChatService:
         specialist: User,
         user: User,
         ai_session_id: uuid.UUID | None = None,
-        idle_warning_seconds: int = 120,
-        idle_end_seconds: int = 180,
+        idle_warning_seconds: int = 420,
+        idle_end_seconds: int = 540,
     ) -> SpecialistChatSession:
         """Start a live chat after the specialist has claimed the ticket.
 
@@ -172,6 +214,8 @@ class SpecialistChatService:
             )
 
         role = "user" if sender.id == session.user_id else "specialist"
+        # Sending a message means you've stopped typing — clear the indicator.
+        set_typing(session_id, role, is_typing=False)
         msg = SpecialistChatMessage(
             session_id=session.id,
             sender_id=sender.id,
@@ -213,6 +257,25 @@ class SpecialistChatService:
         session = await self._load(session_id)
         return await self._append_system_message(session, content=content, event=event)
 
+    async def mark_typing(
+        self, session_id: uuid.UUID, *, sender: User, is_typing: bool,
+    ) -> str:
+        """Record the caller's typing state. Returns the caller's role.
+
+        Validates participation (only the user/specialist on the session may
+        signal typing) but does NOT touch ``last_activity_at`` — typing must not
+        reset the idle timer (only a real message does). No DB write, no audit:
+        this is ephemeral presence, not a transcript event.
+        """
+        session = await self._load(session_id)
+        if not _is_participant(session, sender):
+            raise LiveChatPermissionError("Only participants may signal typing")
+        role = "user" if sender.id == session.user_id else "specialist"
+        if session.status.startswith("ended"):
+            return role
+        set_typing(session_id, role, is_typing=is_typing)
+        return role
+
     async def _append_system_message(
         self,
         session: SpecialistChatSession,
@@ -250,6 +313,7 @@ class SpecialistChatService:
         session = await self._load(session_id)
         if session.status.startswith("ended"):
             return session  # idempotent
+        clear_typing(session_id)
 
         if actor is not None and not _is_participant(session, actor):
             raise LiveChatPermissionError(
@@ -336,11 +400,17 @@ class SpecialistChatService:
         if ev.is_idle_warning and session.status == "active":
             session.status = "idle_warning"
             session.idle_warning_at = datetime.now(UTC)
+            grace_minutes = max(
+                1,
+                round((session.idle_end_seconds - session.idle_warning_seconds) / 60),
+            )
             await self._append_system_message(
                 session,
                 content=(
-                    "It's been quiet for a couple of minutes. Are you still there? "
-                    "The chat will end automatically if there's no reply soon."
+                    "It's been quiet for a few minutes — are you still there? "
+                    f"If there's no reply, this chat will end automatically in about "
+                    f"{grace_minutes} minute{'s' if grace_minutes != 1 else ''}. "
+                    "Just send a message to keep it open."
                 ),
                 event="idle_warning",
             )
@@ -532,4 +602,7 @@ __all__ = [
     "LiveChatPermissionError",
     "LiveChatStateError",
     "SpecialistChatService",
+    "clear_typing",
+    "set_typing",
+    "typing_roles",
 ]

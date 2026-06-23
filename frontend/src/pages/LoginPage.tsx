@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '@/stores/auth-store';
 import { ROLE_ROUTES } from '@/types/auth';
@@ -11,6 +11,7 @@ const REASON_BANNERS: Record<string, string> = {
   session_expired: 'Your session expired. Please sign in again.',
   refresh_failed: 'We could not extend your session. Please sign in again.',
   auth_required: 'Please sign in to continue.',
+  logged_out_other_tab: 'You were signed out from another tab.',
 };
 
 export function LoginPage() {
@@ -19,11 +20,22 @@ export function LoginPage() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
-  const { login } = useAuthStore();
+  const { login, isAuthenticated, user } = useAuthStore();
   const [searchParams] = useSearchParams();
   const reason = searchParams.get('reason');
   const next = searchParams.get('next');
   const reasonMessage = reason ? REASON_BANNERS[reason] : null;
+
+  // If the user is already authenticated (e.g. opened a new tab while logged
+  // in on another tab), skip the login form and go straight to the app.
+  useEffect(() => {
+    if (isAuthenticated && user && !reason) {
+      const safeNext =
+        next && next.startsWith('/') && !next.startsWith('//') ? next : null;
+      const defaultRoute = ROLE_ROUTES[user.role] || '/support';
+      navigate(safeNext ?? defaultRoute, { replace: true });
+    }
+  }, [isAuthenticated, user, reason, next, navigate]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
