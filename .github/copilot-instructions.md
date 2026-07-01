@@ -204,6 +204,21 @@ async def node_name(state: WorkflowState) -> WorkflowState:
   in-memory, no idle reset); idle = 7-min warning + 2-min grace → auto-end;
   specialist queue plays a chime + desktop notification on new handoffs
   (`frontend/src/lib/notification-sound.ts`).
+- **Chat-escalation artifacts**: on escalation, two linked **immutable** records
+  are created (`app/models/escalation.py`): a `TranscriptSnapshot` (write-once
+  Employee↔AI history) + an `EscalationContext` (one per ticket; attempted steps,
+  `kb_gap_tags`, escalation reason, routing, resolution-comparison fields).
+  Created in `ChatService._persist_and_queue`; served via
+  `EscalationService.get_handoff_view` and `GET /specialist-queue/{id}/handoff-view`
+  (summary-first, transcript-second; rendered by
+  `features/specialist-chat/HandoffContextPanel.tsx`). Never shove raw chat into
+  the ticket description; link to the artifacts. Improvement is human-reviewed
+  only — no self-learning. Migration `009_chat_escalation_artifacts`.
+- Escalation-artifact docs: `docs/architecture/chat-escalation-artifacts.md`,
+  `docs/architecture/transcript-snapshot-and-context-model.md`,
+  `docs/product/chat-to-ticket-handoff.md`,
+  `docs/product/specialist-triage-experience.md`,
+  `docs/development/chat-escalation-qa-checklist.md`.
 - Live-chat docs: `docs/architecture/chat-to-live-handoff.md`,
   `docs/architecture/live-chat-session-lifecycle.md`,
   `docs/architecture/idle-timeout-and-typing-indicators.md`,

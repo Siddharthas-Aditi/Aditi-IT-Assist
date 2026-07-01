@@ -29,11 +29,15 @@ from typing import TYPE_CHECKING
 from sqlalchemy import and_, func, or_, select, update
 
 from app.core.logging import get_logger
+from app.models.escalation import EscalationContext
 from app.models.ticket import Ticket
 from app.schemas.specialist_queue import (
+    ConversationTurn,
     HandoffPackage,
     HandoffSummary,
+    KBSourceConsulted,
     QueueEntry,
+    StepAttempted,
 )
 from app.services.knowledge.improvement import KnowledgeImprovementService
 
@@ -204,6 +208,22 @@ class SpecialistQueueService:
             )
             candidate_id = candidate.id
 
+        # Baseline resolution-comparison capture: record what the specialist did
+        # onto the escalation context so AI-suggested vs specialist-actual can be
+        # compared later (human-reviewed improvement, NOT self-learning). A richer
+        # structured comparison can be submitted via the dedicated endpoint.
+        from app.services.escalation_service import EscalationService
+
+        await EscalationService(self.db).record_resolution_comparison(
+            ticket_id=ticket.id,
+            specialist_resolution_summary=resolution_notes,
+            specialist_resolution_steps=[],
+            final_resolution_category=ticket.category,
+            ai_vs_specialist_resolution_gap=None,
+            kb_candidate_flag=propose_knowledge_candidate,
+            actor=by_user,
+        )
+
         await self.db.flush()
         logger.info(
             "specialist_queue_resolved",
@@ -223,10 +243,17 @@ class SpecialistQueueService:
     ) -> HandoffPackage:
         """Assemble the typed context bundle attached to a queue entry.
 
-        Pulls from the ticket's persisted fields and (optionally) a live
-        chat-session state snapshot. Both are typed inputs; nothing here
-        invents data.
+        Primary source is the **persisted** escalation context + transcript
+        snapshot (so the package survives a process restart and is never the
+        data-starved version that the old in-memory-only lookup produced). If no
+        persisted context exists yet, falls back to the live in-memory session
+        state, then the ticket's own fields. Nothing here invents data.
         """
+        context = await self._get_escalation_context(ticket.id)
+        if context is not None:
+            return self._package_from_context(ticket, context)
+
+        # Fallback: live in-memory state (pre-persistence) or ticket-only.
         state = session_state or {}
         diag = state.get("diagnostic_context") or {}
 
@@ -256,6 +283,81 @@ class SpecialistQueueService:
                 if diag.get("live_agent_requested")
                 else "exhausted_grounded_steps"
             ),
+        )
+
+    async def _get_escalation_context(
+        self, ticket_id: uuid.UUID
+    ) -> EscalationContext | None:
+        stmt = select(EscalationContext).where(
+            EscalationContext.ticket_id == ticket_id
+        )
+        result = await self.db.execute(stmt)
+        return result.scalar_one_or_none()
+
+    def _package_from_context(
+        self, ticket: Ticket, context: EscalationContext
+    ) -> HandoffPackage:
+        """Build the typed handoff package from the persisted escalation context."""
+        summary = HandoffSummary(
+            issue_one_liner=context.issue_summary or ticket.ai_summary or ticket.title,
+            affected_system=context.affected_system,
+            issue_category=context.category or ticket.category,
+            issue_subtype=context.subcategory or ticket.subcategory,
+            urgency=context.urgency,  # type: ignore[arg-type]
+            ai_confidence_at_handoff=context.ai_confidence or ticket.ai_confidence or 0.0,
+        )
+
+        steps = [
+            StepAttempted(
+                instruction=s.get("instruction", ""),
+                outcome=s.get("outcome", "unknown"),
+                source_kb_title=s.get("source_kb_title"),
+            )
+            for s in (context.ai_attempted_steps or [])
+        ]
+        kb_sources = [
+            KBSourceConsulted(
+                article_id=r.get("article_id") or "",
+                title=r.get("title") or "Untitled article",
+                relevance=r.get("relevance"),
+            )
+            for r in (context.kb_articles_referenced or [])
+        ]
+
+        conversation: list[ConversationTurn] = []
+        snapshot = context.transcript_snapshot
+        if snapshot is not None:
+            for m in snapshot.messages or []:
+                role = m.get("role")
+                # ConversationTurn only models user/assistant AI turns.
+                if role == "employee":
+                    role = "user"
+                if role in ("user", "assistant"):
+                    conversation.append(
+                        ConversationTurn(role=role, content=m.get("content", ""))
+                    )
+
+        handoff_triggered_by = context.handoff_triggered_by or "exhausted_grounded_steps"
+        valid_triggers = {
+            "user_request", "ai_low_confidence", "exhausted_grounded_steps",
+            "loop_detected", "repeated_failure", "policy_block", "missing_data",
+        }
+        if handoff_triggered_by not in valid_triggers:
+            handoff_triggered_by = "exhausted_grounded_steps"
+
+        return HandoffPackage(
+            session_id=context.chat_session_id,
+            ticket_id=ticket.id,
+            summary=summary,
+            diagnostic_slots={
+                k: str(v) for k, v in (context.diagnostic_slots or {}).items() if v
+            },
+            steps_attempted=steps,
+            kb_sources_consulted=kb_sources,
+            conversation=conversation,
+            handoff_reason=context.escalation_reason or "AI exhausted grounded steps",
+            handoff_triggered_by=handoff_triggered_by,  # type: ignore[arg-type]
+            supervisor_decision_trace=context.supervisor_decision_trace or [],
         )
 
     # ── Helpers ────────────────────────────────────────────────────────

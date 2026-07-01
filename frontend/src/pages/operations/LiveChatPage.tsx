@@ -16,12 +16,14 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import { useAuthStore } from '@/stores/auth-store';
+import { Breadcrumbs } from '@/components/admin/Breadcrumbs';
 
 import {
   type SpecialistChatEndReason,
   type SpecialistChatSessionOut,
   liveChatApi,
 } from '@/features/specialist-chat/api';
+import { HandoffContextPanel } from '@/features/specialist-chat/HandoffContextPanel';
 
 const POLL_INTERVAL_MS = 3000;
 
@@ -143,10 +145,27 @@ export function LiveChatPage() {
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
+      {isSpecialist && (
+        <Breadcrumbs
+          className="mb-3"
+          homeTo="/operations"
+          items={[
+            { label: 'Specialist Queue', to: '/operations/queue' },
+            { label: 'My Assigned', to: '/operations/assigned' },
+            { label: session.ticket_number || 'Live chat' },
+          ]}
+        />
+      )}
+
       <Header
         session={session}
         onBack={() => navigate(isSpecialist ? '/operations/assigned' : '/support')}
       />
+
+      {/* Specialist warm-handoff context: summary first, transcript second. */}
+      {isSpecialist && session.ticket_id && (
+        <HandoffContextPanel ticketId={session.ticket_id} />
+      )}
 
       {session.status === 'idle_warning' && !isEnded && (
         <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">

@@ -361,6 +361,16 @@ HandoffSummary = {
 - ✅ Must preserve ALL conversation context
 - ✅ Must log escalation reason to audit trail
 
+### Persisted escalation artifacts (at handoff time)
+The in-workflow `HandoffSummary` is ephemeral. When the ticket is actually
+persisted (service layer, on explicit confirmation), `EscalationService`
+captures **two linked, immutable records**: a `TranscriptSnapshot` (write-once,
+ordered Employee↔AI history) and an `EscalationContext` (one per ticket — issue
+summary, `ai_attempted_steps[]`, `kb_articles_referenced[]`, `kb_gap_tags[]`,
+`escalation_reason`, routing, and post-resolution comparison fields). The ticket
+description holds only a concise summary; full detail is pulled from these
+records. See `docs/architecture/chat-escalation-artifacts.md`.
+
 ---
 
 ## 6. Ticketing Agent

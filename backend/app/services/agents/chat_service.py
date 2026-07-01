@@ -259,10 +259,12 @@ class ChatService:
         # real ticket number. Never claim a ticket exists unless one does.
         if ticket_ref is not None:
             content = (
-                f"✅ I've created ticket **{ticket_ref.ticket_number}** and handed it to "
-                f"our IT specialists. They have the full context of our conversation and "
-                f"the steps we tried, and will follow up with you directly.\n\n"
-                f"Is there anything else I can help you with in the meantime?"
+                f"✅ I've created support ticket **{ticket_ref.ticket_number}** and I'm "
+                f"sharing our full conversation with the IT specialist — including what you "
+                f"asked, what I understood, and the steps we already tried — so they can "
+                f"continue without asking you to repeat everything.\n\n"
+                f"You'll stay in this chat; a specialist will pick it up shortly. Is there "
+                f"anything else I can help you with in the meantime?"
             )
 
         steps = [
@@ -374,7 +376,7 @@ class ChatService:
             # Confirmed but we can't persist (no DB/user) — degrade to offer.
             return None
 
-        return await self._persist_and_queue(session_id, draft, requester)
+        return await self._persist_and_queue(session_id, draft, requester, state=result)
 
     @staticmethod
     async def _user_intent_authorizes_ticket(result: dict) -> bool:
@@ -456,7 +458,7 @@ class ChatService:
 
         state = state or {}
         draft = state.get("ticket_draft") or self._minimal_draft(state, requester)
-        ref = await self._persist_and_queue(session_id, draft, requester)
+        ref = await self._persist_and_queue(session_id, draft, requester, state=state)
 
         # Record the waiting start time for timeout tracking
         _waiting_since[session_id] = datetime.now(UTC)
@@ -552,17 +554,28 @@ class ChatService:
         return handoff_context_sufficient(diag)
 
     async def _persist_and_queue(
-        self, session_id: str, draft: dict, requester: User
+        self,
+        session_id: str,
+        draft: dict,
+        requester: User,
+        *,
+        state: dict | None = None,
     ) -> TicketRef:
-        """Create the ticket from a draft and queue it for a live agent."""
+        """Create the ticket from a draft, queue it, and snapshot escalation context.
+
+        Linked-artifact model (see docs/architecture/chat-escalation-artifacts.md):
+        a ticket is the parent operational object; the full conversation context
+        is preserved in TWO immutable, linked records (transcript snapshot +
+        escalation context) created here — NOT shoved into the ticket description.
+
+        NOTE: chat sessions are currently in-memory only (no `support_sessions`
+        row), so we still do NOT set ticket.session_id (FK to a persisted session).
+        The conversation is preserved via the transcript snapshot instead, and the
+        ticket links to it through the escalation context (one-per-ticket).
+        """
         svc = self.ticket_service
         assert svc is not None  # guarded by callers
 
-        # NOTE: chat sessions are currently in-memory only (no `chat_sessions`
-        # row), so we must NOT set ticket.session_id — it's an FK to a persisted
-        # session and would violate the constraint. The conversation context is
-        # captured in the description/ai_summary instead. (When chat sessions are
-        # persisted, pass `session_id=_coerce_uuid(session_id)` here.)
         ticket = await svc.create_ticket(
             requester=requester,
             title=draft.get("title") or "IT Support Request",
@@ -574,6 +587,12 @@ class ChatService:
         )
         # Ticket-before-handoff: create first, THEN queue for a human.
         await svc.request_live_agent(ticket.id, requester)
+
+        # Capture the immutable transcript snapshot + structured escalation
+        # context BEFORE commit so all three persist atomically. Resolve the
+        # session state from the caller (preferred) or the in-memory store.
+        await self._create_escalation_artifacts(session_id, ticket, requester, state)
+
         await svc.db.commit()
 
         ref = {
@@ -590,6 +609,39 @@ class ChatService:
             ticket_number=ticket.ticket_number,
         )
         return TicketRef(**ref)
+
+    async def _create_escalation_artifacts(
+        self,
+        session_id: str,
+        ticket,
+        requester: User,
+        state: dict | None,
+    ) -> None:
+        """Create the transcript snapshot + escalation context for this ticket.
+
+        Best-effort and non-fatal: a failure here must never block ticket
+        creation / handoff (the ticket already exists at this point).
+        """
+        svc = self.ticket_service
+        if svc is None:
+            return
+        try:
+            from app.services.escalation_service import EscalationService
+
+            resolved_state = state if state is not None else _sessions.get(session_id)
+            await EscalationService(svc.db).create_escalation_artifacts(
+                ticket=ticket,
+                chat_session_id=session_id,
+                state=resolved_state,
+                requester=requester,
+            )
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning(
+                "escalation_artifacts_creation_failed",
+                session_id=session_id,
+                ticket_number=getattr(ticket, "ticket_number", None),
+                error=str(exc),
+            )
 
     @staticmethod
     def _minimal_draft(state: dict, requester: User) -> dict:

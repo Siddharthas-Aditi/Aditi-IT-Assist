@@ -271,6 +271,11 @@ class TestHandoffContextPackage:
         from app.services.specialist_queue_service import SpecialistQueueService
 
         db = MagicMock()
+        # The service now checks for a persisted escalation context first;
+        # simulate "no context found" so it falls back to the in-memory state.
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none = MagicMock(return_value=None)
+        db.execute = AsyncMock(return_value=mock_result)
         queue_svc = SpecialistQueueService(db)
 
         ticket = MagicMock()

@@ -118,6 +118,67 @@ export interface ClaimResponse {
   handoff_package: HandoffPackage;
 }
 
+// ── Escalation artifacts (summary-first handoff view) ──────────────────
+// Mirrors backend `app/schemas/escalation.py`.
+
+export type TranscriptRole = 'employee' | 'assistant' | 'system' | 'specialist';
+
+export interface TranscriptMessage {
+  seq: number;
+  role: TranscriptRole;
+  content: string;
+  message_type?: string | null;
+  timestamp?: string | null;
+}
+
+export interface TranscriptSnapshot {
+  id: string;
+  chat_session_id: string;
+  captured_at: string;
+  message_count: number;
+  context_version: string;
+  messages: TranscriptMessage[];
+}
+
+export interface KBArticleRef {
+  article_id: string;
+  title: string;
+  relevance?: number | null;
+}
+
+export interface SpecialistHandoffView {
+  ticket_id: string;
+  ticket_number: string;
+  // Overview
+  issue_summary: string;
+  category?: string | null;
+  subcategory?: string | null;
+  affected_system?: string | null;
+  urgency?: string | null;
+  ai_confidence?: number | null;
+  ai_resolution_status: string;
+  escalation_reason?: string | null;
+  escalation_created_at?: string | null;
+  // AI handoff detail
+  user_problem_statement?: string | null;
+  detected_intent?: string | null;
+  steps_attempted: StepAttempted[];
+  // KB signals
+  kb_articles_referenced: KBArticleRef[];
+  kb_gap_tags: string[];
+  // Full transcript (collapsible / secondary)
+  transcript?: TranscriptSnapshot | null;
+  has_structured_context: boolean;
+}
+
+export interface ResolutionComparisonInput {
+  specialist_resolution_summary: string;
+  specialist_resolution_steps?: string[];
+  final_resolution_category?: string | null;
+  ai_vs_specialist_resolution_gap?: string | null;
+  kb_candidate_flag?: boolean;
+}
+
 // ── Live chat ────────────────────────────────────────────────────────
 
 export interface SpecialistChatMessageOut {
@@ -167,6 +228,17 @@ export const queueApi = {
 
   getHandoffPackage: (ticketId: string) =>
     apiRequest<HandoffPackage>(`/specialist-queue/${ticketId}`),
+
+  /** Summary-first, transcript-second view the specialist reads on pickup. */
+  getHandoffView: (ticketId: string) =>
+    apiRequest<SpecialistHandoffView>(`/specialist-queue/${ticketId}/handoff-view`),
+
+  /** Capture what the specialist actually did, for AI/KB improvement. */
+  recordResolutionComparison: (ticketId: string, body: ResolutionComparisonInput) =>
+    apiRequest<unknown>(`/specialist-queue/${ticketId}/resolution-comparison`, {
+      method: 'POST',
+      body,
+    }),
 
   claim: (ticketId: string) =>
     apiRequest<ClaimResponse>('/specialist-queue/claim', {

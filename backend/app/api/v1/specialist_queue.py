@@ -21,6 +21,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.permissions import P
 from app.models.auth import User
+from app.schemas.escalation import (
+    EscalationContextOut,
+    ResolutionComparisonIn,
+    SpecialistHandoffView,
+)
 from app.schemas.specialist_queue import (
     ClaimRequest,
     ClaimResponse,
@@ -30,6 +35,7 @@ from app.schemas.specialist_queue import (
     ResolveResponse,
 )
 from app.services.auth.dependencies import require_permissions
+from app.services.escalation_service import EscalationService
 from app.services.specialist_queue_service import SpecialistQueueService
 
 router = APIRouter()
@@ -88,6 +94,71 @@ async def get_handoff_package(
         if ticket.session_id else None
     )
     return await service.build_handoff_package(ticket, session_state=session_state)
+
+
+@router.get("/{ticket_id}/handoff-view", response_model=SpecialistHandoffView)
+async def get_handoff_view(
+    ticket_id: uuid.UUID,
+    current_user: QueueViewerDep,
+    db: DBDep,
+) -> SpecialistHandoffView:
+    """Summary-first, transcript-second view a specialist reads on pickup.
+
+    Renders: Overview → AI Handoff Summary → Troubleshooting Attempted →
+    KB Signals / Knowledge Gaps → Full Conversation Transcript (collapsible).
+    Degrades gracefully for tickets without a persisted escalation context.
+    """
+    view = await EscalationService(db).get_handoff_view(ticket_id)
+    if view is None:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+    return view
+
+
+@router.get("/{ticket_id}/escalation-context", response_model=EscalationContextOut)
+async def get_escalation_context(
+    ticket_id: uuid.UUID,
+    current_user: QueueViewerDep,
+    db: DBDep,
+) -> EscalationContextOut:
+    """Return the raw structured escalation context (analytics / admin use)."""
+    context = await EscalationService(db).get_context_out(ticket_id)
+    if context is None:
+        raise HTTPException(
+            status_code=404, detail="No escalation context for this ticket"
+        )
+    return context
+
+
+@router.post("/{ticket_id}/resolution-comparison", response_model=EscalationContextOut)
+async def record_resolution_comparison(
+    ticket_id: uuid.UUID,
+    body: ResolutionComparisonIn,
+    current_user: ResolverDep,
+    db: DBDep,
+) -> EscalationContextOut:
+    """Capture what the specialist actually did vs. what the AI suggested.
+
+    Stores structured comparison data for human-reviewed AI/KB improvement.
+    There is NO uncontrolled self-learning.
+    """
+    service = EscalationService(db)
+    context = await service.record_resolution_comparison(
+        ticket_id=ticket_id,
+        specialist_resolution_summary=body.specialist_resolution_summary,
+        specialist_resolution_steps=body.specialist_resolution_steps,
+        final_resolution_category=body.final_resolution_category,
+        ai_vs_specialist_resolution_gap=body.ai_vs_specialist_resolution_gap,
+        kb_candidate_flag=body.kb_candidate_flag,
+        actor=current_user,
+    )
+    if context is None:
+        raise HTTPException(
+            status_code=404, detail="No escalation context for this ticket"
+        )
+    await db.commit()
+    out = await service.get_context_out(ticket_id)
+    assert out is not None
+    return out
 
 
 @router.post("/claim", response_model=ClaimResponse)

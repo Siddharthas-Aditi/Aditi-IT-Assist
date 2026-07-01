@@ -14,6 +14,7 @@ from app.models.auth import (
     UserRoleAssignment,
 )
 from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
+from app.models.escalation import EscalationContext, TranscriptSnapshot
 from app.models.feedback import ConversationFeedback, MessageFeedback
 from app.models.ingestion import IngestionCandidate, IngestionJob
 from app.models.knowledge import (
@@ -57,6 +58,9 @@ __all__ = [
     "Ticket",
     "TicketComment",
     "TicketEvent",
+    # Chat-escalation artifacts
+    "TranscriptSnapshot",
+    "EscalationContext",
     # Knowledge
     "KnowledgeArticle",
     "KnowledgeArticleVersion",
