@@ -29,6 +29,7 @@ export function LiveQueuePage() {
   const [entries, setEntries] = useState<QueueEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
   const [claimingId, setClaimingId] = useState<string | null>(null);
   const [soundOn, setSoundOn] = useState(true);
   // Unclaimed ticket IDs we've already seen — so the chime fires once per new
@@ -49,8 +50,13 @@ export function LiveQueuePage() {
       });
       setEntries(resp.entries);
 
-      // Detect newly-arrived unclaimed handoffs and alert once each.
-      const currentUnclaimed = resp.entries.filter((e) => !e.claimed_at);
+      // Detect newly-arrived *fresh* handoffs (employee still waiting) and
+      // alert once each. Stale "likely_left" entries don't ring — the employee
+      // has already been shown the async-ticket fallback and is not at the
+      // keyboard, so a chime would be misleading.
+      const currentUnclaimed = resp.entries.filter(
+        (e) => !e.claimed_at && e.waiting_state === 'waiting',
+      );
       const currentIds = new Set(currentUnclaimed.map((e) => e.ticket_id));
       const seen = seenUnclaimedRef.current;
       if (seen === null) {
@@ -85,14 +91,26 @@ export function LiveQueuePage() {
   const onClaim = async (entry: QueueEntry) => {
     setClaimingId(entry.ticket_id);
     setError(null);
+    setInfo(null);
     try {
-      await queueApi.claim(entry.ticket_id);
-      // Start the live session right after a successful claim. The backend's
-      // unique-partial-index makes this idempotent if a session already exists.
-      const live = await liveChatApi.start(entry.ticket_id);
-      navigate(`/operations/live-chat/${live.id}`, {
-        state: { ticketNumber: entry.ticket_number },
-      });
+      const claimed = await queueApi.claim(entry.ticket_id);
+
+      if (claimed.waiting_state === 'likely_left') {
+        // The employee waited past the live-chat timeout and has likely already
+        // left. Do NOT open a live session — it would be an empty room. The
+        // ticket is now in the specialist's assigned queue for async follow-up.
+        await load();
+        setInfo(
+          `${entry.ticket_number} claimed — employee may have left (waited ${Math.round(claimed.waited_seconds / 60)}m). ` +
+            'Ticket saved to your assigned queue for async follow-up.',
+        );
+      } else {
+        // Employee is still actively waiting — start the live session immediately.
+        const live = await liveChatApi.start(entry.ticket_id);
+        navigate(`/operations/live-chat/${live.id}`, {
+          state: { ticketNumber: entry.ticket_number },
+        });
+      }
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
         setError(`${entry.ticket_number} was already claimed — refreshing.`);
@@ -164,6 +182,12 @@ export function LiveQueuePage() {
         </div>
       )}
 
+      {info && (
+        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
+          {info}
+        </div>
+      )}
+
       <div className="bg-white rounded-lg border overflow-hidden">
         <div className="p-4 border-b bg-gray-50 flex items-center justify-between">
           <h2 className="text-sm font-medium text-gray-700">Queue ({entries.length})</h2>
@@ -195,7 +219,10 @@ export function LiveQueuePage() {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {entries.map((e) => (
-                <tr key={e.ticket_id} className="hover:bg-gray-50">
+                <tr
+                  key={e.ticket_id}
+                  className={`hover:bg-gray-50 ${e.waiting_state === 'likely_left' ? 'opacity-60' : ''}`}
+                >
                   <td className="px-4 py-3 font-medium text-indigo-700">{e.ticket_number}</td>
                   <td className="px-4 py-3 text-gray-700">
                     <div>{e.summary.issue_one_liner || e.title}</div>
@@ -209,7 +236,14 @@ export function LiveQueuePage() {
                   <td className="px-4 py-3">
                     <PriorityBadge priority={e.priority} />
                   </td>
-                  <td className="px-4 py-3 text-xs text-gray-500">{relativeAge(e.queued_at)}</td>
+                  <td className="px-4 py-3 text-xs text-gray-500">
+                    <div>{relativeAge(e.queued_at)}</div>
+                    {e.waiting_state === 'likely_left' && (
+                      <div className="mt-0.5 text-xs text-amber-600 font-medium">
+                        May have left
+                      </div>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-right">
                     {e.claimed_at ? (
                       <span className="text-xs text-gray-400">
@@ -219,9 +253,22 @@ export function LiveQueuePage() {
                       <button
                         onClick={() => void onClaim(e)}
                         disabled={claimingId === e.ticket_id}
-                        className="px-3 py-1 text-xs rounded-md bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
+                        title={
+                          e.waiting_state === 'likely_left'
+                            ? 'Employee may have left — claim routes to async queue'
+                            : 'Claim and open live chat'
+                        }
+                        className={`px-3 py-1 text-xs rounded-md disabled:opacity-50 ${
+                          e.waiting_state === 'likely_left'
+                            ? 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                            : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                        }`}
                       >
-                        {claimingId === e.ticket_id ? 'Claiming…' : 'Claim'}
+                        {claimingId === e.ticket_id
+                          ? 'Claiming…'
+                          : e.waiting_state === 'likely_left'
+                            ? 'Claim (async)'
+                            : 'Claim'}
                       </button>
                     )}
                   </td>
