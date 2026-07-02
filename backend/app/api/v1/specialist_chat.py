@@ -33,6 +33,8 @@ from app.schemas.specialist_chat import (
     EndLiveChatResponse,
     MyAssignedItem,
     MyAssignedResponse,
+    RemoteSessionFromChatRequest,
+    RemoteSessionFromChatResponse,
     SendSpecialistMessageRequest,
     SpecialistChatMessageOut,
     SpecialistChatSessionOut,
@@ -126,6 +128,7 @@ async def start_session(
         )
     # Pull the requester row for user details on the session.
     from app.models.auth import User as UserModel
+
     user_row = await db.get(UserModel, ticket.requester_id)
     if user_row is None:
         raise HTTPException(status_code=404, detail="Requester not found")
@@ -208,7 +211,9 @@ async def set_typing(
     """
     try:
         role = await svc.mark_typing(
-            session_id, sender=current_user, is_typing=body.is_typing,
+            session_id,
+            sender=current_user,
+            is_typing=body.is_typing,
         )
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -228,7 +233,9 @@ async def send_message(
     """Post a message into a live session. Role derived from the caller."""
     try:
         msg = await svc.send_message(
-            session_id, sender=current_user, content=body.content,
+            session_id,
+            sender=current_user,
+            content=body.content,
         )
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -299,14 +306,89 @@ async def end_session(
     )
 
 
+@router.post(
+    "/{session_id}/remote-session", response_model=RemoteSessionFromChatResponse, status_code=201
+)
+async def request_remote_session_from_chat(
+    session_id: uuid.UUID,
+    body: RemoteSessionFromChatRequest,
+    current_user: SpecialistDep,
+    svc: SvcDep,
+    db: DBDep,
+) -> RemoteSessionFromChatResponse:
+    """Specialist requests a remote support session from inside the live chat.
+
+    Derives employee/ticket linkage from the chat session (single audit
+    chain: chat → ticket → remote session), enforces the remote-support
+    policy (screen_control needs it_lead+ and justification, consent gate,
+    provider prerequisites), and surfaces the consent prompt to the employee
+    as a system message in the same chat window.
+    """
+    from app.services.remote_support.service import (
+        PolicyViolation,
+        RemoteSupportService,
+    )
+
+    try:
+        chat = await svc.get_state(session_id, caller=current_user, run_idle_check=False)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except LiveChatPermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+
+    if chat.specialist_id != current_user.id:
+        raise HTTPException(
+            status_code=403,
+            detail="Only the specialist on this chat can request a remote session",
+        )
+    if chat.status.startswith("ended"):
+        raise HTTPException(status_code=409, detail="This live chat has already ended")
+
+    remote_svc = RemoteSupportService(db)
+    try:
+        remote_session = await remote_svc.request_session(
+            agent=current_user,
+            employee_id=chat.user_id,
+            session_type=body.session_type,
+            ticket_id=chat.ticket_id,
+            support_session_id=chat.id,
+            justification=body.justification,
+            max_duration_minutes=body.max_duration_minutes,
+        )
+        await remote_svc.send_consent_request(remote_session.id, current_user)
+    except PolicyViolation as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+
+    access_label = (
+        "view your screen"
+        if body.session_type == "screen_view"
+        else ("view and control your screen")
+    )
+    await svc.append_system_message(
+        chat.id,
+        content=(
+            f"{current_user.full_name} has requested a remote support session to "
+            f"{access_label}. Please review the consent prompt — nothing is shared "
+            "until you explicitly approve."
+        ),
+        event="remote_session_requested",
+    )
+    await db.commit()
+
+    return RemoteSessionFromChatResponse(
+        remote_session_id=remote_session.id,
+        status=remote_session.status,
+        session_type=remote_session.session_type,
+        consent_deadline=remote_session.consent_deadline,
+    )
+
+
 # ── "My Assigned" — mounted under the queue router ─────────────────────
 
 # "My Assigned" is a queue view (read-only listing of tickets I own); it
 # should be visible to anyone with queue-view permission, not gated by the
 # write-action permissions.
-MyAssignedViewer = Annotated[
-    User, Depends(require_permissions(P.SPECIALIST_QUEUE_VIEW))
-]
+MyAssignedViewer = Annotated[User, Depends(require_permissions(P.SPECIALIST_QUEUE_VIEW))]
 
 
 @queue_router.get("/mine", response_model=MyAssignedResponse)
@@ -345,6 +427,7 @@ async def my_assigned(
 
     items: list[MyAssignedItem] = []
     from app.models.auth import User as UserModel
+
     for t in tickets:
         s = sessions_by_ticket.get(t.id)
         # Lookup the requester for the user-facing name on the row.

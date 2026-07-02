@@ -8,7 +8,8 @@ returning HTTP 500 on login). Calling bcrypt directly removes that version
 coupling and stays compatible with existing ``$2b$`` hashes.
 """
 
-from datetime import datetime, timedelta, timezone
+import uuid
+from datetime import UTC, datetime, timedelta
 
 import bcrypt
 from jose import JWTError, jwt
@@ -25,13 +26,32 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
 
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
-    """Create a JWT access token."""
+    """Create a JWT access token.
+
+    Every token carries a unique ``jti`` (unless the caller supplied one) and
+    an ``iat`` so it can be individually revoked via the token denylist.
+    """
     to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + (
-        expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    )
-    to_encode.update({"exp": expire})
+    now = datetime.now(UTC)
+    expire = now + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    to_encode.setdefault("jti", str(uuid.uuid4()))
+    to_encode.update({"exp": expire, "iat": now})
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=ALGORITHM)
+
+
+def create_refresh_token(data: dict, expires_delta: timedelta | None = None) -> str:
+    """Create a JWT refresh token (``type=refresh``, its own jti, long expiry).
+
+    Refresh tokens MUST be distinguishable from access tokens so that a
+    refresh token can never authenticate an API call (checked in
+    ``LocalAuthProvider.validate_session``) and can be rotated/revoked
+    independently.
+    """
+    to_encode = {**data, "type": "refresh", "jti": str(uuid.uuid4())}
+    return create_access_token(
+        to_encode,
+        expires_delta=expires_delta or timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+    )
 
 
 def verify_token(token: str) -> dict | None:

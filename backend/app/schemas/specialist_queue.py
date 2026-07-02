@@ -111,6 +111,13 @@ class QueueEntry(BaseModel):
     queued_at: datetime
     claimed_by_name: str | None = None
     claimed_at: datetime | None = None
+    # Typed freshness of the live-chat request (see
+    # specialist_queue_service.waiting_info): "waiting" = employee presumed
+    # at their keyboard; "likely_left" = unclaimed past
+    # LIVE_WAIT_TIMEOUT_SECONDS — the UI must not open a live chat as if
+    # someone were waiting; "claimed" = already owned.
+    waiting_state: Literal["waiting", "likely_left", "claimed"] = "waiting"
+    waited_seconds: int = 0
     summary: HandoffSummary
 
 
@@ -134,6 +141,10 @@ class ClaimResponse(BaseModel):
     ticket_number: str
     claimed_by_user_id: UUID
     claimed_at: datetime
+    # Freshness at claim time: tells the client whether to open a live chat
+    # ("waiting") or route to the ticket workspace ("likely_left").
+    waiting_state: Literal["waiting", "likely_left"] = "waiting"
+    waited_seconds: int = 0
     handoff_package: HandoffPackage
 
 

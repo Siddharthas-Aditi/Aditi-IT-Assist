@@ -46,6 +46,16 @@ export interface HandoffSummary {
   ai_confidence_at_handoff: number;
 }
 
+/**
+ * Typed freshness of a live-chat request (single source of truth:
+ * backend `waiting_info`, driven by LIVE_WAIT_TIMEOUT_SECONDS):
+ * - "waiting"     — employee presumed still at their keyboard → claim opens live chat
+ * - "likely_left" — past the wait window; employee was shown the async-ticket
+ *                   fallback → claim routes to the ticket workspace, NOT a live chat
+ * - "claimed"     — already owned by a specialist
+ */
+export type WaitingState = 'waiting' | 'likely_left' | 'claimed';
+
 export interface QueueEntry {
   ticket_id: string;
   ticket_number: string;
@@ -58,6 +68,8 @@ export interface QueueEntry {
   queued_at: string;
   claimed_by_name?: string | null;
   claimed_at?: string | null;
+  waiting_state: WaitingState;
+  waited_seconds: number;
   summary: HandoffSummary;
 }
 
@@ -115,6 +127,9 @@ export interface ClaimResponse {
   ticket_number: string;
   claimed_by_user_id: string;
   claimed_at: string;
+  /** Freshness at claim time — "waiting" opens live chat, "likely_left" routes to the ticket. */
+  waiting_state: 'waiting' | 'likely_left';
+  waited_seconds: number;
   handoff_package: HandoffPackage;
 }
 
@@ -307,6 +322,29 @@ export const liveChatApi = {
     apiRequest<SpecialistChatMessageOut>(`/specialist-chat/${sessionId}/message`, {
       method: 'POST',
       body: { content },
+    }),
+
+  /**
+   * Specialist requests a remote support session from inside this chat.
+   * Employee/ticket linkage is derived server-side from the chat session;
+   * the employee gets the consent prompt in the same chat window.
+   */
+  requestRemote: (
+    sessionId: string,
+    body: {
+      session_type: 'screen_view' | 'screen_control';
+      justification?: string;
+      max_duration_minutes?: number;
+    },
+  ) =>
+    apiRequest<{
+      remote_session_id: string;
+      status: string;
+      session_type: string;
+      consent_deadline: string | null;
+    }>(`/specialist-chat/${sessionId}/remote-session`, {
+      method: 'POST',
+      body,
     }),
 
   end: (

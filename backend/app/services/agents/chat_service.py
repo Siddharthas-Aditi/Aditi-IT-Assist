@@ -6,6 +6,7 @@ from uuid import uuid4
 from langchain_core.messages import AIMessage, HumanMessage
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.logging import get_logger
 from app.models.auth import User
 from app.schemas.chat import (
@@ -40,8 +41,11 @@ _session_tickets: dict[str, dict] = {}
 _waiting_since: dict[str, datetime] = {}
 
 # After this many seconds of waiting without a specialist joining, we surface
-# a fallback message offering async ticket/email resolution.
-WAIT_TIMEOUT_SECONDS: int = 900  # 15 minutes
+# a fallback message offering async ticket/email resolution. Bound from the
+# shared freshness knob (LIVE_WAIT_TIMEOUT_SECONDS) so the employee-side
+# fallback and the specialist queue's waiting_state
+# (specialist_queue_service.waiting_info) can never disagree.
+WAIT_TIMEOUT_SECONDS: int = settings.LIVE_WAIT_TIMEOUT_SECONDS  # default 15 min
 
 
 class ChatService:

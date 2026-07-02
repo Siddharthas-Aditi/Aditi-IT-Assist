@@ -30,19 +30,43 @@ services:
   redis:
     image: redis:7-alpine
     container_name: aditi-redis-prod
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-}
+    # REDIS_PASSWORD has no default on purpose: compose interpolation fails
+    # fast when it is unset, and the backend refuses to boot without it
+    # (Settings.validate_production). Never run production Redis unauthenticated.
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD must be set for production}
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli -a $$REDIS_PASSWORD ping | grep PONG"]
       interval: 5s
       timeout: 3s
       retries: 10
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD must be set for production}
     deploy:
       resources:
         limits:
           memory: 128M
     restart: always
+
+  # One-shot migration runner — the backend only starts after this exits 0,
+  # so app containers never serve traffic against an unmigrated schema.
+  migrate:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: production
+    container_name: aditi-migrate-prod
+    command: ["uv", "run", "alembic", "upgrade", "head"]
+    env_file:
+      - .env
+    environment:
+      - POSTGRES_HOST=postgres
+      - REDIS_HOST=redis
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
 
   backend:
     build:
@@ -58,11 +82,14 @@ services:
       - POSTGRES_HOST=postgres
       - REDIS_HOST=redis
       - DEBUG=false
+      - APP_ENV=production
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
       interval: 10s

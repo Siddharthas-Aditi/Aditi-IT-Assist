@@ -5,6 +5,9 @@ on:
     branches: [main, develop]
   pull_request:
     branches: [main, develop]
+  # Reusable: the release workflow runs this as its test gate before
+  # publishing images (see .github/workflows/release.yml).
+  workflow_call:
 
 jobs:
   backend-lint-test:

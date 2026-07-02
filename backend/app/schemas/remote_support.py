@@ -16,6 +16,13 @@ class RemoteSessionRequestCreate(BaseModel):
     employee_id: str = Field(..., description="UUID of the employee to assist")
     session_type: Literal["screen_view", "screen_control"] = "screen_view"
     ticket_id: str | None = Field(None, description="Associated ticket UUID")
+    support_session_id: str | None = Field(
+        None,
+        description=(
+            "Live specialist-chat session UUID this remote session was launched "
+            "from — completes the audit chain chat → ticket → remote session"
+        ),
+    )
     justification: str | None = Field(
         None,
         max_length=1000,

@@ -195,7 +195,12 @@ class TestLLMServiceAzure:
         svc, mock_s = self._make_service()
         mock_resp = _litellm_completion_response("Done")
 
-        with patch("litellm.acompletion", new_callable=AsyncMock, return_value=mock_resp) as mock_call:
+        # settings must stay patched during the call: _complete_internal reads
+        # settings.is_azure at call time, not only at construction time.
+        with (
+            patch("app.services.llm_service.settings", mock_s),
+            patch("litellm.acompletion", new_callable=AsyncMock, return_value=mock_resp) as mock_call,
+        ):
             result = await svc.complete("say hi")
 
         call_kwargs = mock_call.call_args.kwargs

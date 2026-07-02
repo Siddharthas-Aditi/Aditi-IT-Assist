@@ -66,9 +66,7 @@ def _handle_errors(exc: Exception) -> None:
     if isinstance(exc, ConsentRequired):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
     if isinstance(exc, InvalidTransition):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
-        )
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
     raise exc
 
 
@@ -99,6 +97,9 @@ async def request_remote_session(
             employee_id=uuid.UUID(data.employee_id),
             session_type=data.session_type,
             ticket_id=uuid.UUID(data.ticket_id) if data.ticket_id else None,
+            support_session_id=(
+                uuid.UUID(data.support_session_id) if data.support_session_id else None
+            ),
             justification=data.justification,
             max_duration_minutes=data.max_duration_minutes,
             ip_address=request.client.host if request.client else None,
@@ -113,7 +114,9 @@ async def request_remote_session(
         "session_id": str(session.id),
         "status": session.status,
         "session_type": session.session_type,
-        "consent_deadline": session.consent_deadline.isoformat() if session.consent_deadline else None,
+        "consent_deadline": session.consent_deadline.isoformat()
+        if session.consent_deadline
+        else None,
         "message": "Consent request sent to employee",
     }
 
@@ -329,6 +332,28 @@ async def poll_session_status(
 
 
 @router.get(
+    "/consent/pending",
+    summary="Employee: poll for a pending consent request",
+)
+async def pending_consent(
+    current_user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict:
+    """The employee UI polls this to surface the consent modal.
+
+    Returns the consent-notification payload for the most recent
+    ``consent_pending`` session targeting the current user (within its
+    consent window), or ``{"pending": false}``. Cheap by design — it is
+    polled alongside the chat state.
+    """
+    svc = _get_service(db)
+    payload = await svc.get_pending_consent_for_employee(current_user)
+    if payload is None:
+        return {"pending": False}
+    return {"pending": True, "notification": ConsentNotification(**payload).model_dump()}
+
+
+@router.get(
     "/sessions/{session_id}/consent-info",
     response_model=ConsentNotification,
     summary="Get consent modal payload for employee",
@@ -463,14 +488,9 @@ async def provider_health(
     agent: ITAgentUser,
 ) -> ProviderHealthResponse:
     """Check that the configured remote support provider is reachable."""
-    from app.core.config import settings
-    from app.services.remote_support.providers.microsoft_remote_help import (
-        MicrosoftRemoteHelpProvider,
-    )
+    from app.services.remote_support.providers import build_provider_registry
 
-    provider = MicrosoftRemoteHelpProvider(
-        tenant_id=getattr(settings, "AZURE_TENANT_ID", ""),
-    )
+    provider = next(iter(build_provider_registry().values()))
     healthy = await provider.health_check()
 
     return ProviderHealthResponse(

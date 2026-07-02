@@ -137,26 +137,49 @@ during a session.
 
 ## Microsoft Remote Help Integration
 
-File: `backend/app/services/remote_support/providers/microsoft_remote_help.py`
+Files: `backend/app/services/remote_support/providers/microsoft_remote_help.py`
+(real, Graph-backed), `providers/mock.py` (dev/staging), `providers/__init__.py`
+(`build_provider_registry()` — the single construction point).
 
-**Current state:** STUB — returns mock data for development. Production integration
-requires a Microsoft Intune + Remote Help license and Azure AD app registration.
-
-### Production Implementation Path
+**Decision record:** `docs/architecture/remote-support-decision.md`. Key
+reality (verified 2026-07): **no public Graph API creates attended Remote
+Help sessions** — sessions launch from the Intune admin center / Remote Help
+client with an in-app code exchange. The adapter therefore does only what is
+truthfully possible:
 
 ```http
-# 1. Acquire token
+# Token (client credentials — REMOTE_HELP_TENANT_ID/CLIENT_ID/CLIENT_SECRET)
 POST https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token
 
-# 2. Create session
-POST https://graph.microsoft.com/beta/deviceManagement/remoteAssistanceSessions
-
-# 3. Poll status
-GET  https://graph.microsoft.com/beta/deviceManagement/remoteAssistanceSessions/{id}
-
-# 4. Terminate
-DELETE https://graph.microsoft.com/beta/deviceManagement/remoteAssistanceSessions/{id}
+# Prereq/health checks (real Graph reads)
+GET https://graph.microsoft.com/beta/deviceManagement/remoteAssistanceSettings
+GET https://graph.microsoft.com/v1.0/deviceManagement/managedDevices?$filter=userPrincipalName eq '…'
 ```
+
+On launch the adapter resolves the employee's managed device and returns the
+helper a deterministic **Intune admin-center device launch URL** plus
+employee join instructions; the code exchange and pixel transport happen
+inside Remote Help (Entra-authenticated on both ends — defense in depth on
+top of our consent gate). `provider_session_id` (`msrh-…`) is an internal
+correlation id quotable against the Microsoft 365 audit log. Status polling
+is a documented no-op (our state machine stays authoritative).
+
+**Provider selection:** `REMOTE_SUPPORT_USE_MOCK=true` (default) registers
+only the mock provider (sessions honestly record
+`provider="mock_remote_support"`); production validation refuses to boot
+with mock disabled but credentials missing.
+
+**Time-policy enforcement:** `RemoteSupportService.sweep_sessions()` runs on
+the background scheduler (`REMOTE_SESSION_SWEEPER_*`): consent windows that
+lapse → `expired`; sessions exceeding `max_duration_minutes` → `terminated`
+(`max_duration_exceeded`). Every transition is audited.
+
+**Live-chat bridge:** `POST /specialist-chat/{id}/remote-session` lets the
+specialist request a session from inside a live chat — employee, ticket and
+`support_session_id` linkage derive from the chat session, and the employee
+sees a system message + consent modal in the same window
+(`GET /remote-support/consent/pending` powers the modal via
+`ConsentWatcher` mounted in `EmployeeLayout`).
 
 ### Capabilities
 

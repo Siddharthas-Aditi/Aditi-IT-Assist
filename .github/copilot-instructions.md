@@ -1,5 +1,13 @@
 # Copilot Instructions for Aditi IT Assist
 
+> **Repo-wide rules below.** Path-scoped rules also apply automatically via
+> `.github/instructions/*.instructions.md` (backend, frontend, tests, ai-workflows,
+> admin-console, migrations, docs). For deeper context, prefer real integrations over
+> mock/demo code and consult `memory/` (project overview, architecture, domain model,
+> known risks), the process in `docs/development/engineering-workflow.md`, and task
+> playbooks in `skills/playbooks/`. Framework index: `docs/development/ai-development-framework.md`.
+> Use the Makefile commands (`make lint`, `make typecheck`, `make test`) — never invent build steps.
+
 ## Project Context
 
 This is **Aditi IT Assist** — an enterprise-grade internal IT service platform for

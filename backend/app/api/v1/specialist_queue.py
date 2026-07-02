@@ -189,11 +189,20 @@ async def claim_ticket(
     )
     package = await service.build_handoff_package(ticket, session_state=session_state)
 
+    # Freshness at claim time: was the employee still inside the wait window
+    # when this claim landed? Tells the client whether to open a live chat
+    # ("waiting") or route to the ticket workspace ("likely_left").
+    from app.services.specialist_queue_service import waiting_info
+
+    state, waited = waiting_info(ticket.created_at, None)
+
     return ClaimResponse(
         ticket_id=ticket.id,
         ticket_number=ticket.ticket_number,
         claimed_by_user_id=current_user.id,
         claimed_at=ticket.first_response_at or ticket.updated_at,
+        waiting_state=state,  # type: ignore[arg-type]
+        waited_seconds=waited,
         handoff_package=package,
     )
 

@@ -6,16 +6,21 @@ Provides:
 - In-memory async DB session for unit tests
 """
 
+import os
 import uuid
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from app.core.permissions import UserRole, get_effective_permissions
-from app.main import app
-from app.services.auth.dependencies import get_current_active_user
+# Rate limiting is exercised by its own unit tests; the shared ASGI test
+# client would otherwise trip the per-client budget across the suite.
+# Must be set before app.main (and therefore Settings) is imported.
+os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
 
+from app.core.permissions import UserRole, get_effective_permissions  # noqa: E402
+from app.main import app  # noqa: E402
+from app.services.auth.dependencies import get_current_active_user  # noqa: E402
 
 # ─────────────────────────────────────────────────────────────────────
 # Permission resolution patch — mock users don't have real DB role IDs,

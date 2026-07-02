@@ -1,10 +1,9 @@
 """API integration tests."""
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 from httpx import AsyncClient
 
 
@@ -19,12 +18,46 @@ class TestHealthEndpoint:
         assert data["status"] == "healthy"
         assert data["service"] == "aditi-it-assist"
 
-    async def test_readiness_check(self, client: AsyncClient):
-        """Should return ready status."""
-        response = await client.get("/api/v1/health/ready")
+    async def test_readiness_check_ready_when_db_ok(self, client: AsyncClient):
+        """Readiness returns ready + per-dependency checks when the DB responds."""
+        from contextlib import asynccontextmanager
+
+        @asynccontextmanager
+        async def fake_connect():
+            conn = AsyncMock()
+            yield conn
+
+        fake_engine = MagicMock()
+        fake_engine.connect = fake_connect
+        fake_redis = AsyncMock()
+
+        with (
+            patch("app.core.database.engine", fake_engine),
+            patch("redis.asyncio.from_url", return_value=fake_redis),
+        ):
+            response = await client.get("/api/v1/health/ready")
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "ready"
+        assert data["checks"]["database"] == "ok"
+        assert data["checks"]["redis"] == "ok"
+
+    async def test_readiness_check_503_when_db_down(self, client: AsyncClient):
+        """Readiness must gate on the database — LBs stop routing on 503."""
+        from contextlib import asynccontextmanager
+
+        @asynccontextmanager
+        async def broken_connect():
+            raise ConnectionError("db down")
+            yield  # pragma: no cover
+
+        fake_engine = MagicMock()
+        fake_engine.connect = broken_connect
+
+        with patch("app.core.database.engine", fake_engine):
+            response = await client.get("/api/v1/health/ready")
+        assert response.status_code == 503
+        assert response.json()["status"] == "not_ready"
 
 
 class TestChatEndpoint:
@@ -123,7 +156,7 @@ class TestTicketEndpointWithAuth:
         mock_ticket.category = "hardware/camera"
         mock_ticket.requester_id = uuid.uuid4()
         mock_ticket.assigned_to = None
-        mock_ticket.created_at = datetime.now(timezone.utc)
+        mock_ticket.created_at = datetime.now(UTC)
         mock_ticket.sla_response_target = None
         mock_ticket.sla_resolution_target = None
         mock_ticket.ai_summary = None
@@ -249,8 +282,19 @@ class TestAdminEndpointAuth:
         assert response.status_code == 403
 
     async def test_stats_accessible_to_admin(self, admin_client: AsyncClient):
-        """IT admin can access admin stats."""
-        response = await admin_client.get("/api/v1/admin/stats")
+        """IT admin can access admin stats.
+
+        AdminStatsService is mocked (like AuditQueryService below): this class
+        tests RBAC enforcement, not aggregation SQL — aggregation is covered by
+        service-level tests against a real DB.
+        """
+        from app.schemas.admin import SystemStats
+
+        with patch("app.api.v1.admin.AdminStatsService") as mock_svc_cls:
+            mock_svc = AsyncMock()
+            mock_svc.get_system_stats.return_value = SystemStats()
+            mock_svc_cls.return_value = mock_svc
+            response = await admin_client.get("/api/v1/admin/stats")
         assert response.status_code == 200
         data = response.json()
         assert "total_sessions" in data

@@ -88,6 +88,31 @@ class SendSpecialistMessageRequest(BaseModel):
     content: str = Field(..., min_length=1, max_length=8000)
 
 
+class RemoteSessionFromChatRequest(BaseModel):
+    """Specialist requests a remote support session from inside a live chat.
+
+    The employee, ticket, and chat linkage are derived from the session —
+    the specialist only chooses the access level and justification.
+    """
+
+    session_type: Literal["screen_view", "screen_control"] = "screen_view"
+    justification: str | None = Field(
+        None,
+        max_length=1000,
+        description="Required for screen_control (policy-enforced in the service)",
+    )
+    max_duration_minutes: int = Field(default=30, ge=5, le=120)
+
+
+class RemoteSessionFromChatResponse(BaseModel):
+    """Confirmation that a chat-linked remote session request was created."""
+
+    remote_session_id: UUID
+    status: str
+    session_type: str
+    consent_deadline: datetime | None
+
+
 class EndLiveChatRequest(BaseModel):
     """Body for ending a live session."""
 

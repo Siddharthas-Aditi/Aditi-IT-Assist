@@ -56,6 +56,44 @@ _QUEUE_STATUSES: tuple[str, ...] = (
 )
 
 
+def waiting_info(
+    queued_at: datetime | None,
+    claimed_at: datetime | None,
+    *,
+    now: datetime | None = None,
+) -> tuple[str, int]:
+    """Typed freshness of a live-chat request: is the employee still waiting?
+
+    Pure function — the single definition of "stale" for the specialist
+    queue, driven by the same ``LIVE_WAIT_TIMEOUT_SECONDS`` knob that
+    controls the employee-side "no specialist available" fallback message
+    (``ChatService.get_waiting_status``), so both sides always agree.
+
+    Returns:
+        (state, waited_seconds) where state is one of:
+        * ``"claimed"``      — already owned by a specialist.
+        * ``"waiting"``      — unclaimed and within the wait window; the
+          employee is presumed to still be at their keyboard.
+        * ``"likely_left"``  — unclaimed past the window; the employee has
+          already been shown the async-ticket fallback. Claiming is still
+          valid *ticket* work, but the UI must not open a live chat as if
+          someone were waiting.
+    """
+    from app.core.config import settings
+
+    ts = now or datetime.now(UTC)
+    if queued_at is None:
+        return ("waiting", 0)
+    if queued_at.tzinfo is None:
+        queued_at = queued_at.replace(tzinfo=UTC)
+    waited = max(0, int((ts - queued_at).total_seconds()))
+    if claimed_at is not None:
+        return ("claimed", waited)
+    if waited >= settings.LIVE_WAIT_TIMEOUT_SECONDS:
+        return ("likely_left", waited)
+    return ("waiting", waited)
+
+
 class SpecialistQueueService:
     """Operational queue for live IT specialists."""
 
@@ -121,6 +159,13 @@ class SpecialistQueueService:
                 and_(
                     Ticket.id == ticket_id,
                     Ticket.source == "chat",
+                    # Claim-gate parity: the atomic claim enforces the SAME
+                    # status filter as list_queue. Without this, a resolved/
+                    # closed chat ticket (no longer visible in the queue)
+                    # could be claimed and silently flipped back to
+                    # in_progress — the "agent claims an old live-chat
+                    # request" bug.
+                    Ticket.status.in_(_QUEUE_STATUSES),
                     or_(Ticket.assigned_to.is_(None), Ticket.assigned_to == claimer.id),
                 )
             )
@@ -136,7 +181,7 @@ class SpecialistQueueService:
         result = await self.db.execute(stmt)
         ticket = result.scalar_one_or_none()
         if ticket is None:
-            # Either the row doesn't exist, or someone else got there first.
+            # Row missing, someone else got there first, or it left the queue.
             existing = await self.db.get(Ticket, ticket_id)
             if existing is None:
                 raise LookupError(f"Ticket {ticket_id} not found")
@@ -144,6 +189,11 @@ class SpecialistQueueService:
                 raise PermissionError(
                     f"Ticket {existing.ticket_number} is already claimed by "
                     f"another specialist"
+                )
+            if existing.status not in _QUEUE_STATUSES:
+                raise PermissionError(
+                    f"Ticket {existing.ticket_number} is no longer in the live "
+                    f"queue (status: {existing.status})"
                 )
             raise PermissionError("Ticket is not claimable in its current state")
 
@@ -363,6 +413,8 @@ class SpecialistQueueService:
     # ── Helpers ────────────────────────────────────────────────────────
 
     def _to_queue_entry(self, ticket: Ticket) -> QueueEntry:
+        claimed_at = ticket.first_response_at if ticket.assigned_to else None
+        state, waited = waiting_info(ticket.created_at, claimed_at)
         return QueueEntry(
             ticket_id=ticket.id,
             ticket_number=ticket.ticket_number,
@@ -373,6 +425,8 @@ class SpecialistQueueService:
             issue_subtype=ticket.subcategory,
             queued_at=ticket.created_at,
             claimed_at=ticket.first_response_at,
+            waiting_state=state,  # type: ignore[arg-type]
+            waited_seconds=waited,
             summary=HandoffSummary(
                 issue_one_liner=ticket.ai_summary or ticket.title,
                 affected_system=None,
@@ -384,4 +438,4 @@ class SpecialistQueueService:
         )
 
 
-__all__ = ["SpecialistQueueService"]
+__all__ = ["SpecialistQueueService", "waiting_info"]

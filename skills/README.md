@@ -3,11 +3,19 @@
 This directory defines HOW to implement things correctly in Aditi IT Assist.
 Each skill file is a reference for AI coding agents and human developers.
 
+> Two flavors live here:
+> - `backend/ frontend/ devops/ product/` — **implementation standards** by technology
+>   (patterns to copy).
+> - `playbooks/` — **task-oriented playbooks** for recurring changes (how to safely do a
+>   specific kind of work end-to-end). Start there when the work matches a named task
+>   (API change, migration, escalation, retrieval, etc.). See `playbooks/README.md`.
+
 ## Directory Structure
 
 ```
 skills/
 ├── README.md                      ← This file
+├── playbooks/                     ← Task-oriented dev playbooks (see playbooks/README.md)
 ├── backend/
 │   ├── fastapi-patterns.md        ← API route, service, DI patterns
 │   ├── langgraph-workflows.md     ← LangGraph node and state patterns

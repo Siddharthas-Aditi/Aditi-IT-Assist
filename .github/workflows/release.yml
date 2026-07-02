@@ -1,0 +1,85 @@
+# Release pipeline — build, tag, and publish production images to GHCR.
+#
+# Trigger: pushing a version tag (v1.2.3). The tag is the release identity:
+# images are published as ghcr.io/<org>/<repo>-{backend,frontend}:{version,sha}
+# so any deployed version can be rolled back by re-pointing at a prior tag
+# (see docs/deployment/rollback-plan.md).
+#
+# Deliberately decoupled from deployment: publishing an image is reversible
+# and safe; *deploying* it is a human decision executed via
+# docker-compose.prod.yml (or the platform of record) against a staging
+# environment first — see docs/deployment/production-deployment.md.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  # Full CI gate first — never publish an image that hasn't passed the suite.
+  test:
+    name: Test gate
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    name: Build & push images
+    runs-on: ubuntu-latest
+    needs: [test]
+    strategy:
+      matrix:
+        include:
+          - component: backend
+            context: ./backend
+          - component: frontend
+            context: ./frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}-${{ matrix.component }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,format=long
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          target: production
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  release-notes:
+    name: Draft release notes
+    runs-on: ubuntu-latest
+    needs: [publish]
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create GitHub release (draft)
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          generate_release_notes: true

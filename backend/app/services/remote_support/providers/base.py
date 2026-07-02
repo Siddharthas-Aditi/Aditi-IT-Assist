@@ -161,9 +161,7 @@ class RemoteSupportProvider(ABC):
         ...
 
     @abstractmethod
-    async def get_session_status(
-        self, provider_session_id: str
-    ) -> ProviderStatusUpdate:
+    async def get_session_status(self, provider_session_id: str) -> ProviderStatusUpdate:
         """Query current session status from the provider.
 
         Args:
@@ -174,9 +172,7 @@ class RemoteSupportProvider(ABC):
         """
         ...
 
-    async def get_session_recording_url(
-        self, provider_session_id: str
-    ) -> str | None:
+    async def get_session_recording_url(self, provider_session_id: str) -> str | None:
         """Get URL to session recording/audit log (if supported).
 
         Default: None (not all providers support recording).

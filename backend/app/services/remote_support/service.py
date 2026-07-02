@@ -11,7 +11,7 @@ It enforces:
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import structlog
@@ -25,12 +25,10 @@ from app.models.remote_support import (
     RemoteSupportConsent,
     RemoteSupportSession,
 )
+from app.services.remote_support.providers import build_provider_registry
 from app.services.remote_support.providers.base import (
     RemoteSupportProvider,
     SessionCapability,
-)
-from app.services.remote_support.providers.microsoft_remote_help import (
-    MicrosoftRemoteHelpProvider,
 )
 
 logger = structlog.get_logger()
@@ -40,14 +38,14 @@ _CONSENT_NOTICE_SCREEN_VIEW = (
     "An IT support agent has requested to view your screen to assist with your "
     "support request. During this session, the agent will be able to see everything "
     "on your screen. You can end the session at any time by clicking the "
-    "\"End Session\" button. Your consent is voluntary."
+    '"End Session" button. Your consent is voluntary.'
 )
 
 _CONSENT_NOTICE_SCREEN_CONTROL = (
     "An IT support agent has requested to take control of your screen and keyboard "
     "to assist with your support request. During this session, the agent will be able "
     "to see and interact with your screen. You can end the session at any time by "
-    "clicking the \"End Session\" button. Your consent is voluntary."
+    'clicking the "End Session" button. Your consent is voluntary.'
 )
 
 CONSENT_NOTICES: dict[str, str] = {
@@ -84,22 +82,20 @@ _ALLOWED_TRANSITIONS: dict[str, set[str]] = {
     "requested": {"consent_pending", "terminated"},
     "consent_pending": {"consent_granted", "consent_denied", "expired"},
     "consent_granted": {"connecting", "terminated"},
-    "consent_denied": set(),       # terminal
+    "consent_denied": set(),  # terminal
     "connecting": {"active", "terminated"},
     "active": {"paused", "completed", "terminated"},
     "paused": {"active", "completed", "terminated"},
-    "completed": set(),            # terminal
-    "terminated": set(),           # terminal
-    "expired": set(),              # terminal
+    "completed": set(),  # terminal
+    "terminated": set(),  # terminal
+    "expired": set(),  # terminal
 }
 
 
 def _assert_transition(current: str, target: str) -> None:
     allowed = _ALLOWED_TRANSITIONS.get(current, set())
     if target not in allowed:
-        raise InvalidTransition(
-            f"Cannot transition from '{current}' to '{target}'"
-        )
+        raise InvalidTransition(f"Cannot transition from '{current}' to '{target}'")
 
 
 class RemoteSupportService:
@@ -133,9 +129,15 @@ class RemoteSupportService:
         self._enforce_request_policy(agent, session_type, justification)
 
         provider = self._resolve_provider()
-        consent_deadline = datetime.now(timezone.utc) + timedelta(
-            minutes=CONSENT_WINDOW_MINUTES
-        )
+
+        # Provider prerequisite gate — with the real provider this is a live
+        # Graph check (tenant Remote Help enabled, credentials valid); the
+        # employee's device eligibility is best-effort validated at launch.
+        prereq_ok, prereq_error = await provider.validate_prerequisites()
+        if not prereq_ok:
+            raise PolicyViolation(f"Remote support unavailable: {prereq_error}")
+
+        consent_deadline = datetime.now(UTC) + timedelta(minutes=CONSENT_WINDOW_MINUTES)
 
         session = RemoteSupportSession(
             employee_id=employee_id,
@@ -185,7 +187,7 @@ class RemoteSupportService:
         _assert_transition(session.status, "consent_pending")
 
         session.status = "consent_pending"
-        session.consent_sent_at = datetime.now(timezone.utc)
+        session.consent_sent_at = datetime.now(UTC)
 
         await self._record_event(
             session=session,
@@ -217,7 +219,7 @@ class RemoteSupportService:
             raise PolicyViolation("Only the target employee can respond to this consent request")
 
         # Check consent window hasn't expired
-        if session.consent_deadline and datetime.now(timezone.utc) > session.consent_deadline:
+        if session.consent_deadline and datetime.now(UTC) > session.consent_deadline:
             await self._expire_session(session)
             raise PolicyViolation("Consent window has expired")
 
@@ -273,15 +275,14 @@ class RemoteSupportService:
 
         # Get employee user for display name
         from sqlalchemy import select as sa_select
+
         employee_result = await self.db.execute(
             sa_select(User).where(User.id == session.employee_id)
         )
         employee = employee_result.scalar_one_or_none()
 
         provider = self._resolve_provider(session.provider)
-        capabilities = [
-            SessionCapability(session.session_type)
-        ]
+        capabilities = [SessionCapability(session.session_type)]
 
         provider_info = await provider.create_session(
             agent_id=str(agent.id),
@@ -329,7 +330,7 @@ class RemoteSupportService:
         _assert_transition(session.status, "active")
 
         session.status = "active"
-        session.started_at = datetime.now(timezone.utc)
+        session.started_at = datetime.now(UTC)
 
         await self._record_event(
             session=session,
@@ -355,7 +356,7 @@ class RemoteSupportService:
 
         # Mark active consent as revoked
         if session.active_consent:
-            session.active_consent.revoked_at = datetime.now(timezone.utc)
+            session.active_consent.revoked_at = datetime.now(UTC)
             session.active_consent.revocation_reason = reason
 
         # Terminate with provider if active
@@ -364,7 +365,7 @@ class RemoteSupportService:
             await provider.terminate_session(session.provider_session_id)
 
         session.status = "terminated"
-        session.ended_at = datetime.now(timezone.utc)
+        session.ended_at = datetime.now(UTC)
         session.termination_reason = "employee_revoked"
 
         await self._record_event(
@@ -396,9 +397,7 @@ class RemoteSupportService:
 
         # Agent or employee may end; admin can terminate any session
         actor_roles = set(actor.role_names)
-        is_participant = (
-            session.agent_id == actor.id or session.employee_id == actor.id
-        )
+        is_participant = session.agent_id == actor.id or session.employee_id == actor.id
         is_admin = bool(actor_roles.intersection({"it_admin", "it_lead"}))
 
         if not is_participant and not is_admin:
@@ -413,7 +412,7 @@ class RemoteSupportService:
             await provider.terminate_session(session.provider_session_id)
 
         session.status = target_status
-        session.ended_at = datetime.now(timezone.utc)
+        session.ended_at = datetime.now(UTC)
         session.termination_reason = reason
         if resolution_notes:
             session.resolution_notes = resolution_notes
@@ -466,9 +465,7 @@ class RemoteSupportService:
         )
         return session
 
-    async def get_session(
-        self, session_id: uuid.UUID, viewer: User
-    ) -> RemoteSupportSession:
+    async def get_session(self, session_id: uuid.UUID, viewer: User) -> RemoteSupportSession:
         """Get a session, enforcing visibility rules."""
         session = await self._get_or_raise(session_id)
         viewer_roles = set(viewer.role_names)
@@ -508,11 +505,7 @@ class RemoteSupportService:
         if status:
             stmt = stmt.where(RemoteSupportSession.status == status)
 
-        stmt = (
-            stmt.order_by(RemoteSupportSession.requested_at.desc())
-            .offset(offset)
-            .limit(limit)
-        )
+        stmt = stmt.order_by(RemoteSupportSession.requested_at.desc()).offset(offset).limit(limit)
 
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
@@ -527,9 +520,7 @@ class RemoteSupportService:
             raise PolicyViolation("This consent request is not for you")
 
         # Fetch agent name
-        agent_result = await self.db.execute(
-            select(User).where(User.id == session.agent_id)
-        )
+        agent_result = await self.db.execute(select(User).where(User.id == session.agent_id))
         agent = agent_result.scalar_one_or_none()
 
         type_labels = {"screen_view": "View Only", "screen_control": "Full Control"}
@@ -546,9 +537,29 @@ class RemoteSupportService:
             "ticket_reference": str(session.ticket_id) if session.ticket_id else None,
         }
 
-    async def poll_provider_status(
-        self, session_id: uuid.UUID
-    ) -> RemoteSupportSession:
+    async def get_pending_consent_for_employee(self, employee: User) -> dict[str, Any] | None:
+        """Most recent in-window ``consent_pending`` request for the employee.
+
+        Powers the employee-side consent polling (chat window + dashboard).
+        Returns the consent-notification payload, or None when nothing is
+        pending.
+        """
+        stmt = (
+            select(RemoteSupportSession)
+            .where(
+                RemoteSupportSession.employee_id == employee.id,
+                RemoteSupportSession.status == "consent_pending",
+                RemoteSupportSession.consent_deadline > datetime.now(UTC),
+            )
+            .order_by(RemoteSupportSession.requested_at.desc())
+            .limit(1)
+        )
+        session = (await self.db.execute(stmt)).scalar_one_or_none()
+        if session is None:
+            return None
+        return await self.get_consent_notification(session.id, employee)
+
+    async def poll_provider_status(self, session_id: uuid.UUID) -> RemoteSupportSession:
         """Poll the external provider for session status and sync to our DB."""
         session = await self._get_or_raise(session_id)
 
@@ -573,9 +584,9 @@ class RemoteSupportService:
                 _assert_transition(session.status, new_status)
                 session.status = new_status
                 if new_status in ("completed", "terminated") and not session.ended_at:
-                    session.ended_at = update.disconnected_at or datetime.now(timezone.utc)
+                    session.ended_at = update.disconnected_at or datetime.now(UTC)
                 if new_status == "active" and not session.started_at:
-                    session.started_at = update.connected_at or datetime.now(timezone.utc)
+                    session.started_at = update.connected_at or datetime.now(UTC)
 
                 await self._record_event(
                     session=session,
@@ -587,6 +598,57 @@ class RemoteSupportService:
                 pass  # Provider status diverged; don't force invalid transition
 
         return session
+
+    async def sweep_sessions(self) -> dict[str, int]:
+        """Enforce time policies on stale sessions (background sweeper).
+
+        Two rules, both previously stored-but-unenforced:
+        * ``consent_pending`` sessions past ``consent_deadline`` → ``expired``.
+        * live sessions (connecting/active/paused) running longer than
+          ``max_duration_minutes`` since ``started_at`` → ``terminated``
+          with reason ``max_duration_exceeded`` (provider told to end too).
+
+        Returns counts for observability; every transition is audited.
+        """
+        now = datetime.now(UTC)
+        counts = {"expired": 0, "max_duration_terminated": 0}
+
+        expired_stmt = select(RemoteSupportSession).where(
+            RemoteSupportSession.status == "consent_pending",
+            RemoteSupportSession.consent_deadline.is_not(None),
+            RemoteSupportSession.consent_deadline < now,
+        )
+        for session in (await self.db.execute(expired_stmt)).scalars().all():
+            await self._expire_session(session)
+            counts["expired"] += 1
+
+        live_stmt = select(RemoteSupportSession).where(
+            RemoteSupportSession.status.in_(("connecting", "active", "paused")),
+            RemoteSupportSession.started_at.is_not(None),
+        )
+        for session in (await self.db.execute(live_stmt)).scalars().all():
+            max_minutes = (
+                session.max_duration_minutes or settings.REMOTE_SESSION_MAX_DURATION_MINUTES
+            )
+            if session.started_at and now > session.started_at + timedelta(minutes=max_minutes):
+                if session.provider_session_id:
+                    provider = self._resolve_provider(session.provider)
+                    await provider.terminate_session(session.provider_session_id)
+                session.status = "terminated"
+                session.ended_at = now
+                session.termination_reason = "max_duration_exceeded"
+                await self._record_event(
+                    session=session,
+                    event_type="session_ended",
+                    description=(
+                        f"Session auto-terminated: exceeded max duration of {max_minutes} minutes"
+                    ),
+                )
+                counts["max_duration_terminated"] += 1
+
+        if counts["expired"] or counts["max_duration_terminated"]:
+            logger.info("remote_session_sweep", **counts)
+        return counts
 
     # ── Internals ─────────────────────────────────────────────────────
 
@@ -602,7 +664,7 @@ class RemoteSupportService:
     async def _expire_session(self, session: RemoteSupportSession) -> None:
         session.status = "expired"
         session.termination_reason = "consent_expired"
-        session.ended_at = datetime.now(timezone.utc)
+        session.ended_at = datetime.now(UTC)
         await self._record_event(
             session=session,
             event_type="status_updated",
@@ -641,7 +703,9 @@ class RemoteSupportService:
         if not agent_roles.intersection({"it_agent", "it_lead", "it_admin"}):
             raise PolicyViolation("Only IT staff can request remote sessions")
 
-        if session_type == "screen_control" and not agent_roles.intersection({"it_lead", "it_admin"}):
+        if session_type == "screen_control" and not agent_roles.intersection(
+            {"it_lead", "it_admin"}
+        ):
             raise PolicyViolation("screen_control requires IT Lead or Admin role")
 
         if session_type == "screen_control" and not justification:
@@ -655,10 +719,4 @@ class RemoteSupportService:
 
     @staticmethod
     def _build_providers() -> dict[str, RemoteSupportProvider]:
-        return {
-            "microsoft_remote_help": MicrosoftRemoteHelpProvider(
-                tenant_id=getattr(settings, "AZURE_TENANT_ID", ""),
-                client_id=getattr(settings, "AZURE_CLIENT_ID", ""),
-                client_secret=getattr(settings, "AZURE_CLIENT_SECRET", ""),
-            ),
-        }
+        return build_provider_registry()

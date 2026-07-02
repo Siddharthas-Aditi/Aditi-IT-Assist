@@ -22,6 +22,7 @@
 
 import { useAuthStore } from '@/stores/auth-store';
 import type {
+  ConsentNotification,
   RemoteSessionDetail,
   RemoteSessionSummary,
   RequestSessionForm,
@@ -374,4 +375,23 @@ export const remoteApi = {
     apiRequest<RemoteSessionDetail>(`${REMOTE}/sessions/${sessionId}`),
   listSessions: (params?: { limit?: number }) =>
     apiRequest<RemoteSessionSummary[]>(`${REMOTE}/sessions`, { query: { limit: params?.limit } }),
+
+  // ── Employee consent flow ────────────────────────────────────────
+  /** Poll for a pending consent request targeting the current user. */
+  pendingConsent: () =>
+    apiRequest<{ pending: boolean; notification?: ConsentNotification }>(
+      `${REMOTE}/consent/pending`,
+    ),
+  /** Grant or deny a pending consent request. */
+  respondConsent: (sessionId: string, granted: boolean, denialReason?: string) =>
+    apiRequest<void>(`${REMOTE}/sessions/${sessionId}/consent`, {
+      method: 'POST',
+      body: { granted, denial_reason: denialReason ?? null },
+    }),
+  /** Revoke consent mid-session — terminates the remote session immediately. */
+  revokeConsent: (sessionId: string, reason?: string) =>
+    apiRequest<void>(`${REMOTE}/sessions/${sessionId}/revoke`, {
+      method: 'POST',
+      body: { reason: reason ?? null },
+    }),
 };

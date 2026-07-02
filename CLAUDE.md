@@ -3,6 +3,16 @@
 > **Purpose**: This is the master context file for AI coding assistants (Claude, Copilot, etc.)
 > working on this codebase. Read this first before making any changes.
 
+> **AI Development Framework (start here).** This repo ships a project-specific operating
+> system for AI-assisted development. At the start of a session, load context from
+> **`memory/`** (`project-overview`, `architecture-map`, `domain-model`, `feature-map`,
+> `known-risks`, `glossary`, `current-rollout-state`). Follow the process in
+> **`docs/development/engineering-workflow.md`** and validate with
+> **`docs/development/commit-checklist.md`**. Use task playbooks in **`skills/playbooks/`**
+> and role guides in **`agents/dev/`**. Safety gates: **`docs/development/safety-gates.md`**.
+> Full index: **`docs/development/ai-development-framework.md`**. Everything below remains the
+> authoritative rulebook; the framework docs are the progressive-disclosure layer beneath it.
+
 ---
 
 ## Project Overview
@@ -308,7 +318,8 @@ make lint               # Linting (both)
 | MCP integrations (Phase 7) | ✅ behind flag | Agents consume external systems (Graph: Entra/Intune/Exchange; ServiceNow) as governed MCP-backed read tools behind `FEATURE_MCP_TOOLS` (per-server, default off). Declarative `MCP_SERVER_REGISTRY`, typed tools, typed `integration:*` perms, timeout+degrade. Docs: `docs/architecture/mcp-integrations.md` |
 | Gated write actions + background agents (Phase 8) | ✅ behind flag | Human-approved write tools (unlock account, reset MFA, create incident) behind `FEATURE_AGENT_WRITE_ACTIONS`; propose→approve→execute via `AgentToolRuntime` (0 unapproved executions). Async `AgentTaskRunner` for autonomous agents behind `FEATURE_BACKGROUND_AGENTS`. Docs: `docs/architecture/agent-write-actions-and-tasks.md` |
 | LLM integration | ✅ | LiteLLM abstraction, hybrid intent path, structural-validity guard on LLM picks, **tool-calling (`complete_with_tools`)** |
-| Remote support | ✅ | Session, consent, audit trail |
+| Remote support | ✅ | End-to-end: consent-gated lifecycle, **live-chat bridge** (`POST /specialist-chat/{id}/remote-session`, chat→ticket→session audit chain), employee `ConsentWatcher` + `GET /remote-support/consent/pending`, session sweeper (consent expiry + max duration), provider prereq gate, real Graph-backed Remote Help adapter behind `REMOTE_SUPPORT_USE_MOCK` (dev mock default). ADR: `docs/architecture/remote-support-decision.md` |
+| Production hardening (2026-07) | ✅ | `Settings.validate_production()` fail-fast boot; token denylist + refresh rotation; real rate limiting; security-headers + request-metrics middleware; Prometheus `/api/v1/health/metrics`; real readiness probe (DB+Redis, 503); prod-compose `migrate` service; **alembic.ini `version_locations` fix** (upgrade head silently applied nothing before); GHCR release workflow; runbooks `docs/deployment/`. Plan: `plans/production-readiness-2026-07.md` |
 | Live IT Specialist Chat | ✅ | Dedicated tables, lifecycle state machine, **7-min idle warning + 2-min grace** (configurable), typed end reasons, full transcript persistence, **typing indicators both ways**, same-window handoff + waiting state, specialist sound/desktop notification |
 | Specialist Queue + My Assigned | ✅ | Atomic claim (DB-level), typed HandoffPackage v1.0, REST API, **frontend UI** wired and verified |
 | Background scheduler | ✅ | Pure-asyncio loop in FastAPI lifespan; idle sweeper every 30 s |
@@ -329,11 +340,11 @@ make lint               # Linting (both)
 | pgvector semantic search | ✅ behind flag | Phase 6: hybrid vector+keyword retrieval wired behind `FEATURE_VECTOR_RETRIEVAL` (default off). `AzureOpenAIEmbeddingClient` + pgvector `cosine_distance`; needs an embedding provider configured + `scripts/backfill_embeddings.py` run. Falls back to keyword otherwise. Docs: `docs/architecture/retrieval-and-indexing.md` |
 | WebSocket chat | ❌ Phase 2 | HTTP polling currently; API shape supports drop-in upgrade |
 | Knowledge Candidate review UI | ❌ Phase 2 | Backend model + service ready; SME UI deferred |
-| Refresh-token rotation + denylist | ❌ Phase 2 | Single long-lived refresh token currently |
+| Refresh-token rotation + denylist | ✅ Shipped 2026-07 | Rotation on every refresh; old jti revoked via Redis denylist (`app/core/token_store.py`); refresh tokens can't authenticate APIs. Reuse *detection* (family revocation on replay) still deferred |
 | Cross-tab BroadcastChannel logout | ❌ Phase 2 | Each tab runs its own idle timer |
 | Human Support Copilot | ❌ Future | Spec in agents/08-copilot.md |
-| Token blacklisting | 🚧 TODO | Redis key storage needed |
-| Rate limiting | 🚧 Config | `RATE_LIMIT_ENABLED=true` (middleware stub) |
+| Token blacklisting | ✅ Shipped 2026-07 | Redis jti denylist; logout revokes access (+ refresh when sent); fail-open default, `TOKEN_DENYLIST_FAIL_CLOSED` knob |
+| Rate limiting | ✅ Shipped 2026-07 | Real middleware (`app/core/rate_limit.py`): Redis sliding window + local fallback, tighter auth bucket (`RATE_LIMIT_AUTH_REQUESTS_PER_MINUTE`), health/metrics exempt |
 
 ### 🔑 Seeded Dev Users (see `scripts/seed_enterprise.py`)
 | Email | Password | Role |

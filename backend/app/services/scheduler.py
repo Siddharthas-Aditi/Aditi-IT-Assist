@@ -69,6 +69,29 @@ async def _sweep_idle_once() -> int:
             return 0
 
 
+async def _sweep_remote_sessions_once() -> dict[str, int]:
+    """One pass of the remote-session policy sweeper.
+
+    Enforces consent-window expiry and max-duration termination on
+    remote support sessions (see ``RemoteSupportService.sweep_sessions``).
+    Same isolation pattern as the idle sweeper: short-lived session,
+    rollback + log on failure, never kills the loop.
+    """
+    from app.core.database import async_session_factory
+    from app.services.remote_support.service import RemoteSupportService
+
+    async with async_session_factory() as db:
+        try:
+            counts = await RemoteSupportService(db).sweep_sessions()
+            if counts["expired"] or counts["max_duration_terminated"]:
+                await db.commit()
+            return counts
+        except Exception:  # noqa: BLE001 — never let a bad pass kill the loop
+            await db.rollback()
+            logger.exception("remote_session_sweeper_pass_failed")
+            return {"expired": 0, "max_duration_terminated": 0}
+
+
 async def _run_loop(
     name: str,
     job: Callable[[], Awaitable[object]],
@@ -99,6 +122,8 @@ async def start_background_jobs(
     idle_sweeper_interval_seconds: int = _IDLE_SWEEPER_INTERVAL_SECONDS,
     background_agents_enabled: bool = False,
     background_agents_poll_seconds: int = 60,
+    remote_sweeper_enabled: bool = True,
+    remote_sweeper_interval_seconds: int = 60,
 ) -> AsyncIterator[None]:
     """Async context manager — start jobs on enter, cancel on exit.
 
@@ -122,6 +147,18 @@ async def start_background_jobs(
                     idle_sweeper_interval_seconds,
                 ),
                 name="specialist_chat.idle_sweeper",
+            )
+        )
+
+    if remote_sweeper_enabled:
+        tasks.append(
+            asyncio.create_task(
+                _run_loop(
+                    "remote_support.session_sweeper",
+                    _sweep_remote_sessions_once,
+                    remote_sweeper_interval_seconds,
+                ),
+                name="remote_support.session_sweeper",
             )
         )
 

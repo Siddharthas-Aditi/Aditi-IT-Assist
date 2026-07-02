@@ -3,6 +3,7 @@
 import { Outlet, NavLink } from 'react-router-dom';
 import { MessageSquare, Ticket, User, LogOut, LifeBuoy, ArrowRight } from 'lucide-react';
 
+import { ConsentWatcher } from '@/components/remote-support/ConsentWatcher';
 import { useAuthStore } from '@/stores/auth-store';
 
 const NAV = [
@@ -86,6 +87,9 @@ export function EmployeeLayout() {
       <main className="flex flex-1 flex-col overflow-auto">
         <Outlet />
       </main>
+
+      {/* Remote-support consent prompts reach the employee on any page. */}
+      <ConsentWatcher />
     </div>
   );
 }

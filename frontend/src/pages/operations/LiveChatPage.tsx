@@ -25,6 +25,9 @@ import {
 } from '@/features/specialist-chat/api';
 import { HandoffContextPanel } from '@/features/specialist-chat/HandoffContextPanel';
 
+// Employee-side consent prompts are handled globally by <ConsentWatcher />
+// in EmployeeLayout — this page only owns the specialist request action.
+
 const POLL_INTERVAL_MS = 3000;
 
 export function LiveChatPage() {
@@ -38,6 +41,8 @@ export function LiveChatPage() {
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [ending, setEnding] = useState(false);
+  const [requestingRemote, setRequestingRemote] = useState(false);
+  const [remoteRequested, setRemoteRequested] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   // Typing-indicator heartbeat: throttle "typing=true" pings and schedule a
   // "typing=false" once the user pauses, so we never spam the network.
@@ -131,6 +136,24 @@ export function LiveChatPage() {
     }
   };
 
+  const isSpecialist = !!session && user?.id === session.specialist_id;
+  const isEnded = !!session && session.status.startsWith('ended');
+
+  const requestRemote = async () => {
+    if (!sessionId) return;
+    setRequestingRemote(true);
+    setError(null);
+    try {
+      await liveChatApi.requestRemote(sessionId, { session_type: 'screen_view' });
+      setRemoteRequested(true);
+      await poll(); // pick up the system message immediately
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to request remote session');
+    } finally {
+      setRequestingRemote(false);
+    }
+  };
+
   if (loading || !session) {
     return (
       <div className="p-8 text-center text-gray-500 text-sm">
@@ -139,9 +162,6 @@ export function LiveChatPage() {
       </div>
     );
   }
-
-  const isSpecialist = user?.id === session.specialist_id;
-  const isEnded = session.status.startsWith('ended');
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
@@ -251,6 +271,18 @@ export function LiveChatPage() {
           <div className="mt-3 flex justify-end gap-2 text-xs">
             {isSpecialist ? (
               <>
+                <button
+                  onClick={() => void requestRemote()}
+                  disabled={requestingRemote || remoteRequested}
+                  className="px-3 py-1.5 rounded-md bg-indigo-100 text-indigo-700 hover:bg-indigo-200 disabled:opacity-50"
+                  title="Ask the employee to approve a screen-view remote session"
+                >
+                  {remoteRequested
+                    ? 'Remote session requested — awaiting consent'
+                    : requestingRemote
+                      ? 'Requesting…'
+                      : 'Request remote session'}
+                </button>
                 <button
                   onClick={() => void end('resolved')}
                   disabled={ending}

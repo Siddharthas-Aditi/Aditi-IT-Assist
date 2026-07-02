@@ -184,8 +184,13 @@ async def refresh_session(
 
     Refresh tokens MUST be sent in the request body so a leaked access token
     in the Authorization header can never accidentally satisfy this route.
+
+    Rotation: every successful refresh revokes the presented refresh token
+    (jti → Redis denylist until its natural expiry) and issues a new one.
+    A replayed old refresh token therefore fails with ``session_expired``.
     """
-    from app.core.security import create_access_token, verify_token
+    from app.core.security import create_access_token, create_refresh_token, verify_token
+    from app.core.token_store import get_token_denylist
 
     payload = verify_token(data.refresh_token) if data.refresh_token else None
     if not payload or payload.get("type") != "refresh":
@@ -194,6 +199,26 @@ async def refresh_session(
             detail={
                 "error_code": "session_expired",
                 "message": "Refresh token is missing or invalid.",
+            },
+        )
+
+    denylist = get_token_denylist()
+    try:
+        revoked = await denylist.is_revoked(payload.get("jti"))
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "error_code": "auth_backend_unavailable",
+                "message": "Session service temporarily unavailable. Retry shortly.",
+            },
+        ) from exc
+    if revoked:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "error_code": "session_expired",
+                "message": "Refresh token has been revoked.",
             },
         )
 
@@ -211,10 +236,13 @@ async def refresh_session(
             },
         )
 
-    new_access = create_access_token(
-        data={"sub": str(user.id), "email": user.email}
-    )
-    return RefreshResponse(access_token=new_access)
+    # Rotate: revoke the presented refresh token, then mint replacements.
+    if payload.get("jti") and payload.get("exp"):
+        await denylist.revoke(payload["jti"], float(payload["exp"]))
+
+    new_access = create_access_token(data={"sub": str(user.id), "email": user.email})
+    new_refresh = create_refresh_token(data={"sub": str(user.id), "email": user.email})
+    return RefreshResponse(access_token=new_access, refresh_token=new_refresh)
 
 
 @router.get("/me", response_model=MeResponse)
@@ -232,14 +260,47 @@ async def get_me(current_user: CurrentUser) -> MeResponse:
     )
 
 
-@router.post("/logout")
-async def logout(current_user: CurrentUser) -> dict[str, str]:
-    """Logout user (invalidate current session).
+class LogoutRequest(BaseModel):
+    """Optional logout body — pass the refresh token so it is revoked too."""
 
-    For SAML users, also initiates SLO if configured.
+    refresh_token: str | None = None
+
+
+@router.post("/logout")
+async def logout(
+    current_user: CurrentUser,
+    request: Request,
+    data: LogoutRequest | None = None,
+) -> dict[str, str]:
+    """Logout: revoke the presented access token (and refresh token, if sent).
+
+    Revocation is jti-based via the Redis denylist; entries expire with the
+    token itself. If Redis is briefly unavailable the logout still succeeds
+    client-side — the token then ages out via its own expiry (fail-open,
+    see ``app/core/token_store.py`` for the policy and the fail-closed knob).
     """
-    # TODO: Implement token blacklisting via Redis
-    # TODO: For SAML sessions, check if SLO should be initiated
+    from app.core.security import verify_token
+    from app.core.token_store import get_token_denylist
+
+    denylist = get_token_denylist()
+
+    auth_header = request.headers.get("authorization", "")
+    if auth_header.lower().startswith("bearer "):
+        payload = verify_token(auth_header[7:])
+        if payload and payload.get("jti") and payload.get("exp"):
+            await denylist.revoke(payload["jti"], float(payload["exp"]))
+
+    if data and data.refresh_token:
+        refresh_payload = verify_token(data.refresh_token)
+        if (
+            refresh_payload
+            and refresh_payload.get("type") == "refresh"
+            and refresh_payload.get("jti")
+            and refresh_payload.get("exp")
+        ):
+            await denylist.revoke(refresh_payload["jti"], float(refresh_payload["exp"]))
+
+    # TODO(siddharthas): SAML SLO initiation when SSO ships — docs/security/saml-roadmap.md
     return {"message": "Logged out successfully"}
 
 

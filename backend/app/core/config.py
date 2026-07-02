@@ -2,6 +2,13 @@
 
 from pydantic_settings import BaseSettings
 
+# Secrets that must never survive into a production boot.
+_PLACEHOLDER_SECRETS = (
+    "change-me-in-production",
+    "dev-secret-key-change-in-production",
+    "",
+)
+
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
@@ -46,17 +53,23 @@ class Settings(BaseSettings):
     REDIS_HOST: str = "localhost"
     REDIS_PORT: int = 6379
     REDIS_DB: int = 0
+    REDIS_PASSWORD: str = ""  # required non-empty in production (validated at startup)
 
     @property
     def REDIS_URL(self) -> str:
-        """Construct Redis URL."""
-        return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
+        """Construct Redis URL (password-authenticated when configured)."""
+        auth = f":{self.REDIS_PASSWORD}@" if self.REDIS_PASSWORD else ""
+        return f"redis://{auth}{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
 
     # Authentication
     AUTH_PROVIDER: str = "local"  # "local" | "saml" | "oidc"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     JWT_ALGORITHM: str = "HS256"
+    # Token revocation (logout / refresh rotation) uses a Redis jti denylist.
+    # False = fail-open when Redis is down (tokens age out via exp; warning
+    # logged). True = fail-closed (401 until Redis is back). See token_store.py.
+    TOKEN_DENYLIST_FAIL_CLOSED: bool = False
 
     # SAML Configuration (future SSO integration)
     SAML_ENABLED: bool = False
@@ -67,21 +80,25 @@ class Settings(BaseSettings):
     SAML_SP_ENTITY_ID: str = "aditi-it-assist"
     SAML_SP_ACS_URL: str = "http://localhost:8000/api/v1/auth/saml/acs"
     SAML_SP_SLS_URL: str = "http://localhost:8000/api/v1/auth/saml/sls"
-    SAML_ATTRIBUTE_MAP_EMAIL: str = "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress"
+    SAML_ATTRIBUTE_MAP_EMAIL: str = (
+        "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress"
+    )
     SAML_ATTRIBUTE_MAP_NAME: str = "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name"
-    SAML_ATTRIBUTE_MAP_GROUPS: str = "http://schemas.microsoft.com/ws/2008/06/identity/claims/groups"
+    SAML_ATTRIBUTE_MAP_GROUPS: str = (
+        "http://schemas.microsoft.com/ws/2008/06/identity/claims/groups"
+    )
     SAML_DEFAULT_ROLE: str = "employee"
 
     # LLM Configuration
-    LLM_PROVIDER: str = "openai"         # "openai" | "azure" | "anthropic"
-    LLM_MODEL: str = "gpt-4o"            # used when LLM_PROVIDER != "azure"
-    LLM_API_KEY: str = ""                # OpenAI key (ignored when LLM_PROVIDER=azure)
+    LLM_PROVIDER: str = "openai"  # "openai" | "azure" | "anthropic"
+    LLM_MODEL: str = "gpt-4o"  # used when LLM_PROVIDER != "azure"
+    LLM_API_KEY: str = ""  # OpenAI key (ignored when LLM_PROVIDER=azure)
     LLM_TEMPERATURE: float = 0.3
     LLM_MAX_TOKENS: int = 4096
 
     # Azure OpenAI / Azure AI Services (LLM_PROVIDER=azure)
-    AZURE_OPENAI_ENDPOINT: str = ""                        # https://resource.services.ai.azure.com
-    AZURE_OPENAI_API_KEY: str = ""                         # Azure resource key
+    AZURE_OPENAI_ENDPOINT: str = ""  # https://resource.services.ai.azure.com
+    AZURE_OPENAI_API_KEY: str = ""  # Azure resource key
     AZURE_OPENAI_API_VERSION: str = "2024-12-01-preview"
     AZURE_OPENAI_LLM_DEPLOYMENT: str = "gpt-4.1"
     AZURE_OPENAI_EMBEDDING_DEPLOYMENT: str = "text-embedding-3-large"
@@ -125,10 +142,25 @@ class Settings(BaseSettings):
     REMOTE_SUPPORT_PROVIDER: str = "microsoft_remote_help"
     REMOTE_SESSION_TIMEOUT_MINUTES: int = 30
     REMOTE_SESSION_MAX_DURATION_MINUTES: int = 120
+    # Dev/demo: mock provider (no Graph calls) — mirrors MCP_USE_MOCK. Set
+    # False in production once the Graph app registration below is configured.
+    REMOTE_SUPPORT_USE_MOCK: bool = True
+    # Sweeper that expires consent-lapsed sessions and terminates sessions
+    # exceeding max duration (runs on the in-process background scheduler).
+    REMOTE_SESSION_SWEEPER_ENABLED: bool = True
+    REMOTE_SESSION_SWEEPER_INTERVAL_SECONDS: int = 60
+    # Microsoft Graph app registration for Remote Help orchestration
+    # (client-credential flow; see docs/architecture/remote-support-decision.md).
+    REMOTE_HELP_TENANT_ID: str = ""
+    REMOTE_HELP_CLIENT_ID: str = ""
+    REMOTE_HELP_CLIENT_SECRET: str = ""  # from secrets manager in production
+    INTUNE_ADMIN_CENTER_BASE_URL: str = "https://intune.microsoft.com"
 
     # Observability
     OTEL_EXPORTER_ENDPOINT: str = "http://localhost:4317"
     OTEL_SERVICE_NAME: str = "aditi-it-assist"
+    OTEL_ENABLED: bool = False  # opt-in distributed tracing
+    METRICS_ENABLED: bool = True  # Prometheus /metrics endpoint + request metrics
 
     # Email
     SMTP_HOST: str = "smtp.office365.com"
@@ -137,10 +169,13 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str = ""
     ESCALATION_EMAIL: str = "it-support@aditiconsulting.com"
 
-    # Rate Limiting
+    # Rate Limiting (see app/core/rate_limit.py — Redis sliding window with
+    # in-memory fallback; health/metrics endpoints exempt)
     RATE_LIMIT_ENABLED: bool = True
     RATE_LIMIT_REQUESTS_PER_MINUTE: int = 60
     RATE_LIMIT_BURST: int = 10
+    # Tighter budget for credential endpoints (login/refresh) — brute-force guard.
+    RATE_LIMIT_AUTH_REQUESTS_PER_MINUTE: int = 10
 
     # Background scheduler — the live-specialist-chat idle sweeper runs in
     # the same event loop as the API. Turn off in tests or when running
@@ -151,6 +186,12 @@ class Settings(BaseSettings):
     # auto-end after END seconds. Default = 7-minute warning + 2-minute grace.
     LIVE_CHAT_IDLE_WARNING_SECONDS: int = 420
     LIVE_CHAT_IDLE_END_SECONDS: int = 540
+    # Live-handoff freshness — the ONE knob for "is the employee still
+    # actively waiting for a specialist". Drives BOTH the employee-side
+    # fallback message (ChatService.get_waiting_status) and the specialist
+    # queue's typed waiting_state ("waiting" vs "likely_left"), so the two
+    # sides can never disagree about what "stale" means.
+    LIVE_WAIT_TIMEOUT_SECONDS: int = 900  # 15 minutes
 
     # ── Supervisor routing (Phase-1 dual-run) ────────────────────────
     # When SHADOW is on, the supervisor runs after triage on every turn but
@@ -192,7 +233,7 @@ class Settings(BaseSettings):
     # server id is listed. All Phase-7 tools are read-only and time-bounded.
     # See docs/architecture/mcp-integrations.md.
     FEATURE_MCP_TOOLS: bool = False
-    MCP_ENABLED_SERVERS: list[str] = []        # e.g. ["msgraph", "servicenow"]
+    MCP_ENABLED_SERVERS: list[str] = []  # e.g. ["msgraph", "servicenow"]
     MCP_TOOL_TIMEOUT_SECONDS: float = 8.0
     # Dev/demo: use an in-memory mock MCP session (no real Graph/ServiceNow).
     # Leave True locally to exercise diagnostics + write approvals end-to-end;
@@ -212,17 +253,58 @@ class Settings(BaseSettings):
     # Async task runner for autonomous/background agents (nightly knowledge
     # improvement, proactive diagnostics). Default OFF.
     FEATURE_BACKGROUND_AGENTS: bool = False
-    AGENT_BACKGROUND_CONCURRENCY: int = 2      # max background tasks in flight
-    AGENT_BACKGROUND_POLL_SECONDS: int = 60    # runner poll interval
-    AGENT_TASK_MAX_ATTEMPTS: int = 3           # retry budget per task
+    AGENT_BACKGROUND_CONCURRENCY: int = 2  # max background tasks in flight
+    AGENT_BACKGROUND_POLL_SECONDS: int = 60  # runner poll interval
+    AGENT_TASK_MAX_ATTEMPTS: int = 3  # retry budget per task
 
     # Document Ingestion
     UPLOAD_DIR: str = "/tmp/aditi_uploads"
     MAX_UPLOAD_MB: int = 50
     INGESTION_PARSER_VERSION: str = "1.0.0"
-    INGESTION_LLM_ENABLED: bool = True   # set False to skip LLM enrichment
+    INGESTION_LLM_ENABLED: bool = True  # set False to skip LLM enrichment
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
+
+    # ── Environment helpers + production guardrails ───────────────────
+    @property
+    def is_production(self) -> bool:
+        return self.APP_ENV.lower() in ("production", "prod")
+
+    def validate_production(self) -> list[str]:
+        """Return config violations that make a production boot unsafe.
+
+        Called from the app lifespan: in production, any violation aborts
+        startup (fail fast beats booting with a forgeable SECRET_KEY). Pure
+        function — returns the list so tests can assert exact messages.
+        """
+        if not self.is_production:
+            return []
+
+        violations: list[str] = []
+        if self.SECRET_KEY in _PLACEHOLDER_SECRETS or len(self.SECRET_KEY) < 32:
+            violations.append(
+                "SECRET_KEY is a placeholder or too short (need >=32 chars of real entropy)"
+            )
+        if self.DEBUG:
+            violations.append("DEBUG must be false in production")
+        if self.POSTGRES_PASSWORD in ("aditi_dev_password", ""):
+            violations.append("POSTGRES_PASSWORD is the dev default or empty")
+        if not self.REDIS_PASSWORD:
+            violations.append("REDIS_PASSWORD must be set in production")
+        if self.MCP_USE_MOCK and self.FEATURE_MCP_TOOLS:
+            violations.append("FEATURE_MCP_TOOLS is on but MCP_USE_MOCK is still true")
+        if self.REMOTE_SUPPORT_USE_MOCK is False and not (
+            self.REMOTE_HELP_TENANT_ID
+            and self.REMOTE_HELP_CLIENT_ID
+            and self.REMOTE_HELP_CLIENT_SECRET
+        ):
+            violations.append(
+                "REMOTE_SUPPORT_USE_MOCK=false requires REMOTE_HELP_TENANT_ID/"
+                "CLIENT_ID/CLIENT_SECRET"
+            )
+        if any(o.startswith("http://localhost") for o in self.CORS_ORIGINS):
+            violations.append("CORS_ORIGINS still contains localhost origins")
+        return violations
 
 
 settings = Settings()

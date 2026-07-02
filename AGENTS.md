@@ -1,5 +1,15 @@
 # AGENTS.md — Multi-Agent System Design
 
+> **Two meanings of "agent" — don't confuse them.** This file documents the **runtime
+> product agents** (the LangGraph multi-agent workflow that resolves employee IT issues).
+> If you are a **coding agent or developer** looking for how to *work on this repo*, your
+> operating instructions are: root **`CLAUDE.md`**, the framework index
+> **`docs/development/ai-development-framework.md`**, persistent context in **`memory/`**,
+> the process in **`docs/development/engineering-workflow.md`**, task playbooks in
+> **`skills/playbooks/`**, dev-role guides in **`agents/dev/`**, and the nested
+> **`backend/AGENTS.md`** / **`frontend/AGENTS.md`**. Copilot rules: **`.github/copilot-instructions.md`**
+> and **`.github/instructions/*.instructions.md`**.
+
 > **Aditi IT Assist** uses a LangGraph-based multi-agent workflow to resolve
 > employee IT issues. This document is the authoritative reference for the
 > agent system architecture.

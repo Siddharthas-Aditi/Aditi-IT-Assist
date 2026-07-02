@@ -10,6 +10,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.logging import setup_logging
+from app.core.middleware import RequestMetricsMiddleware, SecurityHeadersMiddleware
+from app.core.rate_limit import RateLimitMiddleware
 
 logger = structlog.get_logger()
 
@@ -18,10 +20,23 @@ logger = structlog.get_logger()
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan: startup and shutdown events.
 
-    Owns: logging setup, dev-mode schema bootstrap, the in-process
-    background-job scheduler (idle sweeper for live specialist chat).
+    Owns: logging setup, production config validation (fail fast),
+    telemetry, dev-mode schema bootstrap, the in-process background-job
+    scheduler (idle sweeper for live specialist chat + remote-session sweep).
     """
     setup_logging()
+
+    # Fail fast on unsafe production configuration — booting with a
+    # placeholder SECRET_KEY or DEBUG=true is strictly worse than not booting.
+    violations = settings.validate_production()
+    if violations:
+        for violation in violations:
+            logger.error("production_config_violation", detail=violation)
+        raise RuntimeError("Unsafe production configuration: " + "; ".join(violations))
+
+    from app.core.telemetry import setup_telemetry
+
+    setup_telemetry()
 
     # Import all models so their metadata is registered with Base
     import app.models  # noqa: F401
@@ -52,14 +67,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         idle_sweeper_interval_seconds=settings.IDLE_SWEEPER_INTERVAL_SECONDS,
         background_agents_enabled=settings.FEATURE_BACKGROUND_AGENTS,
         background_agents_poll_seconds=settings.AGENT_BACKGROUND_POLL_SECONDS,
+        remote_sweeper_enabled=settings.REMOTE_SESSION_SWEEPER_ENABLED,
+        remote_sweeper_interval_seconds=settings.REMOTE_SESSION_SWEEPER_INTERVAL_SECONDS,
     ):
         yield
 
     # Shutdown
     if settings.APP_ENV == "development":
         from app.core.database import engine
-        await engine.dispose()
 
+        await engine.dispose()
 
 
 app = FastAPI(
@@ -70,6 +87,13 @@ app = FastAPI(
     redoc_url="/redoc",
     lifespan=lifespan,
 )
+
+# Middleware — note Starlette runs these in reverse registration order, so
+# requests flow: CORS → security headers → metrics → rate limit → routes.
+if settings.RATE_LIMIT_ENABLED:
+    app.add_middleware(RateLimitMiddleware)
+app.add_middleware(RequestMetricsMiddleware, metrics_enabled=settings.METRICS_ENABLED)
+app.add_middleware(SecurityHeadersMiddleware)
 
 # CORS middleware
 app.add_middleware(
