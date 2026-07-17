@@ -626,8 +626,13 @@ export function SupportChatPage() {
                   />
                 )}
 
-                {/* Numbered resolution steps */}
-                {msg.resolutionSteps && msg.resolutionSteps.length > 0 && (
+                {/* Numbered resolution steps — suppressed for a single step:
+                    the backend now sends one step per turn with the
+                    click-path already folded into the prose, so a
+                    one-item card here would just duplicate the message
+                    bubble above. Kept for 2+ steps in case the operator
+                    raises the batch-size config. */}
+                {msg.resolutionSteps && msg.resolutionSteps.length > 1 && (
                   <div className="w-full rounded-xl border border-indigo-100 bg-indigo-50 p-4">
                     <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-indigo-700">
                       Troubleshooting Steps
