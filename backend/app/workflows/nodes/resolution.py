@@ -379,6 +379,11 @@ async def resolution_node(state: WorkflowState) -> dict:
         "conversation_phase": diag_ctx.phase.value,
         "messages": [AIMessage(content=resolution["response"])],
         "audit_trail": [audit_entry],
+        "quick_replies": [
+            {"label": "That worked", "value": "that worked"},
+            {"label": "Still not working", "value": "still not working"},
+            {"label": "Talk to a specialist", "value": "talk to a specialist"},
+        ],
     }
 
 

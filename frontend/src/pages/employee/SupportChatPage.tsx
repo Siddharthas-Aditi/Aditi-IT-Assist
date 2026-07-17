@@ -107,6 +107,8 @@ interface ChatMessage {
   category?: string;
   confidence?: number;
   isError?: boolean;
+  /** Quick-reply chips offered after a troubleshooting step (e.g. "That worked"). */
+  quickReplies?: { label: string; value: string }[];
 }
 
 /** Render **bold** markdown and newlines without a full MD library. */
@@ -348,6 +350,7 @@ export function SupportChatPage() {
         follow_up_question?: string;
         issue_category?: string;
         confidence_score?: number;
+        quick_replies?: { label: string; value: string }[];
         detail?: string | { msg?: string; loc?: unknown[] }[];
       } = {};
 
@@ -384,6 +387,7 @@ export function SupportChatPage() {
         followUpQuestion: data.follow_up_question ?? undefined,
         category: data.issue_category ?? undefined,
         confidence: data.confidence_score,
+        quickReplies: data.quick_replies ?? undefined,
       };
       setMessages((prev) => [...prev, assistantMsg]);
 
@@ -493,6 +497,11 @@ export function SupportChatPage() {
     }
   };
 
+  // Only the most recent assistant message should ever show quick-reply
+  // chips — once a new message arrives (including the user's own reply to
+  // a chip click), the chips naturally disappear.
+  const lastAssistantIndex = messages.map((m) => m.role).lastIndexOf('assistant');
+
   return (
     <div className="flex h-full flex-col bg-gray-50">
       {/* ── Header ─────────────────────────────────────────────── */}
@@ -570,7 +579,7 @@ export function SupportChatPage() {
       {/* ── Message thread ──────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6">
         <div className="mx-auto max-w-3xl space-y-5">
-          {messages.map((msg) => (
+          {messages.map((msg, idx) => (
             <div
               key={msg.id}
               className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
@@ -666,6 +675,39 @@ export function SupportChatPage() {
                     </p>
                   </div>
                 )}
+
+                {/* Quick-reply chips — shown only on the latest assistant
+                    message, so a new turn (including the user's own reply
+                    to a chip click) naturally replaces them. */}
+                {msg.role === 'assistant' &&
+                  msg.quickReplies &&
+                  msg.quickReplies.length > 0 &&
+                  idx === lastAssistantIndex &&
+                  !isLoading &&
+                  !waitingForSpecialist && (
+                    <div className="flex flex-wrap gap-2">
+                      {msg.quickReplies.map((qr) => {
+                        const isSpecialist = qr.value === 'talk to a specialist';
+                        return (
+                          <button
+                            key={qr.value}
+                            type="button"
+                            onClick={() =>
+                              isSpecialist ? void connectToAgent() : void sendMessage(qr.value)
+                            }
+                            disabled={isSpecialist ? connecting || !sessionId : isLoading}
+                            className={
+                              isSpecialist
+                                ? 'rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60'
+                                : 'rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-700 transition-colors hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-60'
+                            }
+                          >
+                            {qr.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
 
                 {/* Escalation banner — offer to create a ticket + connect a human.
                     No ticket exists yet; clicking Connect creates and queues one. */}

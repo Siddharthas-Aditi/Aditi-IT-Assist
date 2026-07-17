@@ -73,6 +73,43 @@ def test_fallback_prose_single_step_has_no_below_pointer():
 
 
 @pytest.mark.asyncio
+async def test_normal_step_turn_includes_quick_replies():
+    ctx = _ctx()
+    state = {"knowledge_results": _kb(), "diagnostic_context": ctx.to_dict()}
+    result = await R.resolution_node(state)
+    assert result["quick_replies"] == [
+        {"label": "That worked", "value": "that worked"},
+        {"label": "Still not working", "value": "still not working"},
+        {"label": "Talk to a specialist", "value": "talk to a specialist"},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_escalation_turn_has_no_quick_replies():
+    ctx = _ctx()
+    ctx.record_suggested_steps(
+        [
+            "Check for physical obstructions",
+            "Restart the laptop",
+            "Test with the On-Screen Keyboard",
+        ]
+    )
+    ctx.mark_last_batch_failed()
+    kb = _kb()
+    kb[0]["resolution_steps"].append(
+        {
+            "step_number": 4,
+            "instruction": "Check the keyboard language",
+            "details": "Settings -> Time & Language.",
+        }
+    )
+    state = {"knowledge_results": kb, "diagnostic_context": ctx.to_dict()}
+    result = await R.resolution_node(state)
+    assert result["conversation_phase"] == "escalating"
+    assert not result.get("quick_replies")
+
+
+@pytest.mark.asyncio
 async def test_escalates_after_threshold_misses_even_with_steps_left():
     ctx = _ctx()
     # 3 distinct steps already tried and failed (threshold default = 3),
