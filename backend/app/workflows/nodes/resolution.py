@@ -177,92 +177,20 @@ async def resolution_node(state: WorkflowState) -> dict:
         )
         return await _handle_simplification_request(state, diag_ctx, knowledge_results, trace)
 
-    # ── Mismatch detected: KB has wrong articles for this issue → try web search ──
+    # ── Mismatch detected: KB has wrong articles for this issue ──
+    # We no longer perform a raw, ungoverned web search here (that showed
+    # unvetted external content directly to employees). A mismatch now simply
+    # falls through to the normal progression/escalation logic below — no web
+    # content ever reaches the user from this node. Governed research
+    # (best-effort, specialist-only) runs later, at the actual escalation
+    # hook in ChatService (see ChatService._maybe_run_web_research).
     if quality.should_try_web_search and knowledge_results:
-        from app.services.web_search_service import WebSearchService
-
         logger.info(
             "retrieval_mismatch_detected",
             session_id=state.get("session_id"),
             kb_count=len(knowledge_results),
             reason=quality.mismatch_reason,
         )
-
-        diag_ctx.resolution_attempts += 1
-        web_service = WebSearchService()
-        web_results = await web_service.search(
-            query=diag_ctx.exact_problem_statement or "",
-            category=diag_ctx.issue_subtype or diag_ctx.issue_category or "",
-            system=diag_ctx.normalized_system or "",
-        )
-
-        # If web search found better results, use them
-        if web_results:
-            web_response = _format_web_results_for_user(web_results)
-            diag_ctx.resolution_confidence = 0.4  # Slightly higher for mismatch recovery
-            diag_ctx.phase = DiagnosticPhase.CONFIRMING
-            diag_ctx.last_response_type = "resolve"
-            logger.info(
-                "web_search_used_for_mismatch",
-                results_count=len(web_results),
-                kb_mismatch_reason=quality.mismatch_reason,
-            )
-            return {
-                "current_node": "resolve",
-                "resolution_steps": [],
-                "resolution_confidence": 0.4,
-                "diagnostic_context": diag_ctx.to_dict(),
-                "conversation_phase": diag_ctx.phase.value,
-                "messages": [AIMessage(content=web_response)],
-                "audit_trail": [
-                    {
-                        "event": "resolution.web_search_mismatch_recovery",
-                        "confidence": 0.4,
-                        "kb_mismatch": quality.mismatch_reason,
-                        "web_results": len(web_results),
-                        "resolution_attempt": diag_ctx.resolution_attempts,
-                    }
-                ],
-            }
-
-        # Web search also failed after mismatch → escalate with context
-        logger.info(
-            "mismatch_without_web_recovery",
-            kb_mismatch=quality.mismatch_reason,
-        )
-        diag_ctx.escalation_reason = (
-            f"I found some KB articles, but they don't seem to match your specific issue "
-            f"({quality.mismatch_reason}). Let me connect you with our IT team so they can "
-            f"help you directly."
-        )
-        diag_ctx.resolution_confidence = 0.0
-        diag_ctx.phase = DiagnosticPhase.CONFIRMING
-        diag_ctx.last_response_type = "resolve"
-        return {
-            "current_node": "resolve",
-            "resolution_steps": [],
-            "resolution_confidence": 0.0,
-            "diagnostic_context": diag_ctx.to_dict(),
-            "conversation_phase": diag_ctx.phase.value,
-            "messages": [
-                AIMessage(
-                    content=(
-                        "I wasn't able to find a specific solution for this in our knowledge "
-                        "base or online. Would you like me to create a support ticket "
-                        "so our IT team can assist you directly?"
-                    )
-                )
-            ],
-            "audit_trail": [
-                {
-                    "event": "resolution.generated",
-                    "confidence": 0.0,
-                    "steps_count": 0,
-                    "method": "none",
-                    "resolution_attempt": diag_ctx.resolution_attempts,
-                }
-            ],
-        }
 
     ordered, remaining = _build_progression(knowledge_results, diag_ctx)
 
@@ -625,40 +553,6 @@ def _format_concise_response(
         )
 
     return " ".join(parts)
-
-
-def _format_web_results_for_user(results: list) -> str:
-    """Format web search results for display to user.
-
-    Results include external sources when internal KB has no guidance.
-    Always include a disclaimer that these are external sources.
-    """
-    if not results:
-        return (
-            "I wasn't able to find guidance in our knowledge base. "
-            "Let me connect you with our IT team instead."
-        )
-
-    trust_badge = {
-        "official": "✓ Official",
-        "vendor": "✓ Vendor",
-        "trusted_community": "Community",
-        "general_blog": "Blog",
-    }
-
-    formatted_results = []
-    for i, result in enumerate(results, 1):
-        badge = trust_badge.get(result.trust_level.value, "External")
-        formatted_results.append(
-            f"**{i}. {result.title}** [{badge}]\n{result.snippet}\n[Read more]({result.url})"
-        )
-
-    return (
-        "I couldn't find this in our internal knowledge base, but I found some external resources "
-        "that might help:\n\n" + "\n\n".join(formatted_results) + "\n\n"
-        "You're welcome to try one of these solutions. Let me know if it helps, "
-        "or I can escalate this to our IT team if you'd prefer."
-    )
 
 
 def _asks_for_simpler_explanation(message: str) -> bool:

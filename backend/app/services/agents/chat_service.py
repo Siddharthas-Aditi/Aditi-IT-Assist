@@ -681,6 +681,12 @@ class ChatService:
         # Ticket-before-handoff: create first, THEN queue for a human.
         await svc.request_live_agent(ticket.id, requester)
 
+        # Best-effort governed web research (B2): only for KB-insufficient
+        # escalations, never for a bare "connect me with a human" request.
+        # Must run before the artifacts snapshot so any findings are captured
+        # in the escalation context; a failure here never blocks the ticket.
+        await self._maybe_run_web_research(session_id, state)
+
         # Capture the immutable transcript snapshot + structured escalation
         # context BEFORE commit so all three persist atomically. Resolve the
         # session state from the caller (preferred) or the in-memory store.
@@ -705,6 +711,68 @@ class ChatService:
             ticket_number=ticket.ticket_number,
         )
         return TicketRef(**ref)
+
+    async def _maybe_run_web_research(self, session_id: str, state: dict | None) -> None:
+        """Best-effort governed web research at a KB-insufficient escalation.
+
+        Populates ``state["web_research_findings"]`` so it flows into the
+        escalation context for the specialist; never raises — a failure here
+        must never block the ticket/handoff already in flight (the ticket is
+        created before this runs). Only triggers when a real KB attempt was
+        made (steps tried, or retrieval ran) — NOT for a bare "connect me
+        with a human" request with no KB attempt, which is a policy-gated
+        no-op by design (see docs/architecture/chat-to-live-handoff.md).
+        """
+        if not state:
+            return
+        diag = state.get("diagnostic_context") or {}
+        # KB-insufficient = a real KB attempt happened (steps tried, or KB
+        # retrieval actually ran), NOT a bare "I want a human" with no attempt.
+        kb_attempted = bool(
+            diag.get("failed_steps")
+            or diag.get("suggested_steps")
+            or state.get("knowledge_results") is not None
+        )
+        bare_human_request = bool(diag.get("live_agent_requested")) and not kb_attempted
+        if bare_human_request:
+            return
+        try:
+            from app.services.agents.web_research import build_default_web_research_agent
+
+            svc = self.ticket_service
+            agent = build_default_web_research_agent(svc.db) if svc else None
+            if agent is None:
+                return
+            query = diag.get("exact_problem_statement") or state.get("symptom") or ""
+            if not query:
+                return
+            supervisor_decision = state.get("supervisor_decision") or {}
+            specialist_name = (
+                supervisor_decision.get("specialist")
+                or supervisor_decision.get("agent")
+                or diag.get("issue_category")
+                or ""
+            )
+            outcome = await agent.research(
+                query=query,
+                specialist_name=specialist_name,
+                category=state.get("issue_category") or diag.get("issue_category"),
+                subtype=diag.get("issue_subtype"),
+                system=diag.get("normalized_system"),
+                session_id=session_id,
+            )
+            state["web_research_findings"] = [
+                {
+                    "title": r.title,
+                    "url": r.url,
+                    "snippet": r.snippet,
+                    "trust_tier": r.trust_level.value,
+                    "provider": settings.WEB_SEARCH_PROVIDER,
+                }
+                for r in outcome.results
+            ]
+        except Exception as exc:  # never block handoff
+            logger.warning("web_research_trigger_failed", session_id=session_id, error=str(exc))
 
     async def _create_escalation_artifacts(
         self,
