@@ -445,7 +445,10 @@ ISSUE_CATEGORIES = [
     "device-management/intune",
     "hardware/camera",
     "hardware/audio",
+    "hardware/laptop",
     "hardware/other",
+    "system/performance",
+    "software/windows-update",
     "software/other",
     "network/connectivity",
     "access/permissions",
@@ -458,7 +461,8 @@ at Aditi Consulting. Analyze the user's message and classify their IT issue.
 
 Categories:
 - email/outlook, video-conferencing/zoom, device-management/intune
-- hardware/camera, hardware/audio, hardware/other, software/other
+- hardware/camera, hardware/audio, hardware/laptop, hardware/other
+- system/performance, software/windows-update, software/other
 - network/connectivity, access/permissions, access/sixth_sense, other
 
 {entity_hint}
@@ -1466,6 +1470,82 @@ def _keyword_classify(message: str, diag_ctx: DiagnosticContext | None = None) -
             "has_specific_symptom": has_symptom,
             "symptom": message if has_symptom else None,
             "confidence": 0.85 if has_symptom else 0.6,
+            "_method": "keyword",
+        }
+    elif any(
+        w in message_lower
+        for w in [
+            "windows update",
+            "update failed",
+            "update stuck",
+            "update error",
+            "check for updates",
+            "install updates",
+        ]
+    ):
+        return {
+            "category": "software/windows-update",
+            "subcategory": None,
+            "severity": "medium",
+            "urgency": "medium",
+            "has_specific_symptom": has_symptom,
+            "symptom": message if has_symptom else None,
+            "confidence": 0.85 if has_symptom else 0.6,
+            "_method": "keyword",
+        }
+    elif any(
+        w in message_lower
+        for w in [
+            "keyboard",
+            "touchpad",
+            "trackpad",
+            "track pad",
+            "won't turn on",
+            "wont turn on",
+            "not turning on",
+            "won't power on",
+            "not powering on",
+            "won't charge",
+            "not charging",
+            "battery",
+            "external monitor",
+            "second monitor",
+            "second screen",
+            "won't boot",
+            "hdmi",
+        ]
+    ):
+        return {
+            "category": "hardware/laptop",
+            "subcategory": None,
+            "severity": "medium",
+            "urgency": "medium",
+            "has_specific_symptom": has_symptom,
+            "symptom": message if has_symptom else None,
+            "confidence": 0.85 if has_symptom else 0.6,
+            "_method": "keyword",
+        }
+    elif any(
+        w in message_lower
+        for w in [
+            "slow",
+            "laggy",
+            "lagging",
+            "freezing",
+            "freezes",
+            "hangs",
+            "sluggish",
+            "takes forever",
+        ]
+    ):
+        return {
+            "category": "system/performance",
+            "subcategory": None,
+            "severity": "medium",
+            "urgency": "medium",
+            "has_specific_symptom": has_symptom,
+            "symptom": message if has_symptom else None,
+            "confidence": 0.8 if has_symptom else 0.55,
             "_method": "keyword",
         }
     elif any(w in message_lower for w in ["keka", "freshservice", "install", "software", "app"]):
