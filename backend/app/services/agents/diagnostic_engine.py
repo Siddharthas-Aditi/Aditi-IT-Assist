@@ -83,9 +83,9 @@ async def _llm_extract_slots(
 
     assert isinstance(llm, LLMService)
 
-    context_summary = ", ".join(
-        f"{k}={v}" for k, v in context.get_filled_slots().items()
-    ) or "none yet"
+    context_summary = (
+        ", ".join(f"{k}={v}" for k, v in context.get_filled_slots().items()) or "none yet"
+    )
 
     prompt = SLOT_EXTRACTION_PROMPT.format(
         current_context=context_summary,
@@ -114,8 +114,13 @@ def _pattern_extract_slots(message: str, category: str | None = None) -> dict:
 
     # Detect explicit live agent request
     agent_phrases = [
-        "talk to a human", "live agent", "speak to someone",
-        "real person", "human support", "transfer me", "escalate",
+        "talk to a human",
+        "live agent",
+        "speak to someone",
+        "real person",
+        "human support",
+        "transfer me",
+        "escalate",
     ]
     if any(phrase in msg_lower for phrase in agent_phrases):
         extracted["live_agent_requested"] = True

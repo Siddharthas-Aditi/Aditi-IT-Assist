@@ -5,10 +5,9 @@ import pytest
 from app.services.ingestion.parser import (
     CandidatePayload,
     _classify_category,
-    _extract_escalation,
     _extract_product,
-    _extract_symptoms,
     _extract_steps,
+    _extract_symptoms,
     _extract_title,
     _is_heading,
     _score_confidence,
@@ -223,9 +222,7 @@ class TestParseDocument:
         assert len(candidates) >= 2
 
     def test_indices_are_sequential(self):
-        text = "\n".join(
-            f"## Issue {i}\nSome content about issue {i}\n" for i in range(5)
-        )
+        text = "\n".join(f"## Issue {i}\nSome content about issue {i}\n" for i in range(5))
         candidates = parse_document(text)
         for i, c in enumerate(candidates):
             assert c.candidate_index == i

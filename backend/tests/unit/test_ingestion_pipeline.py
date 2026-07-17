@@ -7,19 +7,16 @@ unit level here by mocking the DB repository.
 
 from __future__ import annotations
 
-import asyncio
-import tempfile
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from app.services.ingestion.extractor import ExtractionResult, extract_text
-from app.services.ingestion.parser import CandidatePayload, parse_document
+from app.services.ingestion.parser import parse_document
 from app.services.ingestion.validator import validate_candidate
 
-
 # ── Extractor tests ────────────────────────────────────────────────────────────
+
 
 class TestExtractText:
     def test_txt_extraction(self, tmp_path: Path):
@@ -50,6 +47,7 @@ class TestExtractText:
 
 
 # ── Parser + validator round-trip ─────────────────────────────────────────────
+
 
 class TestParserValidatorRoundTrip:
     """Parse a realistic document snippet and validate each candidate."""
@@ -119,17 +117,19 @@ Contact IT helpdesk if certificate renewal is needed.
     def test_all_candidates_validate_successfully(self):
         candidates = parse_document(self.SAMPLE_DOC)
         for c in candidates:
-            result = validate_candidate({
-                "title": c.title,
-                "summary": c.summary,
-                "category": c.category,
-                "symptoms": c.symptoms,
-                "troubleshooting_steps": c.troubleshooting_steps,
-                "resolution_steps": c.resolution_steps,
-                "escalation_criteria": c.escalation_criteria,
-                "tags": c.tags,
-                "confidence": c.confidence,
-            })
+            result = validate_candidate(
+                {
+                    "title": c.title,
+                    "summary": c.summary,
+                    "category": c.category,
+                    "symptoms": c.symptoms,
+                    "troubleshooting_steps": c.troubleshooting_steps,
+                    "resolution_steps": c.resolution_steps,
+                    "escalation_criteria": c.escalation_criteria,
+                    "tags": c.tags,
+                    "confidence": c.confidence,
+                }
+            )
             # Every candidate from this realistic doc should have no blockers
             assert result.is_valid, (
                 f"Candidate '{c.title}' failed validation: {result.blocking_issues}"
@@ -142,6 +142,7 @@ Contact IT helpdesk if certificate renewal is needed.
 
 
 # ── Mapper test ────────────────────────────────────────────────────────────────
+
 
 class TestMapper:
     def test_maps_to_article_create(self):

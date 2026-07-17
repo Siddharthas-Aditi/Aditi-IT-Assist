@@ -77,7 +77,9 @@ class TestLLMService:
         s = _base_mock()
         mock_response = MagicMock()
         mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = '{"category": "email/outlook", "confidence": 0.9}'
+        mock_response.choices[
+            0
+        ].message.content = '{"category": "email/outlook", "confidence": 0.9}'
 
         with patch("app.services.llm_service.settings", s):
             service = LLMService()

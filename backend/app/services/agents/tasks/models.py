@@ -23,7 +23,7 @@ class AgentTaskStatus(StrEnum):
     PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"
-    FAILED = "failed"          # exhausted retries
+    FAILED = "failed"  # exhausted retries
     CANCELLED = "cancelled"
 
 
@@ -35,7 +35,7 @@ def _now() -> datetime:
 class AgentTask:
     """One scheduled/queued background task."""
 
-    task_type: str                                  # maps to a registered handler
+    task_type: str  # maps to a registered handler
     payload: dict[str, Any] = field(default_factory=dict)
     id: str = field(default_factory=lambda: uuid.uuid4().hex)
     status: AgentTaskStatus = AgentTaskStatus.PENDING

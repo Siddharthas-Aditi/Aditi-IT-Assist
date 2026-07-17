@@ -37,10 +37,9 @@ class DeviceIntuneSpecialist:
 
     def can_handle(self, inp: SpecialistInput) -> bool:
         ctx = inp.diag_ctx
-        return (
-            (ctx.issue_category or "") in self.spec.categories
-            or (ctx.normalized_system or "") in self.spec.systems
-        )
+        return (ctx.issue_category or "") in self.spec.categories or (
+            ctx.normalized_system or ""
+        ) in self.spec.systems
 
     async def handle(self, inp: SpecialistInput) -> SpecialistOutput:
         return compose_specialist_output(

@@ -23,15 +23,17 @@ from __future__ import annotations
 
 import json
 import logging
+from typing import TYPE_CHECKING
 
 from app.core.config import settings
-from app.services.ingestion.profiles.base import ParserProfile
 from app.services.ingestion.schema import (
     ExtractionCandidate,
     ExtractionMethod,
-    ExtractionStep,
     FieldExtraction,
 )
+
+if TYPE_CHECKING:
+    from app.services.ingestion.profiles.base import ParserProfile
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +88,7 @@ JSON:"""
 
 
 # ── Public entry point ────────────────────────────────────────────────────────
+
 
 async def enrich_with_llm(
     candidate: ExtractionCandidate,
@@ -144,18 +147,23 @@ async def enrich_with_llm(
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
 
+
 def _weak_fields(candidate: ExtractionCandidate, threshold: float) -> list[str]:
     """Return names of FieldExtraction fields below *threshold*."""
     tracked = [
-        "title", "short_summary", "category", "subcategory",
-        "product_or_system", "platform", "symptoms",
-        "troubleshooting_steps", "resolution_steps",
-        "escalation_criteria", "tags",
+        "title",
+        "short_summary",
+        "category",
+        "subcategory",
+        "product_or_system",
+        "platform",
+        "symptoms",
+        "troubleshooting_steps",
+        "resolution_steps",
+        "escalation_criteria",
+        "tags",
     ]
-    return [
-        name for name in tracked
-        if candidate.field_confidence(name) < threshold
-    ]
+    return [name for name in tracked if candidate.field_confidence(name) < threshold]
 
 
 def _parse_response(raw: str) -> dict:
@@ -185,7 +193,6 @@ def _merge_into(
     3. The hallucination guard passes (value is grounded in segment text).
     """
     text_lower = candidate.raw_segment_text.lower()
-    threshold = profile.thresholds.medium
 
     # ── Scalar fields ──────────────────────────────────────────────────────────
     scalar_map: dict[str, str] = {
@@ -208,12 +215,19 @@ def _merge_into(
             logger.debug("Hallucination guard blocked LLM '%s': %r", field_name, val[:60])
             continue
         existing = getattr(candidate, field_name)
-        new_conf = min((existing.confidence if isinstance(existing, FieldExtraction) else 0.0) + 0.30, 0.80)
-        setattr(candidate, field_name, FieldExtraction.make(
-            val.strip(), new_conf,
-            method=ExtractionMethod.COMBINED,
-            excerpt=val[:120],
-        ))
+        new_conf = min(
+            (existing.confidence if isinstance(existing, FieldExtraction) else 0.0) + 0.30, 0.80
+        )
+        setattr(
+            candidate,
+            field_name,
+            FieldExtraction.make(
+                val.strip(),
+                new_conf,
+                method=ExtractionMethod.COMBINED,
+                excerpt=val[:120],
+            ),
+        )
 
     # ── Symptoms / tags (list of strings) ─────────────────────────────────────
     for field_name in ("symptoms", "tags"):
@@ -226,11 +240,18 @@ def _merge_into(
         if not clean:
             continue
         existing = getattr(candidate, field_name)
-        new_conf = min((existing.confidence if isinstance(existing, FieldExtraction) else 0.0) + 0.25, 0.80)
-        setattr(candidate, field_name, FieldExtraction.make(
-            clean, new_conf,
-            method=ExtractionMethod.COMBINED,
-        ))
+        new_conf = min(
+            (existing.confidence if isinstance(existing, FieldExtraction) else 0.0) + 0.25, 0.80
+        )
+        setattr(
+            candidate,
+            field_name,
+            FieldExtraction.make(
+                clean,
+                new_conf,
+                method=ExtractionMethod.COMBINED,
+            ),
+        )
 
     # ── Step lists (troubleshooting_steps, resolution_steps) ─────────────────
     for field_name in ("troubleshooting_steps", "resolution_steps"):
@@ -241,11 +262,18 @@ def _merge_into(
         if not steps:
             continue
         existing = getattr(candidate, field_name)
-        new_conf = min((existing.confidence if isinstance(existing, FieldExtraction) else 0.0) + 0.28, 0.82)
-        setattr(candidate, field_name, FieldExtraction.make(
-            steps, new_conf,
-            method=ExtractionMethod.COMBINED,
-        ))
+        new_conf = min(
+            (existing.confidence if isinstance(existing, FieldExtraction) else 0.0) + 0.28, 0.82
+        )
+        setattr(
+            candidate,
+            field_name,
+            FieldExtraction.make(
+                steps,
+                new_conf,
+                method=ExtractionMethod.COMBINED,
+            ),
+        )
 
 
 def _grounded(value: str, text_lower: str) -> bool:
@@ -273,9 +301,13 @@ def _normalise_steps(raw, text_lower: str) -> list[dict]:
         if not _grounded(instr, text_lower):
             logger.debug("Hallucination guard blocked step: %r", instr[:60])
             continue
-        result.append({
-            "step_number": int(step.get("step_number", i)) if isinstance(step, dict) else i,
-            "instruction": instr[:200],
-            "details": str(step.get("details", "")).strip()[:300] if isinstance(step, dict) else "",
-        })
+        result.append(
+            {
+                "step_number": int(step.get("step_number", i)) if isinstance(step, dict) else i,
+                "instruction": instr[:200],
+                "details": str(step.get("details", "")).strip()[:300]
+                if isinstance(step, dict)
+                else "",
+            }
+        )
     return result

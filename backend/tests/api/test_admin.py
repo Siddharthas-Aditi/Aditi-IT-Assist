@@ -8,7 +8,6 @@ canonical registry so gating reflects the real RBAC matrix.
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, patch
 
-import pytest
 from httpx import AsyncClient
 
 from app.schemas.admin import (
@@ -150,9 +149,7 @@ class TestAuditLogGating:
     async def test_event_detail_404(self, admin_client: AsyncClient):
         with patch("app.api.v1.admin.AuditQueryService") as cls:
             cls.return_value.get_event = AsyncMock(return_value=None)
-            resp = await admin_client.get(
-                f"{BASE}/audit-log/00000000-0000-0000-0000-0000000000ff"
-            )
+            resp = await admin_client.get(f"{BASE}/audit-log/00000000-0000-0000-0000-0000000000ff")
         assert resp.status_code == 404
 
     async def test_event_detail_ok(self, admin_client: AsyncClient):
@@ -165,9 +162,7 @@ class TestAuditLogGating:
         )
         with patch("app.api.v1.admin.AuditQueryService") as cls:
             cls.return_value.get_event = AsyncMock(return_value=detail)
-            resp = await admin_client.get(
-                f"{BASE}/audit-log/00000000-0000-0000-0000-0000000000ff"
-            )
+            resp = await admin_client.get(f"{BASE}/audit-log/00000000-0000-0000-0000-0000000000ff")
         assert resp.status_code == 200
         assert resp.json()["action"] == "role_assigned"
 

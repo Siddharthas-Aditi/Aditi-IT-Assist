@@ -7,8 +7,6 @@ flush but do not commit; the unit-of-work is owned by the caller.
 
 from __future__ import annotations
 
-import uuid
-from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import and_, func, select
@@ -16,6 +14,9 @@ from sqlalchemy import and_, func, select
 from app.models.feedback import ConversationFeedback, MessageFeedback
 
 if TYPE_CHECKING:
+    import uuid
+    from datetime import datetime
+
     from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -51,9 +52,7 @@ class FeedbackRepository:
         )
         return result.scalar_one_or_none()
 
-    async def get_by_conversation(
-        self, conversation_id: uuid.UUID
-    ) -> list[ConversationFeedback]:
+    async def get_by_conversation(self, conversation_id: uuid.UUID) -> list[ConversationFeedback]:
         """All feedback entries for a session (typically at most one)."""
         result = await self.db.execute(
             select(ConversationFeedback).where(
@@ -64,9 +63,7 @@ class FeedbackRepository:
 
     async def get_by_ticket(self, ticket_id: uuid.UUID) -> list[ConversationFeedback]:
         result = await self.db.execute(
-            select(ConversationFeedback).where(
-                ConversationFeedback.ticket_id == ticket_id
-            )
+            select(ConversationFeedback).where(ConversationFeedback.ticket_id == ticket_id)
         )
         return list(result.scalars().all())
 
@@ -197,9 +194,7 @@ class FeedbackRepository:
         )
         return result.scalar_one_or_none()
 
-    async def create_message_feedback(
-        self, feedback: MessageFeedback
-    ) -> MessageFeedback:
+    async def create_message_feedback(self, feedback: MessageFeedback) -> MessageFeedback:
         self.db.add(feedback)
         await self.db.flush()
         await self.db.refresh(feedback)

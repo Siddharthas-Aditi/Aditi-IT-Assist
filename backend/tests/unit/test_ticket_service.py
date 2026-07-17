@@ -9,13 +9,10 @@ Tests:
 """
 
 import uuid
-from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, MagicMock, call, patch
-
-import pytest
+from datetime import UTC, datetime, timedelta
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.services.ticket_service import SLA_RESOLUTION_HOURS, SLA_RESPONSE_HOURS, TicketService
-
 
 # ─────────────────────────────────────────────────────────────────────
 # Helpers
@@ -86,16 +83,18 @@ class TestTicketCreation:
             mock_ticket.priority = "high"
             mock_ticket_cls.return_value = mock_ticket
 
-            with patch.object(service, "_generate_ticket_number", return_value="TKT-2026-0001"):
-                with patch.object(service, "_add_event", new_callable=AsyncMock):
-                    requester = _make_user("employee")
-                    ticket = await service.create_ticket(
-                        requester=requester,
-                        title="VPN not connecting",
-                        description="Can't connect to VPN after system update",
-                        priority="high",
-                        category="network/connectivity",
-                    )
+            with (
+                patch.object(service, "_generate_ticket_number", return_value="TKT-2026-0001"),
+                patch.object(service, "_add_event", new_callable=AsyncMock),
+            ):
+                requester = _make_user("employee")
+                ticket = await service.create_ticket(
+                    requester=requester,
+                    title="VPN not connecting",
+                    description="Can't connect to VPN after system update",
+                    priority="high",
+                    category="network/connectivity",
+                )
 
         # Ticket was created with correct params
         assert ticket.status == "new"
@@ -105,7 +104,7 @@ class TestTicketCreation:
         assert call_kwargs["priority"] == "high"
         assert "sla_response_target" in call_kwargs
         assert "sla_resolution_target" in call_kwargs
-        assert call_kwargs["sla_response_target"] > datetime.now(timezone.utc)
+        assert call_kwargs["sla_response_target"] > datetime.now(UTC)
 
     async def test_creates_ticket_with_critical_priority_sla(self):
         """Critical tickets get tightest SLA (1h response, 4h resolution)."""
@@ -120,18 +119,20 @@ class TestTicketCreation:
             mock_ticket.priority = "critical"
             mock_ticket_cls.return_value = mock_ticket
 
-            with patch.object(service, "_generate_ticket_number", return_value="TKT-2026-0002"):
-                with patch.object(service, "_add_event", new_callable=AsyncMock):
-                    requester = _make_user()
-                    ticket = await service.create_ticket(
-                        requester=requester,
-                        title="Production system down",
-                        description="All employees cannot log in",
-                        priority="critical",
-                    )
+            with (
+                patch.object(service, "_generate_ticket_number", return_value="TKT-2026-0002"),
+                patch.object(service, "_add_event", new_callable=AsyncMock),
+            ):
+                requester = _make_user()
+                await service.create_ticket(
+                    requester=requester,
+                    title="Production system down",
+                    description="All employees cannot log in",
+                    priority="critical",
+                )
 
         call_kwargs = mock_ticket_cls.call_args.kwargs
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         # critical: 1h response, 4h resolution
         assert call_kwargs["sla_response_target"] <= now + timedelta(hours=1, minutes=1)
         assert call_kwargs["sla_resolution_target"] <= now + timedelta(hours=4, minutes=1)
@@ -212,9 +213,11 @@ class TestTicketStatusTransitions:
         mock_ticket.resolved_at = None
         mock_ticket.closed_at = None
 
-        with patch.object(service, "_get_ticket", return_value=mock_ticket):
-            with patch.object(service, "_add_event", new_callable=AsyncMock):
-                result = await service.update_status(uuid.uuid4(), "resolved", actor)
+        with (
+            patch.object(service, "_get_ticket", return_value=mock_ticket),
+            patch.object(service, "_add_event", new_callable=AsyncMock),
+        ):
+            result = await service.update_status(uuid.uuid4(), "resolved", actor)
 
         assert result.status == "resolved"
         assert result.resolved_at is not None
@@ -227,12 +230,14 @@ class TestTicketStatusTransitions:
 
         mock_ticket = MagicMock()
         mock_ticket.status = "resolved"
-        mock_ticket.resolved_at = datetime.now(timezone.utc)
+        mock_ticket.resolved_at = datetime.now(UTC)
         mock_ticket.closed_at = None
 
-        with patch.object(service, "_get_ticket", return_value=mock_ticket):
-            with patch.object(service, "_add_event", new_callable=AsyncMock):
-                result = await service.update_status(uuid.uuid4(), "closed", actor)
+        with (
+            patch.object(service, "_get_ticket", return_value=mock_ticket),
+            patch.object(service, "_add_event", new_callable=AsyncMock),
+        ):
+            result = await service.update_status(uuid.uuid4(), "closed", actor)
 
         assert result.closed_at is not None
 
@@ -250,9 +255,11 @@ class TestTicketStatusTransitions:
         mock_ticket.first_response_at = None
 
         add_event_mock = AsyncMock()
-        with patch.object(service, "_get_ticket", return_value=mock_ticket):
-            with patch.object(service, "_add_event", add_event_mock):
-                await service.assign_ticket(mock_ticket.id, target_agent_id, actor)
+        with (
+            patch.object(service, "_get_ticket", return_value=mock_ticket),
+            patch.object(service, "_add_event", add_event_mock),
+        ):
+            await service.assign_ticket(mock_ticket.id, target_agent_id, actor)
 
         add_event_mock.assert_called_once()
         call_kwargs = add_event_mock.call_args
@@ -270,9 +277,11 @@ class TestTicketStatusTransitions:
         mock_ticket.assigned_to = None
         mock_ticket.first_response_at = None
 
-        with patch.object(service, "_get_ticket", return_value=mock_ticket):
-            with patch.object(service, "_add_event", new_callable=AsyncMock):
-                result = await service.assign_ticket(mock_ticket.id, uuid.uuid4(), actor)
+        with (
+            patch.object(service, "_get_ticket", return_value=mock_ticket),
+            patch.object(service, "_add_event", new_callable=AsyncMock),
+        ):
+            result = await service.assign_ticket(mock_ticket.id, uuid.uuid4(), actor)
 
         assert result.status == "triaged"
 

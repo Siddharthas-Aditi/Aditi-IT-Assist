@@ -19,21 +19,27 @@ depends_on = None
 def upgrade() -> None:
     # ── ENUM types ────────────────────────────────────────────────────────────
     support_mode_enum = postgresql.ENUM(
-        "ai_only", "ai_plus_live_agent", "live_agent_only",
+        "ai_only",
+        "ai_plus_live_agent",
+        "live_agent_only",
         name="support_mode_enum",
         create_type=False,
     )
     support_mode_enum.create(op.get_bind(), checkfirst=True)
 
     feedback_source_enum = postgresql.ENUM(
-        "inline_chat", "ticket_page", "followup",
+        "inline_chat",
+        "ticket_page",
+        "followup",
         name="feedback_source_enum",
         create_type=False,
     )
     feedback_source_enum.create(op.get_bind(), checkfirst=True)
 
     quality_bucket_enum = postgresql.ENUM(
-        "positive", "neutral", "negative",
+        "positive",
+        "neutral",
+        "negative",
         name="quality_bucket_enum",
         create_type=False,
     )
@@ -78,7 +84,9 @@ def upgrade() -> None:
         sa.Column(
             "feedback_source",
             sa.Enum(
-                "inline_chat", "ticket_page", "followup",
+                "inline_chat",
+                "ticket_page",
+                "followup",
                 name="feedback_source_enum",
                 create_type=False,
             ),
@@ -89,7 +97,9 @@ def upgrade() -> None:
         sa.Column(
             "support_mode",
             sa.Enum(
-                "ai_only", "ai_plus_live_agent", "live_agent_only",
+                "ai_only",
+                "ai_plus_live_agent",
+                "live_agent_only",
                 name="support_mode_enum",
                 create_type=False,
             ),
@@ -119,7 +129,9 @@ def upgrade() -> None:
         sa.Column(
             "quality_bucket",
             sa.Enum(
-                "positive", "neutral", "negative",
+                "positive",
+                "neutral",
+                "negative",
                 name="quality_bucket_enum",
                 create_type=False,
             ),
@@ -147,9 +159,13 @@ def upgrade() -> None:
         ),
     )
 
-    op.create_index("ix_conv_feedback_conversation_id", "conversation_feedback", ["conversation_id"])
+    op.create_index(
+        "ix_conv_feedback_conversation_id", "conversation_feedback", ["conversation_id"]
+    )
     op.create_index("ix_conv_feedback_ticket_id", "conversation_feedback", ["ticket_id"])
-    op.create_index("ix_conv_feedback_submitted_by", "conversation_feedback", ["submitted_by_user_id"])
+    op.create_index(
+        "ix_conv_feedback_submitted_by", "conversation_feedback", ["submitted_by_user_id"]
+    )
     op.create_index("ix_conv_feedback_agent_id", "conversation_feedback", ["agent_user_id"])
     op.create_index("ix_conv_feedback_review_flag", "conversation_feedback", ["review_flag"])
     op.create_unique_constraint(

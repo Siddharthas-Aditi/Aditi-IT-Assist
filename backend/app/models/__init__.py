@@ -61,6 +61,9 @@ __all__ = [
     # Chat-escalation artifacts
     "TranscriptSnapshot",
     "EscalationContext",
+    # Feedback
+    "ConversationFeedback",
+    "MessageFeedback",
     # Knowledge
     "KnowledgeArticle",
     "KnowledgeArticleVersion",

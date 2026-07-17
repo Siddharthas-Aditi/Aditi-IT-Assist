@@ -146,13 +146,21 @@ class ServiceNowCreateIncidentResult(BaseModel):
 class _Binding:
     spec: ToolSpec
     server_id: str
-    mcp_tool_name: str               # the tool name on the server
+    mcp_tool_name: str  # the tool name on the server
     result_model: type[BaseModel]
 
 
-def _spec(name: str, server_id: str, description: str, args_model, result_model,
-          permission: str, *, side_effect: SideEffect = SideEffect.READ,
-          approval: Approval = Approval.NONE) -> ToolSpec:
+def _spec(
+    name: str,
+    server_id: str,
+    description: str,
+    args_model,
+    result_model,
+    permission: str,
+    *,
+    side_effect: SideEffect = SideEffect.READ,
+    approval: Approval = Approval.NONE,
+) -> ToolSpec:
     return ToolSpec(
         name=name,
         description=description,
@@ -168,74 +176,100 @@ def _spec(name: str, server_id: str, description: str, args_model, result_model,
 _BINDINGS: tuple[_Binding, ...] = (
     _Binding(
         spec=_spec(
-            "entra_account_status", "msgraph",
+            "entra_account_status",
+            "msgraph",
             "Look up an Entra ID account's enabled/locked/MFA state to diagnose sign-in issues.",
-            EntraAccountStatusArgs, EntraAccountStatusResult, P.INTEGRATION_DIRECTORY_READ.value,
+            EntraAccountStatusArgs,
+            EntraAccountStatusResult,
+            P.INTEGRATION_DIRECTORY_READ.value,
         ),
-        server_id="msgraph", mcp_tool_name="get_user_account_status",
+        server_id="msgraph",
+        mcp_tool_name="get_user_account_status",
         result_model=EntraAccountStatusResult,
     ),
     _Binding(
         spec=_spec(
-            "intune_device_compliance", "msgraph",
+            "intune_device_compliance",
+            "msgraph",
             "Check an Intune device's compliance state and reasons to diagnose access blocks.",
-            IntuneDeviceComplianceArgs, IntuneDeviceComplianceResult,
+            IntuneDeviceComplianceArgs,
+            IntuneDeviceComplianceResult,
             P.INTEGRATION_DIRECTORY_READ.value,
         ),
-        server_id="msgraph", mcp_tool_name="get_device_compliance",
+        server_id="msgraph",
+        mcp_tool_name="get_device_compliance",
         result_model=IntuneDeviceComplianceResult,
     ),
     _Binding(
         spec=_spec(
-            "mailbox_quota_status", "msgraph",
+            "mailbox_quota_status",
+            "msgraph",
             "Read a mailbox's real usage vs quota from Exchange to confirm a full-mailbox issue.",
-            MailboxQuotaStatusArgs, MailboxQuotaStatusResult, P.INTEGRATION_DIRECTORY_READ.value,
+            MailboxQuotaStatusArgs,
+            MailboxQuotaStatusResult,
+            P.INTEGRATION_DIRECTORY_READ.value,
         ),
-        server_id="msgraph", mcp_tool_name="get_mailbox_usage",
+        server_id="msgraph",
+        mcp_tool_name="get_mailbox_usage",
         result_model=MailboxQuotaStatusResult,
     ),
     _Binding(
         spec=_spec(
-            "servicenow_incident_lookup", "servicenow",
+            "servicenow_incident_lookup",
+            "servicenow",
             "Look up a ServiceNow incident's state and summary by number.",
-            ServiceNowIncidentLookupArgs, ServiceNowIncidentLookupResult,
+            ServiceNowIncidentLookupArgs,
+            ServiceNowIncidentLookupResult,
             P.INTEGRATION_TICKETING_READ.value,
         ),
-        server_id="servicenow", mcp_tool_name="get_incident",
+        server_id="servicenow",
+        mcp_tool_name="get_incident",
         result_model=ServiceNowIncidentLookupResult,
     ),
     # ── Write tools (Phase 8): WRITE side effect + HUMAN approval ──
     _Binding(
         spec=_spec(
-            "entra_unlock_account", "msgraph",
+            "entra_unlock_account",
+            "msgraph",
             "Unlock a locked Entra ID account. Reversible; idempotent via idempotency_key.",
-            EntraUnlockAccountArgs, EntraUnlockAccountResult,
+            EntraUnlockAccountArgs,
+            EntraUnlockAccountResult,
             P.INTEGRATION_DIRECTORY_WRITE.value,
-            side_effect=SideEffect.WRITE, approval=Approval.HUMAN,
+            side_effect=SideEffect.WRITE,
+            approval=Approval.HUMAN,
         ),
-        server_id="msgraph", mcp_tool_name="unlock_account",
+        server_id="msgraph",
+        mcp_tool_name="unlock_account",
         result_model=EntraUnlockAccountResult,
     ),
     _Binding(
         spec=_spec(
-            "reset_mfa", "msgraph",
+            "reset_mfa",
+            "msgraph",
             "Reset a user's MFA registration so they can re-enrol. Idempotent via idempotency_key.",
-            ResetMfaArgs, ResetMfaResult,
+            ResetMfaArgs,
+            ResetMfaResult,
             P.INTEGRATION_DIRECTORY_WRITE.value,
-            side_effect=SideEffect.WRITE, approval=Approval.HUMAN,
+            side_effect=SideEffect.WRITE,
+            approval=Approval.HUMAN,
         ),
-        server_id="msgraph", mcp_tool_name="reset_mfa",
+        server_id="msgraph",
+        mcp_tool_name="reset_mfa",
         result_model=ResetMfaResult,
     ),
     _Binding(
         spec=_spec(
-            "servicenow_create_incident", "servicenow",
+            "servicenow_create_incident",
+            "servicenow",
             "Create a ServiceNow incident. Idempotent via idempotency_key.",
-            ServiceNowCreateIncidentArgs, ServiceNowCreateIncidentResult,
+            ServiceNowCreateIncidentArgs,
+            ServiceNowCreateIncidentResult,
             P.INTEGRATION_TICKETING_WRITE.value,
-            side_effect=SideEffect.WRITE, approval=Approval.HUMAN,
+            side_effect=SideEffect.WRITE,
+            approval=Approval.HUMAN,
         ),
-        server_id="servicenow", mcp_tool_name="create_incident",
+        server_id="servicenow",
+        mcp_tool_name="create_incident",
         result_model=ServiceNowCreateIncidentResult,
     ),
 )
@@ -334,9 +368,12 @@ def build_mcp_tools(
     provider = session_provider or default_session_provider
     timeout = timeout_seconds if timeout_seconds is not None else settings.MCP_TOOL_TIMEOUT_SECONDS
 
-    enabled = {p.server_id: p for p in mcp_profiles.enabled_profiles(
-        feature_on=feature_on, enabled_server_ids=enabled_server_ids
-    )}
+    enabled = {
+        p.server_id: p
+        for p in mcp_profiles.enabled_profiles(
+            feature_on=feature_on, enabled_server_ids=enabled_server_ids
+        )
+    }
     tools: dict[str, McpBackedTool] = {}
     for binding in _BINDINGS:
         profile = enabled.get(binding.server_id)

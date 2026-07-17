@@ -229,6 +229,10 @@ class P(StrEnum):
     INTEGRATION_TICKETING_READ = "integration:ticketing_read"  # ServiceNow read
     INTEGRATION_DIRECTORY_WRITE = "integration:directory_write"  # unlock account, reset MFA
     INTEGRATION_TICKETING_WRITE = "integration:ticketing_write"  # create ServiceNow incident
+    # Phase 9 — execute on a managed endpoint via Intune (install approved app,
+    # run approved remediation, benign device action). Catalog-bound + autonomy-
+    # policy-gated in the tool layer. Highest-risk external capability.
+    INTEGRATION_DEVICE_EXECUTE = "integration:device_execute"
 
 
 # ─── Permission Registry ───────────────────────────────────────────────────────
@@ -693,6 +697,16 @@ PERMISSION_REGISTRY: list[PermissionDef] = [
         Scope.ALL,
         audit_required=True,
     ),
+    PermissionDef(
+        P.INTEGRATION_DEVICE_EXECUTE,
+        "Execute on Managed Device (Intune)",
+        Resource.INTEGRATION,
+        Action.UPDATE,
+        Scope.ALL,
+        audit_required=True,
+        high_risk=True,
+        consent_required=True,
+    ),
     # ── Analytics ──
     PermissionDef(
         P.ANALYTICS_VIEW_OWN, "View Own Stats", Resource.ANALYTICS, Action.VIEW, Scope.OWN
@@ -902,6 +916,10 @@ ROLE_PERMISSIONS: dict[UserRole, list[P]] = {
         # Phase 8 — approve/execute external write actions (higher bar than read).
         P.INTEGRATION_DIRECTORY_WRITE,
         P.INTEGRATION_TICKETING_WRITE,
+        # Phase 9 — device execution (install approved app / remediation / action).
+        # The agent runs autonomous low-risk actions under a service principal that
+        # also holds this permission; leads approve anything above the threshold.
+        P.INTEGRATION_DEVICE_EXECUTE,
     ],
     UserRole.IT_ADMIN: [
         # Inherits all IT_LEAD permissions, plus:

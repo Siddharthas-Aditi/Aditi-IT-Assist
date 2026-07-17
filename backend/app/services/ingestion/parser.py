@@ -28,7 +28,10 @@ _CATEGORY_KEYWORDS: list[tuple[re.Pattern, tuple[str, str]]] = [
     (re.compile(r"\bcamera\b|\bwebcam\b", re.I), ("hardware/camera", "general")),
     (re.compile(r"\bvpn\b", re.I), ("network/connectivity", "vpn")),
     (re.compile(r"\bwifi\b|\bwi-fi\b|\bwireless\b", re.I), ("network/connectivity", "wifi")),
-    (re.compile(r"\baccess denied\b|\bpermission\b|\brbac\b|\bmfa\b", re.I), ("access/permissions", "general")),
+    (
+        re.compile(r"\baccess denied\b|\bpermission\b|\brbac\b|\bmfa\b", re.I),
+        ("access/permissions", "general"),
+    ),
     (re.compile(r"\bpassword\b", re.I), ("access/permissions", "password")),
     (re.compile(r"\bslow\b|\bperformance\b|\blagging\b", re.I), ("hardware/other", "performance")),
     (re.compile(r"\bmonitor\b|\bdisplay\b|\bscreen\b", re.I), ("hardware/other", "display")),
@@ -40,44 +43,53 @@ _CATEGORY_KEYWORDS: list[tuple[re.Pattern, tuple[str, str]]] = [
 
 # ── Product / system extraction patterns ─────────────────────────────────────
 _KNOWN_PRODUCTS = [
-    "Outlook", "Microsoft 365", "M365", "Office 365", "OneDrive", "SharePoint",
-    "Teams", "Zoom", "Intune", "Azure AD", "Entra ID", "Windows", "macOS",
-    "Chrome", "Edge", "Firefox", "Slack", "ServiceNow",
+    "Outlook",
+    "Microsoft 365",
+    "M365",
+    "Office 365",
+    "OneDrive",
+    "SharePoint",
+    "Teams",
+    "Zoom",
+    "Intune",
+    "Azure AD",
+    "Entra ID",
+    "Windows",
+    "macOS",
+    "Chrome",
+    "Edge",
+    "Firefox",
+    "Slack",
+    "ServiceNow",
 ]
-_PRODUCT_RE = re.compile(
-    r"\b(" + "|".join(re.escape(p) for p in _KNOWN_PRODUCTS) + r")\b", re.I
-)
+_PRODUCT_RE = re.compile(r"\b(" + "|".join(re.escape(p) for p in _KNOWN_PRODUCTS) + r")\b", re.I)
 
 # ── Topic heading patterns ────────────────────────────────────────────────────
 # A line is a heading candidate if it matches one of these.
 _HEADING_PATTERNS: list[re.Pattern] = [
-    re.compile(r"^#{1,3}\s+.+$"),                              # Markdown heading
-    re.compile(r"^[A-Z][A-Z\s\-/]{4,60}$"),                  # ALL-CAPS heading 5–61 chars
-    re.compile(r"^\d+[\.\)]\s+[A-Z].+$"),                    # Numbered: "1. Title" or "1) Title"
+    re.compile(r"^#{1,3}\s+.+$"),  # Markdown heading
+    re.compile(r"^[A-Z][A-Z\s\-/]{4,60}$"),  # ALL-CAPS heading 5–61 chars
+    re.compile(r"^\d+[\.\)]\s+[A-Z].+$"),  # Numbered: "1. Title" or "1) Title"
     re.compile(r"^(?:Issue|Problem|Topic|Section|Title):\s*.+$", re.I),  # Labelled heading
 ]
 
 # ── Symptom / step / escalation line patterns ─────────────────────────────────
-_SYMPTOM_LEAD = re.compile(
-    r"^(?:[-•*]\s+|symptoms?:|when\s|users?\s|issue:|problem:)", re.I
-)
-_STEP_LEAD = re.compile(
-    r"^(?:\d+[\.\)]\s+|step\s+\d+[:\.\)]?\s+|[-•*]\s+)", re.I
-)
+_SYMPTOM_LEAD = re.compile(r"^(?:[-•*]\s+|symptoms?:|when\s|users?\s|issue:|problem:)", re.I)
+_STEP_LEAD = re.compile(r"^(?:\d+[\.\)]\s+|step\s+\d+[:\.\)]?\s+|[-•*]\s+)", re.I)
 _RESOLUTION_SECTION = re.compile(
     r"^(?:resolution|solution|fix|steps?\s+to\s+(?:resolve|fix)|how\s+to\s+fix)", re.I
 )
 _TROUBLESHOOT_SECTION = re.compile(
     r"^(?:troubleshoot|troubleshooting|diagnosis|diagnostic|investigation)", re.I
 )
-_SYMPTOM_SECTION = re.compile(
-    r"^(?:symptoms?|signs?|indicators?|manifestation)", re.I
-)
+_SYMPTOM_SECTION = re.compile(r"^(?:symptoms?|signs?|indicators?|manifestation)", re.I)
 _ESCALATION_SECTION = re.compile(
-    r"^(?:escalat|reach\s+out|contact\s+it|contact\s+support|if\s+(?:the\s+)?issue\s+persists?)", re.I
+    r"^(?:escalat|reach\s+out|contact\s+it|contact\s+support|if\s+(?:the\s+)?issue\s+persists?)",
+    re.I,
 )
 
 # ── Step dict builder ─────────────────────────────────────────────────────────
+
 
 def _build_step(n: int, instruction: str) -> dict:
     return {"step_number": n, "instruction": instruction.strip(), "details": ""}
@@ -86,6 +98,7 @@ def _build_step(n: int, instruction: str) -> dict:
 # ─────────────────────────────────────────────────────────────────────────────
 # Public types
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 @dataclass
 class CandidatePayload:
@@ -113,6 +126,7 @@ class CandidatePayload:
 # Public entry point
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def parse_document(raw_text: str) -> list[CandidatePayload]:
     """Parse *raw_text* into a list of ``CandidatePayload`` objects.
 
@@ -133,6 +147,7 @@ def parse_document(raw_text: str) -> list[CandidatePayload]:
 # ─────────────────────────────────────────────────────────────────────────────
 # Topic segmentation
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def _is_heading(line: str) -> bool:
     stripped = line.strip()
@@ -208,6 +223,7 @@ def _segment_into_topics(text: str) -> list[str]:
 # Per-segment field extraction
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def _extract_candidate(idx: int, segment: str) -> CandidatePayload:
     """Extract all structured fields from a single text segment."""
     lines = [ln.strip() for ln in segment.splitlines() if ln.strip()]
@@ -273,7 +289,9 @@ def _extract_symptoms(lines: list[str]) -> list[str]:
                 symptoms.append(re.sub(r"^[-•*\d\.\)]\s*", "", line).strip())
         elif _SYMPTOM_LEAD.match(line):
             cleaned = re.sub(r"^[-•*]\s+", "", line)
-            cleaned = re.sub(r"^(?:symptoms?|when|users?|issue|problem):\s*", "", cleaned, flags=re.I)
+            cleaned = re.sub(
+                r"^(?:symptoms?|when|users?|issue|problem):\s*", "", cleaned, flags=re.I
+            )
             if cleaned and len(cleaned) > 10:
                 symptoms.append(cleaned)
 
@@ -302,7 +320,9 @@ def _extract_steps(lines: list[str]) -> tuple[list[dict], list[dict]]:
             continue
 
         if mode and _STEP_LEAD.match(line):
-            instruction = re.sub(r"^(?:\d+[\.\)]|[-•*]|step\s+\d+[:\.\)]*)\s*", "", line, flags=re.I).strip()
+            instruction = re.sub(
+                r"^(?:\d+[\.\)]|[-•*]|step\s+\d+[:\.\)]*)\s*", "", line, flags=re.I
+            ).strip()
             if instruction:
                 target = troubleshooting if mode == "troubleshoot" else resolution
                 target.append(_build_step(len(target) + 1, instruction))
@@ -315,7 +335,7 @@ def _extract_escalation(lines: list[str]) -> str | None:
     for i, line in enumerate(lines):
         if _ESCALATION_SECTION.match(line):
             # Collect this line + next 2 lines as the escalation text
-            chunk = " ".join(lines[i: i + 3])
+            chunk = " ".join(lines[i : i + 3])
             return chunk[:500]
     return None
 

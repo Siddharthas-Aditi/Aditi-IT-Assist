@@ -60,6 +60,7 @@ class FakeSession:
 def _provider(session):
     async def provider(profile):
         return session
+
     return provider
 
 
@@ -119,13 +120,13 @@ class TestBuild:
             enabled_server_ids=["msgraph"],
             session_provider=_provider(FakeSession()),
         )
-        expected = {"entra_account_status", "intune_device_compliance",
-                    "mailbox_quota_status"}
+        expected = {"entra_account_status", "intune_device_compliance", "mailbox_quota_status"}
         assert expected.issubset(set(tools))
 
     def test_servicenow_isolated(self) -> None:
         tools = build_mcp_tools(
-            feature_on=True, enabled_server_ids=["servicenow"],
+            feature_on=True,
+            enabled_server_ids=["servicenow"],
             session_provider=_provider(FakeSession()),
         )
         assert "servicenow_incident_lookup" in set(tools)
@@ -138,16 +139,22 @@ class TestExecution:
     def _runtime(self, session):
         self.events: list[dict] = []
         tools = build_mcp_tools(
-            feature_on=True, enabled_server_ids=["msgraph"],
-            session_provider=_provider(session), timeout_seconds=0.2,
+            feature_on=True,
+            enabled_server_ids=["msgraph"],
+            session_provider=_provider(session),
+            timeout_seconds=0.2,
         )
         return AgentToolRuntime(tools, audit_sink=self.events.append)
 
     async def test_success_returns_typed_result(self) -> None:
-        session = FakeSession(result={
-            "user_principal_name": "alice@aditi.com",
-            "account_enabled": True, "locked": True, "mfa_registered": True,
-        })
+        session = FakeSession(
+            result={
+                "user_principal_name": "alice@aditi.com",
+                "account_enabled": True,
+                "locked": True,
+                "mfa_registered": True,
+            }
+        )
         rt = self._runtime(session)
         out = await rt.dispatch(
             ToolInvocation("entra_account_status", {"user_principal_name": "alice@aditi.com"}),
@@ -164,7 +171,8 @@ class TestExecution:
         rt = self._runtime(session)
         out = await rt.dispatch(
             ToolInvocation("entra_account_status", {"user_principal_name": "a@b.com"}),
-            _ctx(DIR), allowed_tools=("entra_account_status",),
+            _ctx(DIR),
+            allowed_tools=("entra_account_status",),
         )
         assert out.result.raw.get("weird_field") == 7
 
@@ -177,7 +185,8 @@ class TestExecution:
         rt = self._runtime(FakeSession(hang=True))
         out = await rt.dispatch(
             ToolInvocation("entra_account_status", {"user_principal_name": "a@b.com"}),
-            _ctx(DIR), allowed_tools=("entra_account_status",),
+            _ctx(DIR),
+            allowed_tools=("entra_account_status",),
         )
         assert out.status is ToolOutcomeStatus.ERROR
 
@@ -185,7 +194,8 @@ class TestExecution:
         rt = self._runtime(FakeSession(raise_exc=RuntimeError("graph 500")))
         out = await rt.dispatch(
             ToolInvocation("entra_account_status", {"user_principal_name": "a@b.com"}),
-            _ctx(DIR), allowed_tools=("entra_account_status",),
+            _ctx(DIR),
+            allowed_tools=("entra_account_status",),
         )
         assert out.status is ToolOutcomeStatus.ERROR
 
@@ -212,7 +222,8 @@ class TestExecution:
         rt = self._runtime(session)
         await rt.dispatch(
             ToolInvocation("entra_account_status", {"user_principal_name": "a@b.com"}),
-            _ctx(DIR), allowed_tools=("entra_account_status",),
+            _ctx(DIR),
+            allowed_tools=("entra_account_status",),
         )
         event = self.events[-1]
         assert event["args_hash"]

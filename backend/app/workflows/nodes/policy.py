@@ -51,10 +51,13 @@ async def policy_enforcement_node(state: WorkflowState) -> dict:
     # ── Role-based policy checks ─────────────────────────────────
 
     # Employees cannot access IT-only features
-    if state.get("is_employee_facing", True):
-        # Employees should not be routed to escalation management
-        if state.get("current_node") == "escalation" and not state.get("should_escalate"):
-            pass  # Allow escalation from AI (system-initiated)
+    # Employees should not be routed to escalation management
+    if (
+        state.get("is_employee_facing", True)
+        and state.get("current_node") == "escalation"
+        and not state.get("should_escalate")
+    ):
+        pass  # Allow escalation from AI (system-initiated)
 
     # ── Remote support policy ────────────────────────────────────
 
@@ -62,10 +65,10 @@ async def policy_enforcement_node(state: WorkflowState) -> dict:
         session_type = state.get("remote_session_type", "screen_view")
 
         # Check agent has permission for session type
-        if session_type == "screen_control" and not user_roles.intersection({"it_lead", "it_admin"}):
-            policy_violations.append(
-                "Screen control requires IT Lead or Admin role"
-            )
+        if session_type == "screen_control" and not user_roles.intersection(
+            {"it_lead", "it_admin"}
+        ):
+            policy_violations.append("Screen control requires IT Lead or Admin role")
             logger.warning(
                 "policy_violation",
                 action="remote_screen_control",
@@ -73,18 +76,19 @@ async def policy_enforcement_node(state: WorkflowState) -> dict:
             )
 
         # Check consent requirement
-        if session_type in CONSENT_REQUIRED_ACTIONS:
-            if not state.get("consent_granted", False):
-                audit_entries.append({
+        if session_type in CONSENT_REQUIRED_ACTIONS and not state.get("consent_granted", False):
+            audit_entries.append(
+                {
                     "action": "policy_check",
                     "detail": f"Consent required for {session_type}",
                     "result": "blocked_pending_consent",
-                })
-                return {
-                    "requires_consent": True,
-                    "policy_violations": policy_violations,
-                    "audit_trail": audit_entries,
                 }
+            )
+            return {
+                "requires_consent": True,
+                "policy_violations": policy_violations,
+                "audit_trail": audit_entries,
+            }
 
     # ── AI copilot mode policy ───────────────────────────────────
 
@@ -97,11 +101,13 @@ async def policy_enforcement_node(state: WorkflowState) -> dict:
     # ── Max turn safety ──────────────────────────────────────────
 
     if state.get("turn_count", 0) >= 10:
-        audit_entries.append({
-            "action": "policy_enforcement",
-            "detail": "Max turns reached, forcing escalation",
-            "result": "auto_escalate",
-        })
+        audit_entries.append(
+            {
+                "action": "policy_enforcement",
+                "detail": "Max turns reached, forcing escalation",
+                "result": "auto_escalate",
+            }
+        )
 
     # ── Log policy decision ──────────────────────────────────────
 
@@ -111,11 +117,13 @@ async def policy_enforcement_node(state: WorkflowState) -> dict:
             violations=policy_violations,
             user_roles=list(user_roles),
         )
-        audit_entries.append({
-            "action": "policy_violation",
-            "detail": "; ".join(policy_violations),
-            "result": "blocked",
-        })
+        audit_entries.append(
+            {
+                "action": "policy_violation",
+                "detail": "; ".join(policy_violations),
+                "result": "blocked",
+            }
+        )
 
     return {
         "policy_violations": policy_violations,

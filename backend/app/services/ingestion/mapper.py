@@ -8,8 +8,6 @@ can persist it as a draft article without modification.
 
 from __future__ import annotations
 
-import uuid as _uuid_mod
-
 from app.schemas.knowledge import ArticleCreate, StepSchema
 
 
@@ -44,9 +42,7 @@ def map_candidate_to_article_create(
     troubleshooting_steps = _to_step_schemas(
         candidate_fields.get("extracted_troubleshooting_steps") or []
     )
-    resolution_steps = _to_step_schemas(
-        candidate_fields.get("extracted_resolution_steps") or []
-    )
+    resolution_steps = _to_step_schemas(candidate_fields.get("extracted_resolution_steps") or [])
     symptoms = candidate_fields.get("extracted_symptoms") or []
     tags = candidate_fields.get("extracted_tags") or []
     keywords = candidate_fields.get("extracted_keywords") or []
@@ -78,20 +74,25 @@ def map_candidate_to_article_create(
 # Helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def _to_step_schemas(raw_steps: list) -> list[StepSchema]:
     """Coerce raw step dicts or strings into ``StepSchema`` instances."""
     result: list[StepSchema] = []
     for i, step in enumerate(raw_steps, start=1):
         if isinstance(step, dict):
-            result.append(StepSchema(
-                step_number=int(step.get("step_number", i)),
-                instruction=str(step.get("instruction", "")).strip(),
-                details=str(step.get("details", "")).strip() or None,
-            ))
+            result.append(
+                StepSchema(
+                    step_number=int(step.get("step_number", i)),
+                    instruction=str(step.get("instruction", "")).strip(),
+                    details=str(step.get("details", "")).strip() or None,
+                )
+            )
         elif isinstance(step, str) and step.strip():
-            result.append(StepSchema(
-                step_number=i,
-                instruction=step.strip(),
-                details=None,
-            ))
+            result.append(
+                StepSchema(
+                    step_number=i,
+                    instruction=step.strip(),
+                    details=None,
+                )
+            )
     return result

@@ -37,10 +37,11 @@ logger = get_logger(__name__)
 
 class ApprovalStatus(StrEnum):
     PENDING = "pending"
-    APPROVED = "approved"     # approved + executed successfully
+    EXECUTING = "executing"  # claimed by an approve() call; execution in flight
+    APPROVED = "approved"  # approved + executed successfully
     REJECTED = "rejected"
-    FAILED = "failed"         # approved but execution errored
-    INVALID = "invalid"       # proposal rejected by the runtime (bad args / not gated)
+    FAILED = "failed"  # approved but execution errored
+    INVALID = "invalid"  # proposal rejected by the runtime (bad args / not gated)
 
 
 @dataclass
@@ -65,8 +66,11 @@ class ApprovalQueue:
     """In-memory store + workflow for human-gated agent actions."""
 
     def __init__(self, runtime=None) -> None:
-        # Include MCP write tools in the runtime so write actions are dispatchable.
-        self._runtime = runtime or build_default_runtime(include_mcp=True)
+        # Include MCP write tools + device-execution tools so both are dispatchable
+        # from the shared approval queue (Phase 8 writes + Phase 9 device actions).
+        self._runtime = runtime or build_default_runtime(
+            include_mcp=True, include_device_execution=True
+        )
         self._records: dict[str, PendingApproval] = {}
 
     # ── Proposing ────────────────────────────────────────────────────────
@@ -114,8 +118,13 @@ class ApprovalQueue:
                 record.status = ApprovalStatus.INVALID
                 record.error = f"invalid arguments: {exc.error_count()} error(s)"
         self._records[record.id] = record
-        logger.info("approval_proposed", id=record.id, tool=tool_name,
-                    status=record.status.value, proposer=proposer_id)
+        logger.info(
+            "approval_proposed",
+            id=record.id,
+            tool=tool_name,
+            status=record.status.value,
+            proposer=proposer_id,
+        )
         return record
 
     # ── Deciding ─────────────────────────────────────────────────────────
@@ -126,6 +135,12 @@ class ApprovalQueue:
             raise KeyError(approval_id)
         if record.status is not ApprovalStatus.PENDING:
             return record
+        # Claim the record BEFORE the first await. The event loop can only switch
+        # coroutines at an await point, so setting a non-PENDING status here (with
+        # no await in between) makes the check-and-claim atomic: a second
+        # concurrent approve() on the same id sees EXECUTING and returns early,
+        # preventing a double execution of a human-gated write/device action.
+        record.status = ApprovalStatus.EXECUTING
 
         from app.services.agents.tools.runtime import ProposedAction
 
@@ -152,8 +167,12 @@ class ApprovalQueue:
         else:
             record.status = ApprovalStatus.FAILED
             record.error = outcome.error or outcome.status.value
-        logger.info("approval_decided", id=approval_id, status=record.status.value,
-                    approver=approver.user_id)
+        logger.info(
+            "approval_decided",
+            id=approval_id,
+            status=record.status.value,
+            approver=approver.user_id,
+        )
         return record
 
     def reject(self, approval_id: str, approver_id: str) -> PendingApproval:

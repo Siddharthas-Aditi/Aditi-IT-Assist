@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime  # noqa: TC003 - pydantic evaluates these annotations at runtime
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -29,7 +29,9 @@ class RemoteSessionRequestCreate(BaseModel):
         description="Reason for requesting remote access (required for screen_control)",
     )
     max_duration_minutes: int = Field(
-        default=30, ge=5, le=120,
+        default=30,
+        ge=5,
+        le=120,
         description="Maximum session duration; hard-enforced",
     )
 
@@ -168,9 +170,7 @@ class SessionLaunchInfo(BaseModel):
     provider: str
     provider_display_name: str
     join_url: str = Field(..., description="Deep-link URL for this user's role")
-    join_code: str | None = Field(
-        None, description="Numeric code if provider uses codes"
-    )
+    join_code: str | None = Field(None, description="Numeric code if provider uses codes")
     instructions: str
     expires_at: datetime | None
 

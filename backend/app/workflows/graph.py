@@ -17,13 +17,16 @@ _MAX_TURNS = 10
 
 def route_after_triage(state: WorkflowState) -> str:
     """Route after triage: clarify, retrieve, escalate, or end (resolved)."""
+    # User confirmed the issue is fixed — close out cleanly. This is checked
+    # BEFORE the max-turns guard: a user who says "it works, thanks" on a long
+    # conversation must get a clean close, not a forced escalation to a ticket.
+    if state.get("issue_resolved"):
+        return END
+
     # Safety: if the conversation has gone too long without resolution, escalate.
     if (state.get("turn_count") or 0) >= _MAX_TURNS:
         return "escalate"
 
-    # User confirmed the issue is fixed — close out, no retrieval.
-    if state.get("issue_resolved"):
-        return END
     if state.get("needs_clarification"):
         return END  # Return clarification question to user
     if state.get("issue_category") is None:

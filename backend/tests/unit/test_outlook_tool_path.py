@@ -96,12 +96,14 @@ class TestToolPathOptIn:
             },
             audit_sink=lambda e: None,
         )
-        llm = _FakeLLM([
-            LLMToolResponse(
-                tool_calls=(ToolInvocation("kb_search", {"query": "mailbox full"}, "c1"),)
-            ),
-            LLMToolResponse(text="Your mailbox is full — clear Deleted Items to free space."),
-        ])
+        llm = _FakeLLM(
+            [
+                LLMToolResponse(
+                    tool_calls=(ToolInvocation("kb_search", {"query": "mailbox full"}, "c1"),)
+                ),
+                LLMToolResponse(text="Your mailbox is full — clear Deleted Items to free space."),
+            ]
+        )
         ctx = ToolContext(
             user_id="emp-1",
             permissions=frozenset({"knowledge:read"}),

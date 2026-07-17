@@ -100,8 +100,9 @@ class AgentTaskRunner:
             task.error = f"no handler registered for task_type {task.task_type!r}"
             task.touch()
             await self._store.save(task)
-            self._audit({"task_id": task.id, "task_type": task.task_type,
-                         "status": "skipped_unknown"})
+            self._audit(
+                {"task_id": task.id, "task_type": task.task_type, "status": "skipped_unknown"}
+            )
             return "skipped_unknown"
 
         async with self._sem:
@@ -112,8 +113,14 @@ class AgentTaskRunner:
                 task.error = None
                 task.touch()
                 await self._store.save(task)
-                self._audit({"task_id": task.id, "task_type": task.task_type,
-                             "status": "completed", "attempts": task.attempts})
+                self._audit(
+                    {
+                        "task_id": task.id,
+                        "task_type": task.task_type,
+                        "status": "completed",
+                        "attempts": task.attempts,
+                    }
+                )
                 return "completed"
             except Exception as exc:  # noqa: BLE001 — one task can't crash the runner
                 task.error = str(exc)
@@ -125,16 +132,32 @@ class AgentTaskRunner:
                     outcome = "retried"
                 task.touch()
                 await self._store.save(task)
-                self._audit({"task_id": task.id, "task_type": task.task_type,
-                             "status": outcome, "attempts": task.attempts, "error": str(exc)})
-                logger.warning("agent_task_failed", task_id=task.id,
-                               task_type=task.task_type, attempts=task.attempts, error=str(exc))
+                self._audit(
+                    {
+                        "task_id": task.id,
+                        "task_type": task.task_type,
+                        "status": outcome,
+                        "attempts": task.attempts,
+                        "error": str(exc),
+                    }
+                )
+                logger.warning(
+                    "agent_task_failed",
+                    task_id=task.id,
+                    task_type=task.task_type,
+                    attempts=task.attempts,
+                    error=str(exc),
+                )
                 return outcome
 
     async def run_forever(self, *, poll_seconds: int) -> None:
         """Infinite poll loop. Survives individual pass failures."""
-        logger.info("agent_task_runner_started", concurrency=self._concurrency,
-                    poll_seconds=poll_seconds, handlers=sorted(self._handlers))
+        logger.info(
+            "agent_task_runner_started",
+            concurrency=self._concurrency,
+            poll_seconds=poll_seconds,
+            handlers=sorted(self._handlers),
+        )
         try:
             while True:
                 await asyncio.sleep(poll_seconds)

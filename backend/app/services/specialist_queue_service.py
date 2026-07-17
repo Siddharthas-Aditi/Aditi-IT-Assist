@@ -52,7 +52,11 @@ logger = get_logger(__name__)
 
 
 _QUEUE_STATUSES: tuple[str, ...] = (
-    "new", "triaged", "in_progress", "waiting_for_user", "escalated",
+    "new",
+    "triaged",
+    "in_progress",
+    "waiting_for_user",
+    "escalated",
 )
 
 
@@ -122,9 +126,7 @@ class SpecialistQueueService:
         ]
         if only_unclaimed:
             if for_user_id is not None:
-                clauses.append(
-                    or_(Ticket.assigned_to.is_(None), Ticket.assigned_to == for_user_id)
-                )
+                clauses.append(or_(Ticket.assigned_to.is_(None), Ticket.assigned_to == for_user_id))
             else:
                 clauses.append(Ticket.assigned_to.is_(None))
 
@@ -145,7 +147,10 @@ class SpecialistQueueService:
     # ── Atomic claim ───────────────────────────────────────────────────
 
     async def claim(
-        self, ticket_id: uuid.UUID, *, claimer: User,
+        self,
+        ticket_id: uuid.UUID,
+        *,
+        claimer: User,
     ) -> Ticket:
         """Atomically claim a queue entry for this specialist.
 
@@ -187,8 +192,7 @@ class SpecialistQueueService:
                 raise LookupError(f"Ticket {ticket_id} not found")
             if existing.assigned_to and existing.assigned_to != claimer.id:
                 raise PermissionError(
-                    f"Ticket {existing.ticket_number} is already claimed by "
-                    f"another specialist"
+                    f"Ticket {existing.ticket_number} is already claimed by another specialist"
                 )
             if existing.status not in _QUEUE_STATUSES:
                 raise PermissionError(
@@ -212,6 +216,13 @@ class SpecialistQueueService:
             raise LookupError(f"Ticket {ticket_id} not found")
         if ticket.assigned_to != by_user.id:
             raise PermissionError("Only the current claimer may release this ticket")
+        # End any live chat bound to this ticket so the employee isn't left
+        # polling a still-"active" session after the specialist steps away.
+        from app.services.specialist_chat_service import SpecialistChatService
+
+        await SpecialistChatService(self.db).end_active_for_ticket(
+            ticket.id, actor=by_user, reason="specialist_ended"
+        )
         ticket.assigned_to = None
         ticket.status = "triaged"
         await self.db.flush()
@@ -242,6 +253,14 @@ class SpecialistQueueService:
         ticket.status = "resolved"
         ticket.resolved_at = now
         ticket.resolution_notes = resolution_notes
+
+        # End the live chat session (if any) so the employee's chat closes with
+        # the ticket instead of lingering as active until the idle sweeper.
+        from app.services.specialist_chat_service import SpecialistChatService
+
+        await SpecialistChatService(self.db).end_active_for_ticket(
+            ticket.id, actor=by_user, reason="resolved", resolution_notes=resolution_notes
+        )
 
         candidate_id: uuid.UUID | None = None
         if propose_knowledge_candidate:
@@ -309,9 +328,7 @@ class SpecialistQueueService:
 
         summary = HandoffSummary(
             issue_one_liner=(
-                ticket.ai_summary
-                or diag.get("exact_problem_statement")
-                or ticket.title
+                ticket.ai_summary or diag.get("exact_problem_statement") or ticket.title
             ),
             affected_system=diag.get("affected_system"),
             issue_category=ticket.category,
@@ -329,24 +346,16 @@ class SpecialistQueueService:
             },
             handoff_reason=diag.get("escalation_reason") or "AI exhausted grounded steps",
             handoff_triggered_by=(
-                "user_request"
-                if diag.get("live_agent_requested")
-                else "exhausted_grounded_steps"
+                "user_request" if diag.get("live_agent_requested") else "exhausted_grounded_steps"
             ),
         )
 
-    async def _get_escalation_context(
-        self, ticket_id: uuid.UUID
-    ) -> EscalationContext | None:
-        stmt = select(EscalationContext).where(
-            EscalationContext.ticket_id == ticket_id
-        )
+    async def _get_escalation_context(self, ticket_id: uuid.UUID) -> EscalationContext | None:
+        stmt = select(EscalationContext).where(EscalationContext.ticket_id == ticket_id)
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
-    def _package_from_context(
-        self, ticket: Ticket, context: EscalationContext
-    ) -> HandoffPackage:
+    def _package_from_context(self, ticket: Ticket, context: EscalationContext) -> HandoffPackage:
         """Build the typed handoff package from the persisted escalation context."""
         summary = HandoffSummary(
             issue_one_liner=context.issue_summary or ticket.ai_summary or ticket.title,
@@ -383,14 +392,17 @@ class SpecialistQueueService:
                 if role == "employee":
                     role = "user"
                 if role in ("user", "assistant"):
-                    conversation.append(
-                        ConversationTurn(role=role, content=m.get("content", ""))
-                    )
+                    conversation.append(ConversationTurn(role=role, content=m.get("content", "")))
 
         handoff_triggered_by = context.handoff_triggered_by or "exhausted_grounded_steps"
         valid_triggers = {
-            "user_request", "ai_low_confidence", "exhausted_grounded_steps",
-            "loop_detected", "repeated_failure", "policy_block", "missing_data",
+            "user_request",
+            "ai_low_confidence",
+            "exhausted_grounded_steps",
+            "loop_detected",
+            "repeated_failure",
+            "policy_block",
+            "missing_data",
         }
         if handoff_triggered_by not in valid_triggers:
             handoff_triggered_by = "exhausted_grounded_steps"
@@ -399,9 +411,7 @@ class SpecialistQueueService:
             session_id=context.chat_session_id,
             ticket_id=ticket.id,
             summary=summary,
-            diagnostic_slots={
-                k: str(v) for k, v in (context.diagnostic_slots or {}).items() if v
-            },
+            diagnostic_slots={k: str(v) for k, v in (context.diagnostic_slots or {}).items() if v},
             steps_attempted=steps,
             kb_sources_consulted=kb_sources,
             conversation=conversation,

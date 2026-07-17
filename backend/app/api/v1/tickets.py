@@ -114,7 +114,10 @@ async def list_my_tickets(
     """List current user's own tickets."""
     service = TicketService(db)
     tickets = await service.list_tickets_for_employee(
-        employee=current_user, status=ticket_status, limit=limit, offset=offset,
+        employee=current_user,
+        status=ticket_status,
+        limit=limit,
+        offset=offset,
     )
     return TicketListResponse(
         tickets=[_ticket_to_response(t) for t in tickets],
@@ -142,7 +145,11 @@ async def get_my_ticket(
             for c in result["comments"]
         ],
         "events": [
-            {"type": e.event_type, "description": e.description, "created_at": e.created_at.isoformat()}
+            {
+                "type": e.event_type,
+                "description": e.description,
+                "created_at": e.created_at.isoformat(),
+            }
             for e in result["events"]
         ],
     }
@@ -166,9 +173,12 @@ async def get_ticket_queue(
     """Get ticket queue for IT agents."""
     service = TicketService(db)
     tickets = await service.list_tickets_for_agent(
-        agent=agent_user, assigned_only=assigned_only,
-        status=ticket_status, priority=priority,
-        limit=limit, offset=offset,
+        agent=agent_user,
+        assigned_only=assigned_only,
+        status=ticket_status,
+        priority=priority,
+        limit=limit,
+        offset=offset,
     )
     return TicketListResponse(
         tickets=[_ticket_to_response(t) for t in tickets],
@@ -232,7 +242,9 @@ async def assign_ticket(
     """Assign ticket to an IT agent."""
     service = TicketService(db)
     ticket = await service.assign_ticket(
-        uuid.UUID(ticket_id), uuid.UUID(data.agent_id), agent_user,
+        uuid.UUID(ticket_id),
+        uuid.UUID(data.agent_id),
+        agent_user,
     )
     return _ticket_to_response(ticket)
 
@@ -247,7 +259,10 @@ async def update_ticket_status(
     """Update ticket status."""
     service = TicketService(db)
     ticket = await service.update_status(
-        uuid.UUID(ticket_id), data.status, agent_user, comment=data.comment,
+        uuid.UUID(ticket_id),
+        data.status,
+        agent_user,
+        comment=data.comment,
     )
     return _ticket_to_response(ticket)
 
@@ -262,7 +277,10 @@ async def add_comment(
     """Add a comment to a ticket."""
     service = TicketService(db)
     comment = await service.add_comment(
-        uuid.UUID(ticket_id), current_user, data.content, is_internal=data.is_internal,
+        uuid.UUID(ticket_id),
+        current_user,
+        data.content,
+        is_internal=data.is_internal,
     )
     return {
         "id": str(comment.id),
@@ -290,8 +308,12 @@ def _ticket_to_response(ticket) -> TicketResponse:
         requester_id=str(ticket.requester_id),
         assigned_to=str(ticket.assigned_to) if ticket.assigned_to else None,
         created_at=ticket.created_at.isoformat(),
-        sla_response_target=ticket.sla_response_target.isoformat() if ticket.sla_response_target else None,
-        sla_resolution_target=ticket.sla_resolution_target.isoformat() if ticket.sla_resolution_target else None,
+        sla_response_target=ticket.sla_response_target.isoformat()
+        if ticket.sla_response_target
+        else None,
+        sla_resolution_target=ticket.sla_resolution_target.isoformat()
+        if ticket.sla_resolution_target
+        else None,
         ai_summary=ticket.ai_summary,
         resolution_notes=ticket.resolution_notes,
     )

@@ -116,6 +116,20 @@ class SAMLStatusResponse(BaseModel):
 # ─────────────────────────────────────────────────────────────────────
 
 
+def _require_local_auth_enabled() -> None:
+    """Block local email/password auth when it is disabled.
+
+    In an SSO deployment ``LOCAL_AUTH_ENABLED`` is false so the IdP is the only
+    entry point; otherwise open self-registration + local login would let anyone
+    provision an account and bypass SSO entirely.
+    """
+    if not settings.LOCAL_AUTH_ENABLED:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Local password authentication is disabled. Please sign in via SSO.",
+        )
+
+
 @router.post("/login", response_model=LoginResponse)
 async def login(
     data: LoginRequest,
@@ -126,6 +140,7 @@ async def login(
 
     For SAML SSO login, use GET /auth/saml/login instead.
     """
+    _require_local_auth_enabled()
     auth_service = AuthService(db)
     try:
         result = await auth_service.login(
@@ -152,7 +167,8 @@ async def register(
     data: RegisterRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> dict:
-    """Register a new user (development only — production uses SSO)."""
+    """Register a new user (local auth only — an SSO deployment provisions via IdP)."""
+    _require_local_auth_enabled()
     auth_service = AuthService(db)
     try:
         user = await auth_service.register_user(

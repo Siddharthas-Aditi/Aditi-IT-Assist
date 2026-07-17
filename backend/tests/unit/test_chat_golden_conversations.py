@@ -22,11 +22,15 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from langchain_core.messages import HumanMessage
 
-from app.services.agents import chat_service as cs_mod
 from app.services.agents.chat_service import ChatService
 from app.services.agents.intent_classifier import (
     ConversationIntent,
     classify_intent,
+)
+from app.services.agents.session_store import (
+    ChatSession,
+    InMemorySessionStore,
+    set_session_store,
 )
 
 # ── Test helpers ────────────────────────────────────────────────────────────
@@ -51,14 +55,11 @@ def _mock_ticket_service() -> MagicMock:
 
 
 def _requester() -> MagicMock:
-    return MagicMock(
-        id=uuid.uuid4(), full_name="Test Employee", email="emp@aditi.com"
-    )
+    return MagicMock(id=uuid.uuid4(), full_name="Test Employee", email="emp@aditi.com")
 
 
 def _clear_state() -> None:
-    cs_mod._sessions.clear()
-    cs_mod._session_tickets.clear()
+    set_session_store(InMemorySessionStore())
 
 
 # ── Intent-classifier-level guards (cheap & fast) ──────────────────────────
@@ -128,12 +129,12 @@ class TestServiceTicketGuard:
                 "category": "email/outlook",
                 "priority": "medium",
             },
+            "session_id": "sess-bug",
             "messages": [HumanMessage(content="I have an another problem")],
         }
-        ref = await chat._handle_ticketing("sess-bug", result, _requester())
-        assert ref is None, (
-            "intent guard must refuse the ticket for NEW_TOPIC messages"
-        )
+        session = ChatSession(user_id=None, state={"session_id": "sess-bug"})
+        ref = await chat._handle_ticketing(session, result, _requester())
+        assert ref is None, "intent guard must refuse the ticket for NEW_TOPIC messages"
         svc.create_ticket.assert_not_called()
 
     @pytest.mark.asyncio
@@ -152,9 +153,11 @@ class TestServiceTicketGuard:
                 "category": "email/outlook",
                 "priority": "medium",
             },
+            "session_id": "sess-ok",
             "messages": [HumanMessage(content="please connect me with a specialist")],
         }
-        ref = await chat._handle_ticketing("sess-ok", result, _requester())
+        session = ChatSession(user_id=None, state={"session_id": "sess-ok"})
+        ref = await chat._handle_ticketing(session, result, _requester())
         assert ref is not None
         svc.create_ticket.assert_awaited_once()
 
@@ -174,9 +177,11 @@ class TestServiceTicketGuard:
                 "category": "email/outlook",
                 "priority": "medium",
             },
+            "session_id": "sess-yes",
             "messages": [HumanMessage(content="yes please")],
         }
-        ref = await chat._handle_ticketing("sess-yes", result, _requester())
+        session = ChatSession(user_id=None, state={"session_id": "sess-yes"})
+        ref = await chat._handle_ticketing(session, result, _requester())
         assert ref is not None
         svc.create_ticket.assert_awaited_once()
 
@@ -191,11 +196,17 @@ class TestServiceTicketGuard:
             "should_escalate": True,
             "escalation_confirmed": True,
             "ticket_offered": True,
-            "ticket_draft": {"title": "x", "description": "...", "category": "other",
-                             "priority": "low"},
+            "ticket_draft": {
+                "title": "x",
+                "description": "...",
+                "category": "other",
+                "priority": "low",
+            },
+            "session_id": "sess-thx",
             "messages": [HumanMessage(content="thanks so much, that worked")],
         }
-        ref = await chat._handle_ticketing("sess-thx", result, _requester())
+        session = ChatSession(user_id=None, state={"session_id": "sess-thx"})
+        ref = await chat._handle_ticketing(session, result, _requester())
         assert ref is None
         svc.create_ticket.assert_not_called()
 
@@ -299,9 +310,7 @@ class TestExplicitEscalationCreatesTicket:
             requester=requester,
         )
 
-        assert response.ticket is not None, (
-            "Explicit escalation request must produce a ticket."
-        )
+        assert response.ticket is not None, "Explicit escalation request must produce a ticket."
         svc.create_ticket.assert_awaited()
 
 
@@ -326,9 +335,10 @@ class TestConfirmUnderstandingDoesNotEscalate:
         # for the wrong reason (e.g. KB empty → escalate → CONFIRM misread).
         # The diagnostic context shows escalation was NEVER offered before.
         result = {
+            "session_id": "sess-A",
             "should_escalate": True,
             "escalation_confirmed": True,
-            "ticket_offered": False,           # nothing was offered yet
+            "ticket_offered": False,  # nothing was offered yet
             "ticket_draft": {
                 "title": "Network issue",
                 "description": "...",
@@ -343,10 +353,9 @@ class TestConfirmUnderstandingDoesNotEscalate:
                 "issue_category": "network/connectivity",
             },
         }
-        ref = await chat._handle_ticketing("sess-A", result, _requester())
-        assert ref is None, (
-            "CONFIRM without a prior offer must NOT create a ticket"
-        )
+        session = ChatSession(user_id=None, state={"session_id": "sess-A"})
+        ref = await chat._handle_ticketing(session, result, _requester())
+        assert ref is None, "CONFIRM without a prior offer must NOT create a ticket"
         svc.create_ticket.assert_not_called()
 
     @pytest.mark.asyncio
@@ -357,6 +366,7 @@ class TestConfirmUnderstandingDoesNotEscalate:
         chat = ChatService(svc)
 
         result = {
+            "session_id": "sess-B",
             "should_escalate": True,
             "escalation_confirmed": True,
             "ticket_offered": True,
@@ -372,7 +382,8 @@ class TestConfirmUnderstandingDoesNotEscalate:
                 "issue_category": "network/connectivity",
             },
         }
-        ref = await chat._handle_ticketing("sess-B", result, _requester())
+        session = ChatSession(user_id=None, state={"session_id": "sess-B"})
+        ref = await chat._handle_ticketing(session, result, _requester())
         assert ref is not None
         svc.create_ticket.assert_awaited_once()
 
@@ -391,27 +402,30 @@ class TestTicketBannerDoesNotHijackSubsequentTurns:
         svc = _mock_ticket_service()
         chat = ChatService(svc)
 
-        # Pre-populate the cache as if a ticket was created earlier this session.
-        cs_mod._session_tickets["sess-existing"] = {
-            "ticket_id": str(uuid.uuid4()),
-            "ticket_number": "ITA-000099",
-            "status": "triaged",
-            "priority": "high",
-            "live_agent_requested": True,
-        }
+        # Pre-populate the session as if a ticket was created earlier this session.
+        session = ChatSession(
+            user_id=None,
+            state={"session_id": "sess-existing"},
+            ticket={
+                "ticket_id": str(uuid.uuid4()),
+                "ticket_number": "ITA-000099",
+                "status": "triaged",
+                "priority": "high",
+                "live_agent_requested": True,
+            },
+        )
 
         # The user now asks a NEW question. The workflow is NOT escalating.
         result = {
+            "session_id": "sess-existing",
             "should_escalate": False,
             "escalation_confirmed": False,
             "ticket_offered": False,
             "messages": [HumanMessage(content="My mailbox is full")],
             "diagnostic_context": {"live_agent_requested": False},
         }
-        ref = await chat._handle_ticketing("sess-existing", result, _requester())
-        assert ref is None, (
-            "Without escalation this turn, the cached ticket must not re-surface"
-        )
+        ref = await chat._handle_ticketing(session, result, _requester())
+        assert ref is None, "Without escalation this turn, the cached ticket must not re-surface"
 
     @pytest.mark.asyncio
     async def test_reclick_connect_with_specialist_returns_same_ticket(self) -> None:
@@ -421,15 +435,20 @@ class TestTicketBannerDoesNotHijackSubsequentTurns:
         chat = ChatService(svc)
 
         ticket_id = str(uuid.uuid4())
-        cs_mod._session_tickets["sess-reclick"] = {
-            "ticket_id": ticket_id,
-            "ticket_number": "ITA-000100",
-            "status": "triaged",
-            "priority": "high",
-            "live_agent_requested": True,
-        }
+        session = ChatSession(
+            user_id=None,
+            state={"session_id": "sess-reclick"},
+            ticket={
+                "ticket_id": ticket_id,
+                "ticket_number": "ITA-000100",
+                "status": "triaged",
+                "priority": "high",
+                "live_agent_requested": True,
+            },
+        )
 
         result = {
+            "session_id": "sess-reclick",
             "should_escalate": True,
             "escalation_confirmed": True,
             "ticket_offered": True,
@@ -439,7 +458,7 @@ class TestTicketBannerDoesNotHijackSubsequentTurns:
                 "escalation_offered_in_session": True,
             },
         }
-        ref = await chat._handle_ticketing("sess-reclick", result, _requester())
+        ref = await chat._handle_ticketing(session, result, _requester())
         assert ref is not None
         assert ref.ticket_number == "ITA-000100"
         svc.create_ticket.assert_not_called()  # no duplicate created
@@ -466,6 +485,7 @@ class TestLLMNewTopicGuard:
         # worst case we're guarding against. The wrapper must demote it.
         class _StubLLM:
             is_available = True
+
             async def complete_json(self, *_args, **_kwargs):
                 return {
                     "intent": "new_topic",

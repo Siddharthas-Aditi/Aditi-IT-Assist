@@ -40,9 +40,9 @@ class InMemoryAgentTaskStore:
             # exists, return it rather than queueing a duplicate.
             if task.idempotency_key:
                 for existing in self._tasks.values():
-                    if (
-                        existing.idempotency_key == task.idempotency_key
-                        and existing.status in (AgentTaskStatus.PENDING, AgentTaskStatus.RUNNING)
+                    if existing.idempotency_key == task.idempotency_key and existing.status in (
+                        AgentTaskStatus.PENDING,
+                        AgentTaskStatus.RUNNING,
                     ):
                         return existing
             self._tasks[task.id] = task

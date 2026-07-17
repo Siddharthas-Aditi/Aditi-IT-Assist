@@ -31,7 +31,9 @@ class TestMockSession:
 
     async def test_write_tools_return_success(self) -> None:
         sess = MockMcpSession(get_profile("msgraph"))
-        assert (await sess.call_tool("unlock_account", {"user_principal_name": "a@b.com"}))["unlocked"]
+        assert (await sess.call_tool("unlock_account", {"user_principal_name": "a@b.com"}))[
+            "unlocked"
+        ]
         assert (await sess.call_tool("reset_mfa", {"user_principal_name": "a@b.com"}))["mfa_reset"]
 
 
@@ -113,6 +115,41 @@ class TestApprovalQueue:
         )
         assert len(q.list(status=ApprovalStatus.PENDING)) == 1
         assert q.list(status=ApprovalStatus.APPROVED) == []
+
+    async def test_concurrent_approve_executes_exactly_once(self) -> None:
+        """Two concurrent approve() calls on the same id must execute ONCE.
+
+        Regression for the TOCTOU window: the PENDING check and the status
+        update straddled an await, so both callers passed the check and both
+        dispatched. The record is now claimed (EXECUTING) synchronously before
+        the first await, so the second caller returns early.
+        """
+        import asyncio
+
+        q = _queue()
+        rec = await q.propose(
+            tool_name="reset_mfa",
+            raw_args={"user_principal_name": "a@b.com", "idempotency_key": "k-123456"},
+            proposer_id="agent-1",
+        )
+
+        calls = {"n": 0}
+        original = q._runtime.execute_approved
+
+        async def counting_execute(*args, **kwargs):
+            calls["n"] += 1
+            await asyncio.sleep(0)  # yield so both coroutines interleave
+            return await original(*args, **kwargs)
+
+        q._runtime.execute_approved = counting_execute
+        results = await asyncio.gather(
+            q.approve(rec.id, _ctx(DIRW)),
+            q.approve(rec.id, _ctx(DIRW)),
+        )
+
+        assert calls["n"] == 1  # executed exactly once despite two approvals
+        assert rec.status is ApprovalStatus.APPROVED
+        assert all(r.id == rec.id for r in results)
 
 
 # ── Task runner singleton ────────────────────────────────────────────────────

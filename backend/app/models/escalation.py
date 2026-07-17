@@ -22,7 +22,7 @@ table); the in-memory chat-session identifier is stored as a plain
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -64,23 +64,29 @@ class TranscriptSnapshot(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "transcript_snapshots"
 
     ticket_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("tickets.id", ondelete="CASCADE"),
-        nullable=True, index=True,
+        UUID(as_uuid=True),
+        ForeignKey("tickets.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
     )
     # The in-memory chat-session identifier (string) the snapshot was taken from.
     chat_session_id: Mapped[str] = mapped_column(String(128), index=True)
     user_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True,
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
     )
 
     captured_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
     )
     message_count: Mapped[int] = mapped_column(Integer, default=0)
     # Ordered array of message dicts (see class docstring).
     messages: Mapped[list] = mapped_column(JSONB, default=list)
     context_version: Mapped[str] = mapped_column(
-        String(16), default=ESCALATION_CONTEXT_VERSION,
+        String(16),
+        default=ESCALATION_CONTEXT_VERSION,
     )
 
 
@@ -96,8 +102,10 @@ class EscalationContext(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     # ── Links (parent ticket + transcript artifact) ─────────────────────────
     ticket_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("tickets.id", ondelete="CASCADE"),
-        unique=True, index=True,
+        UUID(as_uuid=True),
+        ForeignKey("tickets.id", ondelete="CASCADE"),
+        unique=True,
+        index=True,
     )
     transcript_snapshot_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
@@ -106,11 +114,14 @@ class EscalationContext(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     chat_session_id: Mapped[str] = mapped_column(String(128), index=True)
     user_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True,
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
     )
 
     escalation_created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
     )
 
     # ── Issue understanding (what the AI understood) ─────────────────────────
@@ -134,7 +145,8 @@ class EscalationContext(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     kb_gap_tags: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     ai_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     ai_resolution_status: Mapped[str] = mapped_column(
-        String(40), default="unresolved",
+        String(40),
+        default="unresolved",
     )
 
     # ── Why it escalated + routing ───────────────────────────────────────────
@@ -147,7 +159,8 @@ class EscalationContext(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     diagnostic_slots: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
     context_version: Mapped[str] = mapped_column(
-        String(16), default=ESCALATION_CONTEXT_VERSION,
+        String(16),
+        default=ESCALATION_CONTEXT_VERSION,
     )
 
     # ── Resolution comparison (filled AFTER specialist resolves) ─────────────
@@ -159,12 +172,14 @@ class EscalationContext(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     ai_vs_specialist_resolution_gap: Mapped[str | None] = mapped_column(Text, nullable=True)
     kb_candidate_flag: Mapped[bool] = mapped_column(Boolean, default=False)
     resolution_compared_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True,
+        DateTime(timezone=True),
+        nullable=True,
     )
 
     # ── Relationships ────────────────────────────────────────────────────────
     transcript_snapshot: Mapped["TranscriptSnapshot | None"] = relationship(
-        "TranscriptSnapshot", lazy="joined",
+        "TranscriptSnapshot",
+        lazy="joined",
     )
 
 

@@ -89,10 +89,8 @@ async def get_handoff_package(
         raise HTTPException(status_code=404, detail="Ticket not found")
     # Pull session state if the chat service still holds it.
     from app.services.agents import chat_service as cs_mod
-    session_state = (
-        cs_mod._sessions.get(str(ticket.session_id))
-        if ticket.session_id else None
-    )
+
+    session_state = cs_mod._sessions.get(str(ticket.session_id)) if ticket.session_id else None
     return await service.build_handoff_package(ticket, session_state=session_state)
 
 
@@ -123,9 +121,7 @@ async def get_escalation_context(
     """Return the raw structured escalation context (analytics / admin use)."""
     context = await EscalationService(db).get_context_out(ticket_id)
     if context is None:
-        raise HTTPException(
-            status_code=404, detail="No escalation context for this ticket"
-        )
+        raise HTTPException(status_code=404, detail="No escalation context for this ticket")
     return context
 
 
@@ -152,9 +148,7 @@ async def record_resolution_comparison(
         actor=current_user,
     )
     if context is None:
-        raise HTTPException(
-            status_code=404, detail="No escalation context for this ticket"
-        )
+        raise HTTPException(status_code=404, detail="No escalation context for this ticket")
     await db.commit()
     out = await service.get_context_out(ticket_id)
     assert out is not None
@@ -183,10 +177,8 @@ async def claim_ticket(
     await db.commit()
 
     from app.services.agents import chat_service as cs_mod
-    session_state = (
-        cs_mod._sessions.get(str(ticket.session_id))
-        if ticket.session_id else None
-    )
+
+    session_state = cs_mod._sessions.get(str(ticket.session_id)) if ticket.session_id else None
     package = await service.build_handoff_package(ticket, session_state=session_state)
 
     # Freshness at claim time: was the employee still inside the wait window

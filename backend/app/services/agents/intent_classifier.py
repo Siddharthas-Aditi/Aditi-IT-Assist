@@ -129,142 +129,403 @@ class IntentClassification:
 # markers — anything more ambiguous (e.g. bare "also") must NOT be here, since
 # false-positives drop the user's active diagnostic context.
 _NEW_TOPIC_PHRASES: tuple[str, ...] = (
-    "another problem", "an another problem", "another issue", "another question",
-    "different problem", "different issue", "different question", "new problem",
-    "new issue", "new question", "one more problem", "one more issue",
-    "one more question", "one more thing", "something else",
-    "i have another", "i've got another", "ive got another",
-    "i have a different", "i have a new",
-    "also having", "also having an issue", "also have an issue",
-    "another thing", "by the way i", "btw i have",
-    "switch topic", "change topic", "unrelated", "separate issue",
-    "next problem", "next issue",
+    "another problem",
+    "an another problem",
+    "another issue",
+    "another question",
+    "different problem",
+    "different issue",
+    "different question",
+    "new problem",
+    "new issue",
+    "new question",
+    "one more problem",
+    "one more issue",
+    "one more question",
+    "one more thing",
+    "something else",
+    "i have another",
+    "i've got another",
+    "ive got another",
+    "i have a different",
+    "i have a new",
+    "also having",
+    "also having an issue",
+    "also have an issue",
+    "another thing",
+    "by the way i",
+    "btw i have",
+    "switch topic",
+    "change topic",
+    "unrelated",
+    "separate issue",
+    "next problem",
+    "next issue",
 )
 
 # Asking the agent to repeat / simplify (NOT a new problem).
 _SIMPLIFY_PHRASES: tuple[str, ...] = (
-    "explain again", "say that again", "can you repeat", "repeat that",
-    "didn't get that", "didn't catch that", "don't follow", "i don't follow",
-    "simpler", "simpler explanation", "easier", "easier way", "break it down",
-    "step by step", "step-by-step", "in plain english", "plain english",
-    "can you simplify", "simplify that", "more clearly", "more detail",
-    "not clear", "unclear", "i'm confused", "im confused", "i am confused",
+    "explain again",
+    "say that again",
+    "can you repeat",
+    "repeat that",
+    "didn't get that",
+    "didn't catch that",
+    "don't follow",
+    "i don't follow",
+    "simpler",
+    "simpler explanation",
+    "easier",
+    "easier way",
+    "break it down",
+    "step by step",
+    "step-by-step",
+    "in plain english",
+    "plain english",
+    "can you simplify",
+    "simplify that",
+    "more clearly",
+    "more detail",
+    "not clear",
+    "unclear",
+    "i'm confused",
+    "im confused",
+    "i am confused",
     "confusing",
 )
 
 # Explicit human / ticket request.
 _ESCALATE_PHRASES: tuple[str, ...] = (
-    "connect me with a specialist", "connect me with a human", "connect me with an agent",
-    "connect with a specialist", "connect with a human", "connect with an agent",
-    "connect to a specialist", "connect to a human",
-    "talk to a human", "talk to a person", "talk to a specialist",
-    "talk to an agent", "talk to someone", "speak to a human",
-    "speak to a person", "speak to a specialist", "speak to an agent",
+    "connect me with a specialist",
+    "connect me with a human",
+    "connect me with an agent",
+    "connect with a specialist",
+    "connect with a human",
+    "connect with an agent",
+    "connect to a specialist",
+    "connect to a human",
+    "talk to a human",
+    "talk to a person",
+    "talk to a specialist",
+    "talk to an agent",
+    "talk to someone",
+    "speak to a human",
+    "speak to a person",
+    "speak to a specialist",
+    "speak to an agent",
     "speak to someone",
-    "create a ticket", "raise a ticket", "open a ticket", "log a ticket",
-    "file a ticket", "create ticket", "raise ticket",
-    "i need a human", "i want a human", "i'd like a human",
-    "i need help from", "escalate this", "escalate to",
-    "real person", "live agent", "live person", "it team",
-    "human support", "human agent",
+    "create a ticket",
+    "raise a ticket",
+    "open a ticket",
+    "log a ticket",
+    "file a ticket",
+    "create ticket",
+    "raise ticket",
+    "i need a human",
+    "i want a human",
+    "i'd like a human",
+    "i need help from",
+    "escalate this",
+    "escalate to",
+    "real person",
+    "live agent",
+    "live person",
+    "it team",
+    "human support",
+    "human agent",
 )
 # Single-word escalation tokens (require whole-word match to avoid matching
 # "another" → "agent" → false positive).
-_ESCALATE_WORDS: frozenset[str] = frozenset({
-    "escalate", "specialist", "agent", "human",
-})
+_ESCALATE_WORDS: frozenset[str] = frozenset(
+    {
+        "escalate",
+        "specialist",
+        "agent",
+        "human",
+    }
+)
 
 # Affirmation tokens for use ONLY when the agent just asked yes/no.
-_AFFIRM_WORDS: frozenset[str] = frozenset({
-    "yes", "yep", "yeah", "yup", "ya", "yas", "correct", "right",
-    "exactly", "perfect", "confirmed", "sure", "ok", "okay", "indeed",
-    "absolutely", "affirmative", "fine", "alright",
-})
+_AFFIRM_WORDS: frozenset[str] = frozenset(
+    {
+        "yes",
+        "yep",
+        "yeah",
+        "yup",
+        "ya",
+        "yas",
+        "correct",
+        "right",
+        "exactly",
+        "perfect",
+        "confirmed",
+        "sure",
+        "ok",
+        "okay",
+        "indeed",
+        "absolutely",
+        "affirmative",
+        "fine",
+        "alright",
+    }
+)
 _AFFIRM_PHRASES: tuple[str, ...] = (
-    "that's right", "thats right", "that is correct", "that's correct",
-    "thats correct", "you got it", "spot on", "yes please", "go ahead",
-    "please do", "do it", "sounds good", "sounds great",
+    "that's right",
+    "thats right",
+    "that is correct",
+    "that's correct",
+    "thats correct",
+    "you got it",
+    "spot on",
+    "yes please",
+    "go ahead",
+    "please do",
+    "do it",
+    "sounds good",
+    "sounds great",
 )
 
 _DENY_WORDS: frozenset[str] = frozenset({"no", "nope", "nah", "wrong", "incorrect", "negative"})
 _DENY_PHRASES: tuple[str, ...] = (
-    "not exactly", "not right", "that's not", "thats not", "not correct",
-    "not quite", "actually no", "that's wrong", "thats wrong",
-    "not really", "not what i meant",
+    "not exactly",
+    "not right",
+    "that's not",
+    "thats not",
+    "not correct",
+    "not quite",
+    "actually no",
+    "that's wrong",
+    "thats wrong",
+    "not really",
+    "not what i meant",
 )
 
-_GREETING_WORDS: frozenset[str] = frozenset({
-    "hi", "hii", "hiii", "hello", "helo", "hey", "hiya", "yo",
-    "howdy", "morning", "afternoon", "evening", "greetings",
-    "namaste", "hola", "sup",
-})
+_GREETING_WORDS: frozenset[str] = frozenset(
+    {
+        "hi",
+        "hii",
+        "hiii",
+        "hello",
+        "helo",
+        "hey",
+        "hiya",
+        "yo",
+        "howdy",
+        "morning",
+        "afternoon",
+        "evening",
+        "greetings",
+        "namaste",
+        "hola",
+        "sup",
+    }
+)
 _GREETING_PHRASES: tuple[str, ...] = (
-    "hi there", "hello there", "hey there", "good morning",
-    "good afternoon", "good evening", "what's up", "whats up",
+    "hi there",
+    "hello there",
+    "hey there",
+    "good morning",
+    "good afternoon",
+    "good evening",
+    "what's up",
+    "whats up",
 )
 
-_GRATITUDE_WORDS: frozenset[str] = frozenset({
-    "thanks", "thank", "thankyou", "ty", "thx", "tq", "tysm",
-    "cheers", "appreciated",
-})
+_GRATITUDE_WORDS: frozenset[str] = frozenset(
+    {
+        "thanks",
+        "thank",
+        "thankyou",
+        "ty",
+        "thx",
+        "tq",
+        "tysm",
+        "cheers",
+        "appreciated",
+    }
+)
 _GRATITUDE_PHRASES: tuple[str, ...] = (
-    "thank you", "thank you so much", "thanks so much", "thanks a lot",
-    "thanks a bunch", "many thanks", "much appreciated", "thanks very much",
-    "thank you very much", "really appreciate",
+    "thank you",
+    "thank you so much",
+    "thanks so much",
+    "thanks a lot",
+    "thanks a bunch",
+    "many thanks",
+    "much appreciated",
+    "thanks very much",
+    "thank you very much",
+    "really appreciate",
 )
 
 # Negative feedback phrases (the steps did not work).
 _NEGATIVE_FEEDBACK_PHRASES: tuple[str, ...] = (
-    "didn't work", "did not work", "doesn't work", "does not work",
-    "not working", "not fixed", "not resolved", "not sorted",
-    "still not working", "still not", "still the same", "same issue",
-    "same problem", "no change", "nothing changed", "no difference",
-    "no effect", "no luck", "not helping", "didn't help", "did not help",
-    "that didn't help", "doesn't help", "no joy",
-    "still happening", "still broken", "still there", "issue persists",
-    "problem persists", "still having", "still getting",
-    "tried that", "already tried", "tried that already", "done that already",
-    "already done that", "don't see that", "can't find that", "can't find it",
-    "don't have that option", "made it worse", "now it's worse",
+    "didn't work",
+    "did not work",
+    "doesn't work",
+    "does not work",
+    "not working",
+    "not fixed",
+    "not resolved",
+    "not sorted",
+    "still not working",
+    "still not",
+    "still the same",
+    "same issue",
+    "same problem",
+    "no change",
+    "nothing changed",
+    "no difference",
+    "no effect",
+    "no luck",
+    "not helping",
+    "didn't help",
+    "did not help",
+    "that didn't help",
+    "doesn't help",
+    "no joy",
+    "still happening",
+    "still broken",
+    "still there",
+    "issue persists",
+    "problem persists",
+    "still having",
+    "still getting",
+    "tried that",
+    "already tried",
+    "tried that already",
+    "done that already",
+    "already done that",
+    "don't see that",
+    "can't find that",
+    "can't find it",
+    "don't have that option",
+    "made it worse",
+    "now it's worse",
 )
 
 # Positive feedback phrases (the steps worked / problem resolved).
 _POSITIVE_FEEDBACK_PHRASES: tuple[str, ...] = (
-    "it worked", "that worked", "works now", "working now", "working fine",
-    "it's fixed", "its fixed", "fixed it", "fixed now", "issue fixed",
-    "that fixed it", "now it works", "it's working", "its working",
-    "resolved", "issue resolved", "problem resolved", "all resolved",
-    "sorted", "sorted now", "sorted it", "sorted out", "problem solved",
-    "all sorted", "that sorted it", "now sorted",
-    "all good", "looks good", "all fine", "fine now", "ok now",
-    "back to normal", "normal now", "back online", "it's back",
-    "found it", "found them", "found the emails", "found the issue",
-    "got it", "got them", "i can see them", "can see them now",
-    "showing now", "showing up now",
-    "figured it out", "that did it", "yes it worked", "yep that worked",
-    "thanks that worked", "yes that resolved", "yes that fixed",
+    "it worked",
+    "that worked",
+    "works now",
+    "working now",
+    "working fine",
+    "it's fixed",
+    "its fixed",
+    "fixed it",
+    "fixed now",
+    "issue fixed",
+    "that fixed it",
+    "now it works",
+    "it's working",
+    "its working",
+    "resolved",
+    "issue resolved",
+    "problem resolved",
+    "all resolved",
+    "sorted",
+    "sorted now",
+    "sorted it",
+    "sorted out",
+    "problem solved",
+    "all sorted",
+    "that sorted it",
+    "now sorted",
+    "all good",
+    "looks good",
+    "all fine",
+    "fine now",
+    "ok now",
+    "back to normal",
+    "normal now",
+    "back online",
+    "it's back",
+    "found it",
+    "found them",
+    "found the emails",
+    "found the issue",
+    "got it",
+    "got them",
+    "i can see them",
+    "can see them now",
+    "showing now",
+    "showing up now",
+    "figured it out",
+    "that did it",
+    "yes it worked",
+    "yep that worked",
+    "thanks that worked",
+    "yes that resolved",
+    "yes that fixed",
     # "Able to" / success confirmation patterns
-    "able to", "was able to", "i was able", "im able to", "i'm able to",
-    "managed to", "i managed to", "i can now", "can now",
-    "logged in successfully", "signed in successfully",
-    "updated successfully", "changed successfully", "reset successfully",
-    "password updated", "password changed", "password reset",
-    "it's working again", "its working again", "working again",
-    "up and running", "back up", "good to go", "all set",
+    "able to",
+    "was able to",
+    "i was able",
+    "im able to",
+    "i'm able to",
+    "managed to",
+    "i managed to",
+    "i can now",
+    "can now",
+    "logged in successfully",
+    "signed in successfully",
+    "updated successfully",
+    "changed successfully",
+    "reset successfully",
+    "password updated",
+    "password changed",
+    "password reset",
+    "it's working again",
+    "its working again",
+    "working again",
+    "up and running",
+    "back up",
+    "good to go",
+    "all set",
 )
 
 # Negation prefixes to recognize "not resolved", "still not working", etc.
-_NEGATION_PREFIXES: frozenset[str] = frozenset({
-    "not", "no", "nope", "didn't", "did not", "hasn't", "haven't",
-    "doesn't", "isn't", "wasn't", "still not", "not yet", "never",
-})
+_NEGATION_PREFIXES: frozenset[str] = frozenset(
+    {
+        "not",
+        "no",
+        "nope",
+        "didn't",
+        "did not",
+        "hasn't",
+        "haven't",
+        "doesn't",
+        "isn't",
+        "wasn't",
+        "still not",
+        "not yet",
+        "never",
+    }
+)
 
 # Small-talk fillers — short utterances with no actionable content.
 _SMALL_TALK_PHRASES: tuple[str, ...] = (
-    "how are you", "how's it going", "hows it going", "what can you do",
-    "who are you", "what are you", "are you a bot", "are you human",
-    "lol", "haha", "hmm", "hm", "interesting", "i see", "got it",
-    "ok cool", "okay cool", "alright cool", "cool", "nice", "great",
+    "how are you",
+    "how's it going",
+    "hows it going",
+    "what can you do",
+    "who are you",
+    "what are you",
+    "are you a bot",
+    "are you human",
+    "lol",
+    "haha",
+    "hmm",
+    "hm",
+    "interesting",
+    "i see",
+    "got it",
+    "ok cool",
+    "okay cool",
+    "alright cool",
+    "cool",
+    "nice",
+    "great",
 )
 
 # Priority order — highest priority intent wins when multiple match.
@@ -288,6 +549,7 @@ _PRIORITY: tuple[ConversationIntent, ...] = (
 
 
 # ── Pure helpers ────────────────────────────────────────────────────────────
+
 
 def _normalize(text: str) -> str:
     """Lower-case, strip surrounding punctuation, collapse whitespace."""
@@ -323,6 +585,7 @@ def _phrase_not_negated(text: str, phrase: str) -> bool:
 
 
 # ── Individual detectors (each returns ``(matched_label, confidence)`` or None)
+
 
 def _detect_new_topic(text: str) -> tuple[str, float] | None:
     p = _has_phrase(text, _NEW_TOPIC_PHRASES)
@@ -371,8 +634,22 @@ def _detect_gratitude(text: str) -> tuple[str, float] | None:
     tokens = _token_set(text)
     if tokens & _GRATITUDE_WORDS:
         # Short pure-thanks message ("thanks!", "ty so much")
-        filler = {"a", "so", "very", "lot", "much", "you", "for", "the",
-                  "help", "that", "this", "your", "assistance", "support"}
+        filler = {
+            "a",
+            "so",
+            "very",
+            "lot",
+            "much",
+            "you",
+            "for",
+            "the",
+            "help",
+            "that",
+            "this",
+            "your",
+            "assistance",
+            "support",
+        }
         if len(tokens) <= 6 and all(t in _GRATITUDE_WORDS or t in filler for t in tokens):
             return ("thanks", 0.9)
     return None
@@ -515,9 +792,7 @@ def classify_intent(
     for candidate in _PRIORITY:
         if candidate in detections:
             label, conf = detections[candidate]
-            alternates = tuple(
-                i for i in _PRIORITY if i in detections and i is not candidate
-            )
+            alternates = tuple(i for i in _PRIORITY if i in detections and i is not candidate)
             return IntentClassification(
                 intent=candidate,
                 confidence=conf,

@@ -7,7 +7,8 @@
  */
 
 import { useState } from 'react';
-import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import {
   BarChart3,
   BookOpen,
@@ -66,6 +67,7 @@ const NAV: NavItem[] = [
 export function AdminLayout() {
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
+  const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
 
   const initials = (user?.full_name || '?')
@@ -169,7 +171,9 @@ export function AdminLayout() {
 
       {/* Main content */}
       <main className="flex flex-1 flex-col overflow-auto">
-        <Outlet />
+        <ErrorBoundary key={location.pathname} boundaryName="admin">
+          <Outlet />
+        </ErrorBoundary>
       </main>
     </div>
   );

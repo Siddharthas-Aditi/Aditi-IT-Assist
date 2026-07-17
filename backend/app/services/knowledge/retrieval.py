@@ -55,6 +55,7 @@ def _weights_from_settings() -> ranking.HybridWeights:
         return ranking.DEFAULT_WEIGHTS
     return w
 
+
 #: Below this composite score, the orchestrator should consider escalation.
 LOW_CONFIDENCE_THRESHOLD = 0.45
 
@@ -89,8 +90,13 @@ class GovernedRetrievalResult:
 class KnowledgeRetrievalService:
     """Read-only retrieval over governed (published) knowledge content."""
 
-    def __init__(self, db, *, repo: KnowledgeRepository | None = None,
-                 embedder: EmbeddingClient | None = None) -> None:
+    def __init__(
+        self,
+        db,
+        *,
+        repo: KnowledgeRepository | None = None,
+        embedder: EmbeddingClient | None = None,
+    ) -> None:
         self.db = db
         self.repo = repo or KnowledgeRepository(db)
         # Embedder is resolved lazily (only when the vector path is taken) so

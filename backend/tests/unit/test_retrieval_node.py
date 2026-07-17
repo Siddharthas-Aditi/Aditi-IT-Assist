@@ -11,6 +11,7 @@ from app.workflows.nodes.retrieval import retrieval_node
 @dataclass
 class _MockArticle:
     """Minimal mock for KnowledgeArticle attributes used by _scored_to_dict."""
+
     id: str = "art-1"
     title: str = "Test Article"
     category: str = "email/outlook"
@@ -41,6 +42,7 @@ class _MockScoredArticle:
 @dataclass
 class _MockResult:
     """Mock for GovernedRetrievalResult."""
+
     items: list = None
     confidence: float = 0.85
     source: str = "db_keyword"
@@ -82,8 +84,10 @@ class TestRetrievalNode:
         ]
         mock_result = _MockResult(items=articles, confidence=0.85)
 
-        with patch("app.workflows.nodes.retrieval.async_session_factory") as mock_factory, \
-             patch("app.workflows.nodes.retrieval.KnowledgeRetrievalService") as MockSvc:
+        with (
+            patch("app.workflows.nodes.retrieval.async_session_factory") as mock_factory,
+            patch("app.workflows.nodes.retrieval.KnowledgeRetrievalService") as MockSvc,
+        ):
             mock_factory.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_factory.return_value.__aexit__ = AsyncMock(return_value=False)
             mock_instance = AsyncMock()
@@ -107,8 +111,10 @@ class TestRetrievalNode:
         """Should return empty results with zero confidence."""
         mock_result = _MockResult(items=[], confidence=0.0)
 
-        with patch("app.workflows.nodes.retrieval.async_session_factory") as mock_factory, \
-             patch("app.workflows.nodes.retrieval.KnowledgeRetrievalService") as MockSvc:
+        with (
+            patch("app.workflows.nodes.retrieval.async_session_factory") as mock_factory,
+            patch("app.workflows.nodes.retrieval.KnowledgeRetrievalService") as MockSvc,
+        ):
             mock_factory.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_factory.return_value.__aexit__ = AsyncMock(return_value=False)
             mock_instance = AsyncMock()
@@ -131,8 +137,10 @@ class TestRetrievalNode:
         """Should default to 'other' when issue_category is None."""
         mock_result = _MockResult(items=[], confidence=0.0)
 
-        with patch("app.workflows.nodes.retrieval.async_session_factory") as mock_factory, \
-             patch("app.workflows.nodes.retrieval.KnowledgeRetrievalService") as MockSvc:
+        with (
+            patch("app.workflows.nodes.retrieval.async_session_factory") as mock_factory,
+            patch("app.workflows.nodes.retrieval.KnowledgeRetrievalService") as MockSvc,
+        ):
             mock_factory.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_factory.return_value.__aexit__ = AsyncMock(return_value=False)
             mock_instance = AsyncMock()
@@ -162,8 +170,10 @@ class TestRetrievalNode:
         ]
         mock_result = _MockResult(items=articles, confidence=0.7, source="db_keyword")
 
-        with patch("app.workflows.nodes.retrieval.async_session_factory") as mock_factory, \
-             patch("app.workflows.nodes.retrieval.KnowledgeRetrievalService") as MockSvc:
+        with (
+            patch("app.workflows.nodes.retrieval.async_session_factory") as mock_factory,
+            patch("app.workflows.nodes.retrieval.KnowledgeRetrievalService") as MockSvc,
+        ):
             mock_factory.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_factory.return_value.__aexit__ = AsyncMock(return_value=False)
             mock_instance = AsyncMock()
@@ -183,4 +193,3 @@ class TestRetrievalNode:
         assert audit["category"] == "hardware/camera"
         # Grounding keeps articles that match the issue's domain family
         assert audit["results_count"] >= 0
-

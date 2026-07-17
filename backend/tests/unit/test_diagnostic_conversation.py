@@ -8,21 +8,18 @@ These tests validate that the upgraded chat experience:
 5. Preserves context across turns
 """
 
-import pytest
-
-from app.services.agents.diagnostic_state import DiagnosticContext, DiagnosticPhase
 from app.services.agents.diagnostic_engine import (
+    _pattern_extract_slots,
     evaluate_clarify_or_answer,
     update_context_from_extraction,
-    _pattern_extract_slots,
 )
+from app.services.agents.diagnostic_state import DiagnosticContext, DiagnosticPhase
 from app.services.agents.playbooks import (
-    get_playbook,
+    INTUNE_PLAYBOOK,
     OUTLOOK_PLAYBOOK,
     ZOOM_PLAYBOOK,
-    INTUNE_PLAYBOOK,
+    get_playbook,
 )
-
 
 # ══════════════════════════════════════════════════════════════════════
 #  DIAGNOSTIC STATE TESTS
@@ -195,7 +192,9 @@ class TestSlotExtraction:
         assert result.get("device_type") == "laptop"
 
     def test_extracts_symptom_from_keywords(self):
-        result = _pattern_extract_slots("I'm not receiving any emails since morning", "email/outlook")
+        result = _pattern_extract_slots(
+            "I'm not receiving any emails since morning", "email/outlook"
+        )
         assert result.get("symptom") == "not-receiving-emails"
 
     def test_extracts_option_selection(self):
@@ -288,7 +287,8 @@ class TestConversationFlows:
     """End-to-end flow tests for common scenarios."""
 
     def test_vague_outlook_then_specific_answer(self):
-        """Simulates: 'I have an Outlook issue' → clarification → 'not receiving emails' → proceed."""
+        # noqa keeps this descriptive docstring verbatim (single-line by intent)
+        """Simulates: 'I have an Outlook issue' → clarification → 'not receiving emails' → proceed."""  # noqa: E501
         # Turn 1: Vague message
         ctx = DiagnosticContext(issue_category="email/outlook")
         decision = evaluate_clarify_or_answer(ctx)

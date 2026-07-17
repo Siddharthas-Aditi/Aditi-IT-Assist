@@ -26,8 +26,10 @@ logs can explain *why* an article was kept, reranked, or rejected.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
-from app.services.agents.diagnostic_state import DiagnosticContext
+if TYPE_CHECKING:
+    from app.services.agents.diagnostic_state import DiagnosticContext
 
 
 @dataclass
@@ -75,9 +77,34 @@ class GroundingResult:
 
 
 _STOPWORDS = {
-    "the", "and", "for", "with", "you", "your", "this", "that", "have", "has",
-    "are", "was", "not", "but", "issue", "issues", "problem", "help", "please",
-    "cant", "can't", "cannot", "what", "when", "how", "why", "from", "into",
+    "the",
+    "and",
+    "for",
+    "with",
+    "you",
+    "your",
+    "this",
+    "that",
+    "have",
+    "has",
+    "are",
+    "was",
+    "not",
+    "but",
+    "issue",
+    "issues",
+    "problem",
+    "help",
+    "please",
+    "cant",
+    "can't",
+    "cannot",
+    "what",
+    "when",
+    "how",
+    "why",
+    "from",
+    "into",
 }
 
 
@@ -90,17 +117,14 @@ def _family(category: str | None) -> str:
 
 def _tokens(text: str) -> set[str]:
     return {
-        t for t in (text or "").lower().replace("/", " ").replace("-", " ").split()
+        t
+        for t in (text or "").lower().replace("/", " ").replace("-", " ").split()
         if len(t) > 2 and t not in _STOPWORDS
     }
 
 
 def _article_subtype(article: dict) -> str | None:
-    return (
-        article.get("subcategory")
-        or article.get("subtype")
-        or article.get("issue_type")
-    )
+    return article.get("subcategory") or article.get("subtype") or article.get("issue_type")
 
 
 def _article_text(article: dict) -> str:
@@ -135,7 +159,7 @@ def ground_results(
     current_family = _family(diag_ctx.issue_category)
     allowed = {current_family} | (allowed_families or set())
 
-    subtype = (diag_ctx.issue_subtype or diag_ctx.issue_subcategory or "")
+    subtype = diag_ctx.issue_subtype or diag_ctx.issue_subcategory or ""
     subtype_norm = subtype.replace("_", "-").lower()
     subtype_tokens = _tokens(subtype.replace("-", " "))
     symptom_tokens = _tokens(
@@ -156,18 +180,15 @@ def ground_results(
         system_hit = bool(system_token) and system_token in art_text_lower
 
         # ── Domain guard (system match exempts) ──────────────────
-        if (
-            current_family
-            and art_family
-            and art_family not in allowed
-            and not system_hit
-        ):
-            result.rejected.append({
-                "id": art.get("id"),
-                "title": art.get("title"),
-                "category": art.get("category"),
-                "reason": f"cross-domain: '{art_family}' not in allowed {sorted(allowed)}",
-            })
+        if current_family and art_family and art_family not in allowed and not system_hit:
+            result.rejected.append(
+                {
+                    "id": art.get("id"),
+                    "title": art.get("title"),
+                    "category": art.get("category"),
+                    "reason": f"cross-domain: '{art_family}' not in allowed {sorted(allowed)}",
+                }
+            )
             continue
 
         reasons: list[str] = []
@@ -177,8 +198,7 @@ def ground_results(
 
         # ── Subtype match (strongest signal) ─────────────────────
         subtype_match = bool(subtype_norm) and (
-            art_subtype == subtype_norm
-            or (subtype_tokens and subtype_tokens.issubset(art_tokens))
+            art_subtype == subtype_norm or (subtype_tokens and subtype_tokens.issubset(art_tokens))
         )
         if subtype_match:
             relevance += 0.55

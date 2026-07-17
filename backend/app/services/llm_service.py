@@ -46,6 +46,7 @@ class LLMService:
         # httpx clients created by LiteLLM pick it up automatically.
         if not self._ssl_verify:
             import litellm as _litellm  # noqa: PLC0415
+
             _litellm.ssl_verify = False
 
     @property

@@ -13,8 +13,8 @@ This migration adds:
 - Audit events (enhanced)
 """
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision = "002_enterprise_upgrade"
@@ -53,8 +53,15 @@ def upgrade() -> None:
     # ── Role Permissions ─────────────────────────────────────────
     op.create_table(
         "role_permissions",
-        sa.Column("role_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("roles.id"), primary_key=True),
-        sa.Column("permission_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("permissions.id"), primary_key=True),
+        sa.Column(
+            "role_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("roles.id"), primary_key=True
+        ),
+        sa.Column(
+            "permission_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("permissions.id"),
+            primary_key=True,
+        ),
     )
 
     # ── Groups ───────────────────────────────────────────────────
@@ -65,7 +72,12 @@ def upgrade() -> None:
         sa.Column("display_name", sa.String(255), nullable=False),
         sa.Column("description", sa.Text, nullable=True),
         sa.Column("external_id", sa.String(255), nullable=True),
-        sa.Column("default_role_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("roles.id"), nullable=True),
+        sa.Column(
+            "default_role_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("roles.id"),
+            nullable=True,
+        ),
         sa.Column("is_active", sa.Boolean, default=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
@@ -83,9 +95,23 @@ def upgrade() -> None:
     op.create_table(
         "user_role_assignments",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("user_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("users.id"), index=True, nullable=False),
-        sa.Column("role_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("roles.id"), index=True, nullable=False),
-        sa.Column("assigned_by", postgresql.UUID(as_uuid=True), sa.ForeignKey("users.id"), nullable=True),
+        sa.Column(
+            "user_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("users.id"),
+            index=True,
+            nullable=False,
+        ),
+        sa.Column(
+            "role_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("roles.id"),
+            index=True,
+            nullable=False,
+        ),
+        sa.Column(
+            "assigned_by", postgresql.UUID(as_uuid=True), sa.ForeignKey("users.id"), nullable=True
+        ),
         sa.Column("assigned_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=True),
         sa.UniqueConstraint("user_id", "role_id", name="uq_user_role"),
@@ -94,15 +120,25 @@ def upgrade() -> None:
     # ── User Groups ──────────────────────────────────────────────
     op.create_table(
         "user_groups",
-        sa.Column("user_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("users.id"), primary_key=True),
-        sa.Column("group_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("groups.id"), primary_key=True),
+        sa.Column(
+            "user_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("users.id"), primary_key=True
+        ),
+        sa.Column(
+            "group_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("groups.id"), primary_key=True
+        ),
     )
 
     # ── Auth Identities ──────────────────────────────────────────
     op.create_table(
         "auth_identities",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("user_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("users.id"), index=True, nullable=False),
+        sa.Column(
+            "user_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("users.id"),
+            index=True,
+            nullable=False,
+        ),
         sa.Column("provider", sa.String(20), nullable=False),
         sa.Column("provider_user_id", sa.String(255), nullable=False),
         sa.Column("provider_email", sa.String(255), nullable=True),
@@ -117,7 +153,13 @@ def upgrade() -> None:
     op.create_table(
         "login_sessions",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("user_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("users.id"), index=True, nullable=False),
+        sa.Column(
+            "user_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("users.id"),
+            index=True,
+            nullable=False,
+        ),
         sa.Column("token_jti", sa.String(255), unique=True, index=True, nullable=False),
         sa.Column("ip_address", sa.String(50), nullable=True),
         sa.Column("user_agent", sa.String(500), nullable=True),
@@ -130,18 +172,31 @@ def upgrade() -> None:
 
     # ── Tickets (enhanced) ───────────────────────────────────────
     op.add_column("tickets", sa.Column("ticket_number", sa.String(20), unique=True, index=True))
-    op.add_column("tickets", sa.Column("requester_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("users.id")))
+    op.add_column(
+        "tickets",
+        sa.Column("requester_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("users.id")),
+    )
     op.add_column("tickets", sa.Column("category", sa.String(100), index=True))
     op.add_column("tickets", sa.Column("subcategory", sa.String(100), nullable=True))
     op.add_column("tickets", sa.Column("severity", sa.String(20), nullable=True))
     op.add_column("tickets", sa.Column("impact", sa.String(20), nullable=True))
     op.add_column("tickets", sa.Column("urgency", sa.String(20), nullable=True))
     op.add_column("tickets", sa.Column("source", sa.String(20), nullable=True))
-    op.add_column("tickets", sa.Column("escalated_to", postgresql.UUID(as_uuid=True), nullable=True))
-    op.add_column("tickets", sa.Column("remote_session_id", postgresql.UUID(as_uuid=True), nullable=True))
-    op.add_column("tickets", sa.Column("sla_response_target", sa.DateTime(timezone=True), nullable=True))
-    op.add_column("tickets", sa.Column("sla_resolution_target", sa.DateTime(timezone=True), nullable=True))
-    op.add_column("tickets", sa.Column("first_response_at", sa.DateTime(timezone=True), nullable=True))
+    op.add_column(
+        "tickets", sa.Column("escalated_to", postgresql.UUID(as_uuid=True), nullable=True)
+    )
+    op.add_column(
+        "tickets", sa.Column("remote_session_id", postgresql.UUID(as_uuid=True), nullable=True)
+    )
+    op.add_column(
+        "tickets", sa.Column("sla_response_target", sa.DateTime(timezone=True), nullable=True)
+    )
+    op.add_column(
+        "tickets", sa.Column("sla_resolution_target", sa.DateTime(timezone=True), nullable=True)
+    )
+    op.add_column(
+        "tickets", sa.Column("first_response_at", sa.DateTime(timezone=True), nullable=True)
+    )
     op.add_column("tickets", sa.Column("resolved_at", sa.DateTime(timezone=True), nullable=True))
     op.add_column("tickets", sa.Column("closed_at", sa.DateTime(timezone=True), nullable=True))
     op.add_column("tickets", sa.Column("ai_confidence", sa.Float, nullable=True))
@@ -155,8 +210,16 @@ def upgrade() -> None:
     op.create_table(
         "ticket_comments",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("ticket_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("tickets.id"), index=True, nullable=False),
-        sa.Column("author_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("users.id"), nullable=False),
+        sa.Column(
+            "ticket_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("tickets.id"),
+            index=True,
+            nullable=False,
+        ),
+        sa.Column(
+            "author_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("users.id"), nullable=False
+        ),
         sa.Column("content", sa.Text, nullable=False),
         sa.Column("is_internal", sa.Boolean, default=False),
         sa.Column("comment_type", sa.String(20), default="note"),
@@ -167,8 +230,16 @@ def upgrade() -> None:
     op.create_table(
         "ticket_events",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("ticket_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("tickets.id"), index=True, nullable=False),
-        sa.Column("actor_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("users.id"), nullable=True),
+        sa.Column(
+            "ticket_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("tickets.id"),
+            index=True,
+            nullable=False,
+        ),
+        sa.Column(
+            "actor_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("users.id"), nullable=True
+        ),
         sa.Column("event_type", sa.String(50), index=True, nullable=False),
         sa.Column("description", sa.Text, nullable=False),
         sa.Column("old_value", sa.Text, nullable=True),
@@ -181,10 +252,29 @@ def upgrade() -> None:
     op.create_table(
         "remote_support_sessions",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("employee_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("users.id"), index=True, nullable=False),
-        sa.Column("agent_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("users.id"), index=True, nullable=False),
-        sa.Column("ticket_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("tickets.id"), nullable=True),
-        sa.Column("support_session_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("support_sessions.id"), nullable=True),
+        sa.Column(
+            "employee_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("users.id"),
+            index=True,
+            nullable=False,
+        ),
+        sa.Column(
+            "agent_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("users.id"),
+            index=True,
+            nullable=False,
+        ),
+        sa.Column(
+            "ticket_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("tickets.id"), nullable=True
+        ),
+        sa.Column(
+            "support_session_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("support_sessions.id"),
+            nullable=True,
+        ),
         sa.Column("session_type", sa.String(20), default="screen_view"),
         sa.Column("status", sa.String(30), default="requested", index=True),
         sa.Column("provider", sa.String(100), default="microsoft_remote_help"),
@@ -212,8 +302,16 @@ def upgrade() -> None:
     op.create_table(
         "remote_support_consents",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("session_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("remote_support_sessions.id", ondelete="CASCADE"), index=True, nullable=False),
-        sa.Column("employee_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("users.id"), nullable=False),
+        sa.Column(
+            "session_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("remote_support_sessions.id", ondelete="CASCADE"),
+            index=True,
+            nullable=False,
+        ),
+        sa.Column(
+            "employee_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("users.id"), nullable=False
+        ),
         sa.Column("consent_type", sa.String(20), nullable=False),
         sa.Column("granted", sa.Boolean, nullable=False),
         sa.Column("consented_at", sa.DateTime(timezone=True), nullable=False),
@@ -229,9 +327,17 @@ def upgrade() -> None:
     op.create_table(
         "remote_session_events",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("session_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("remote_support_sessions.id", ondelete="CASCADE"), index=True, nullable=False),
+        sa.Column(
+            "session_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("remote_support_sessions.id", ondelete="CASCADE"),
+            index=True,
+            nullable=False,
+        ),
         sa.Column("event_type", sa.String(30), nullable=False),
-        sa.Column("actor_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("users.id"), nullable=True),
+        sa.Column(
+            "actor_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("users.id"), nullable=True
+        ),
         sa.Column("occurred_at", sa.DateTime(timezone=True), nullable=False, index=True),
         sa.Column("description", sa.Text, nullable=True),
         sa.Column("event_metadata", postgresql.JSONB, nullable=True),

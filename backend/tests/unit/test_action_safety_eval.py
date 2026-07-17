@@ -56,7 +56,7 @@ def _runtime():
     tools = build_mcp_tools(
         feature_on=True,
         enabled_server_ids=[p.server_id for p in mcp_profiles.list_profiles()],
-        write_actions_on=True,   # write tools built
+        write_actions_on=True,  # write tools built
         session_provider=provider,
     )
     return AgentToolRuntime(tools, audit_sink=lambda e: None), tools
@@ -97,8 +97,11 @@ class TestZeroUnapprovedExecution:
         # Simulate the propose → approve → execute flow.
         proposed = ProposedAction(
             invocation=ToolInvocation(case["name"], case["valid_args"]),
-            tool_name=case["name"], side_effect="write", mcp_server=case["server"],
-            description="", args_hash="x",
+            tool_name=case["name"],
+            side_effect="write",
+            mcp_server=case["server"],
+            description="",
+            args_hash="x",
         )
         out = await rt.execute_approved(
             proposed, ctx, allowed_tools=(case["name"],), approver_id="lead-1"
@@ -113,8 +116,11 @@ class TestZeroUnapprovedExecution:
         ctx = ToolContext(user_id="agent-1", permissions=frozenset())  # no write perm
         proposed = ProposedAction(
             invocation=ToolInvocation(case["name"], case["valid_args"]),
-            tool_name=case["name"], side_effect="write", mcp_server=case["server"],
-            description="", args_hash="x",
+            tool_name=case["name"],
+            side_effect="write",
+            mcp_server=case["server"],
+            description="",
+            args_hash="x",
         )
         out = await rt.execute_approved(
             proposed, ctx, allowed_tools=(case["name"],), approver_id="agent-1"

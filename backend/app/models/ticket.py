@@ -1,7 +1,7 @@
 """Enhanced ticket models with enterprise lifecycle management."""
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import Boolean, DateTime, Enum, Float, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -10,14 +10,23 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 
 TICKET_STATUSES = (
-    "new", "triaged", "in_progress", "waiting_for_user",
-    "escalated", "resolved", "closed",
+    "new",
+    "triaged",
+    "in_progress",
+    "waiting_for_user",
+    "escalated",
+    "resolved",
+    "closed",
 )
 
 TICKET_PRIORITIES = ("low", "medium", "high", "critical")
 
 TICKET_SOURCES = (
-    "chat", "email", "manual", "remote_session_followup", "api",
+    "chat",
+    "email",
+    "manual",
+    "remote_session_followup",
+    "api",
 )
 
 
@@ -27,9 +36,7 @@ class Ticket(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "tickets"
 
     # Core fields
-    ticket_number: Mapped[str] = mapped_column(
-        String(20), unique=True, index=True
-    )
+    ticket_number: Mapped[str] = mapped_column(String(20), unique=True, index=True)
     title: Mapped[str] = mapped_column(String(500))
     description: Mapped[str] = mapped_column(Text)
 
@@ -50,9 +57,7 @@ class Ticket(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     status: Mapped[str] = mapped_column(
         Enum(*TICKET_STATUSES, name="ticket_status_v2"), default="new", index=True
     )
-    source: Mapped[str] = mapped_column(
-        Enum(*TICKET_SOURCES, name="ticket_source"), default="chat"
-    )
+    source: Mapped[str] = mapped_column(Enum(*TICKET_SOURCES, name="ticket_source"), default="chat")
 
     # Relationships
     requester_id: Mapped[uuid.UUID] = mapped_column(
@@ -81,12 +86,8 @@ class Ticket(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     first_response_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    resolved_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    closed_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # AI metadata
     ai_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -115,9 +116,7 @@ class TicketComment(UUIDPrimaryKeyMixin, Base):
     ticket_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("tickets.id"), index=True
     )
-    author_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id")
-    )
+    author_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
     content: Mapped[str] = mapped_column(Text)
     is_internal: Mapped[bool] = mapped_column(Boolean, default=False)
     comment_type: Mapped[str] = mapped_column(
@@ -125,7 +124,7 @@ class TicketComment(UUIDPrimaryKeyMixin, Base):
         default="note",
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
 
     ticket: Mapped["Ticket"] = relationship(back_populates="comments")
@@ -148,7 +147,7 @@ class TicketEvent(UUIDPrimaryKeyMixin, Base):
     new_value: Mapped[str | None] = mapped_column(Text, nullable=True)
     metadata_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
 
     ticket: Mapped["Ticket"] = relationship(back_populates="events")

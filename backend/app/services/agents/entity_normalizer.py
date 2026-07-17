@@ -56,16 +56,31 @@ _SYSTEM_REGISTRY: list[SystemEntity] = [
         canonical_name="sixth_sense",
         display_name="Sixth Sense (Naukri)",
         aliases=[
-            "sixth sense", "sixthsense", "sixthsenses", "sixth senses",
-            "6th sense", "6thsense", "sixth-sense", "naukri",
-            "naukri.com", "naukhri", "naukarii", "naukree",
-            "sixth sense portal", "sixth sense login",
-            "ss portal", "naukri portal",
+            "sixth sense",
+            "sixthsense",
+            "sixthsenses",
+            "sixth senses",
+            "6th sense",
+            "6thsense",
+            "sixth-sense",
+            "naukri",
+            "naukri.com",
+            "naukhri",
+            "naukarii",
+            "naukree",
+            "sixth sense portal",
+            "sixth sense login",
+            "ss portal",
+            "naukri portal",
         ],
         category="access/permissions",
         common_issues=[
-            "login-failure", "account-locked", "unhandled-message",
-            "otp-issue", "password-reset", "blocked-account",
+            "login-failure",
+            "account-locked",
+            "unhandled-message",
+            "otp-issue",
+            "password-reset",
+            "blocked-account",
         ],
     ),
     # ── Microsoft Outlook / Email ───────────────────────────────────
@@ -73,14 +88,26 @@ _SYSTEM_REGISTRY: list[SystemEntity] = [
         canonical_name="outlook",
         display_name="Microsoft Outlook",
         aliases=[
-            "outlook", "ms outlook", "microsoft outlook", "outlook365",
-            "outlook 365", "outlook email", "hotmail", "o365 mail",
-            "exchange", "office mail", "outlook web",
+            "outlook",
+            "ms outlook",
+            "microsoft outlook",
+            "outlook365",
+            "outlook 365",
+            "outlook email",
+            "hotmail",
+            "o365 mail",
+            "exchange",
+            "office mail",
+            "outlook web",
         ],
         category="email/outlook",
         common_issues=[
-            "not-receiving-emails", "sending-failure", "outlook-slow",
-            "outlook-crash", "calendar-sync", "sign-in-problem",
+            "not-receiving-emails",
+            "sending-failure",
+            "outlook-slow",
+            "outlook-crash",
+            "calendar-sync",
+            "sign-in-problem",
         ],
     ),
     # ── Zoom ────────────────────────────────────────────────────────
@@ -88,13 +115,22 @@ _SYSTEM_REGISTRY: list[SystemEntity] = [
         canonical_name="zoom",
         display_name="Zoom",
         aliases=[
-            "zoom", "zoom meeting", "zoom call", "zoom app",
-            "zoom video", "zoom client", "zoomm",
+            "zoom",
+            "zoom meeting",
+            "zoom call",
+            "zoom app",
+            "zoom video",
+            "zoom client",
+            "zoomm",
         ],
         category="video-conferencing/zoom",
         common_issues=[
-            "no-audio", "no-video", "cant-join-meeting",
-            "sign-in-issue", "screen-share-issue", "zoom-crash",
+            "no-audio",
+            "no-video",
+            "cant-join-meeting",
+            "sign-in-issue",
+            "screen-share-issue",
+            "zoom-crash",
         ],
     ),
     # ── Microsoft Teams ─────────────────────────────────────────────
@@ -102,8 +138,12 @@ _SYSTEM_REGISTRY: list[SystemEntity] = [
         canonical_name="teams",
         display_name="Microsoft Teams",
         aliases=[
-            "teams", "ms teams", "microsoft teams", "teams app",
-            "teams meeting", "teams call",
+            "teams",
+            "ms teams",
+            "microsoft teams",
+            "teams app",
+            "teams meeting",
+            "teams call",
         ],
         category="video-conferencing/zoom",
         common_issues=["no-audio", "no-video", "cant-join-meeting", "sign-in-issue"],
@@ -113,8 +153,13 @@ _SYSTEM_REGISTRY: list[SystemEntity] = [
         canonical_name="intune",
         display_name="Microsoft Intune",
         aliases=[
-            "intune", "ms intune", "microsoft intune", "company portal",
-            "mdm", "device management", "device compliance",
+            "intune",
+            "ms intune",
+            "microsoft intune",
+            "company portal",
+            "mdm",
+            "device management",
+            "device compliance",
         ],
         category="device-management/intune",
         common_issues=["non-compliant", "enrollment-failure", "sync-issue"],
@@ -124,8 +169,13 @@ _SYSTEM_REGISTRY: list[SystemEntity] = [
         canonical_name="vpn",
         display_name="VPN",
         aliases=[
-            "vpn", "corporate vpn", "cisco vpn", "global protect",
-            "globalprotect", "anyconnect", "pulse secure",
+            "vpn",
+            "corporate vpn",
+            "cisco vpn",
+            "global protect",
+            "globalprotect",
+            "anyconnect",
+            "pulse secure",
         ],
         category="network/connectivity",
         common_issues=["vpn-not-connecting", "vpn-slow", "vpn-disconnecting"],
@@ -143,8 +193,11 @@ _SYSTEM_REGISTRY: list[SystemEntity] = [
         canonical_name="freshservice",
         display_name="FreshService",
         aliases=[
-            "freshservice", "fresh service", "freshdesk",
-            "freshservice portal", "itsm",
+            "freshservice",
+            "fresh service",
+            "freshdesk",
+            "freshservice portal",
+            "itsm",
         ],
         category="software/other",
         common_issues=["login-failure", "app-crash", "ticket-issue"],
@@ -162,9 +215,16 @@ _SYSTEM_REGISTRY: list[SystemEntity] = [
         canonical_name="ruddr",
         display_name="Ruddr",
         aliases=[
-            "ruddr", "rudder", "rudr", "ruddr app", "ruddr portal",
-            "ruddr account", "ruddr timesheet", "ruddr login",
-            "project tracking", "timesheet tool",
+            "ruddr",
+            "rudder",
+            "rudr",
+            "ruddr app",
+            "ruddr portal",
+            "ruddr account",
+            "ruddr timesheet",
+            "ruddr login",
+            "project tracking",
+            "timesheet tool",
         ],
         category="access/permissions",
         common_issues=["ruddr-account-missing", "ruddr-account-locked"],
@@ -174,9 +234,17 @@ _SYSTEM_REGISTRY: list[SystemEntity] = [
         canonical_name="github",
         display_name="GitHub",
         aliases=[
-            "github", "git hub", "github copilot", "copilot", "gh",
-            "github repo", "github access", "aditi github",
-            "git repository", "github organisation", "github org",
+            "github",
+            "git hub",
+            "github copilot",
+            "copilot",
+            "gh",
+            "github repo",
+            "github access",
+            "aditi github",
+            "git repository",
+            "github organisation",
+            "github org",
         ],
         category="access/permissions",
         common_issues=["license-request", "access-denied-app"],
@@ -186,8 +254,12 @@ _SYSTEM_REGISTRY: list[SystemEntity] = [
         canonical_name="microsoft_copilot",
         display_name="Microsoft Copilot",
         aliases=[
-            "microsoft copilot", "m365 copilot", "office copilot",
-            "copilot for microsoft 365", "bing copilot", "copilot ai",
+            "microsoft copilot",
+            "m365 copilot",
+            "office copilot",
+            "copilot for microsoft 365",
+            "bing copilot",
+            "copilot ai",
         ],
         category="access/permissions",
         common_issues=["license-request", "access-denied-app"],
@@ -197,8 +269,12 @@ _SYSTEM_REGISTRY: list[SystemEntity] = [
         canonical_name="linkedin_recruiter",
         display_name="LinkedIn Recruiter",
         aliases=[
-            "linkedin recruiter", "linkedin", "li recruiter",
-            "recruiter lite", "linkedin license", "linkedin access",
+            "linkedin recruiter",
+            "linkedin",
+            "li recruiter",
+            "recruiter lite",
+            "linkedin license",
+            "linkedin access",
         ],
         category="access/permissions",
         common_issues=["license-request", "access-denied-app"],
@@ -208,8 +284,12 @@ _SYSTEM_REGISTRY: list[SystemEntity] = [
         canonical_name="keeper",
         display_name="Keeper",
         aliases=[
-            "keeper", "keeper security", "keeper password",
-            "keeper app", "password manager", "keeper vault",
+            "keeper",
+            "keeper security",
+            "keeper password",
+            "keeper app",
+            "password manager",
+            "keeper vault",
         ],
         category="access/permissions",
         common_issues=["license-request", "access-denied-app"],
@@ -221,9 +301,16 @@ _SYSTEM_REGISTRY: list[SystemEntity] = [
         canonical_name="headset",
         display_name="Headset / Audio Device",
         aliases=[
-            "headset", "headphones", "earphones", "earbuds",
-            "microphone", "mic", "speaker", "audio device",
-            "usb headset", "wireless headset",
+            "headset",
+            "headphones",
+            "earphones",
+            "earbuds",
+            "microphone",
+            "mic",
+            "speaker",
+            "audio device",
+            "usb headset",
+            "wireless headset",
         ],
         category="hardware/audio",
         common_issues=["microphone-not-working", "no-audio-output", "voice-breaks-during-call"],
@@ -280,18 +367,17 @@ def normalize_entity(text: str) -> EntityMatch | None:
             continue  # Skip very short aliases to avoid false positives
         # Word-boundary check: alias must appear as a whole phrase
         pattern = r"(?:^|\s|[^\w])" + re.escape(alias) + r"(?:\s|[^\w]|$)"
-        if re.search(pattern, text_lower):
-            if len(alias) > best_substr_len:
-                best_substr_len = len(alias)
-                best_substr = EntityMatch(
-                    canonical_name=entity.canonical_name,
-                    display_name=entity.display_name,
-                    category=entity.category,
-                    matched_text=alias,
-                    confidence=0.9,
-                    method="alias",
-                    common_issues=entity.common_issues,
-                )
+        if re.search(pattern, text_lower) and len(alias) > best_substr_len:
+            best_substr_len = len(alias)
+            best_substr = EntityMatch(
+                canonical_name=entity.canonical_name,
+                display_name=entity.display_name,
+                category=entity.category,
+                matched_text=alias,
+                confidence=0.9,
+                method="alias",
+                common_issues=entity.common_issues,
+            )
 
     if best_substr:
         return best_substr
@@ -359,11 +445,24 @@ def detect_issue_intent(text: str) -> dict[str, str | bool | None]:
 
     # Login / Access intent
     login_words = [
-        "login", "log in", "log-in", "sign in", "signin", "sign-in",
-        "unable to login", "can't login", "cannot login", "can not login",
-        "unable to log in", "can't log in", "cannot log in",
-        "unable to access", "can't access", "cannot access",
-        "authentication", "credential",
+        "login",
+        "log in",
+        "log-in",
+        "sign in",
+        "signin",
+        "sign-in",
+        "unable to login",
+        "can't login",
+        "cannot login",
+        "can not login",
+        "unable to log in",
+        "can't log in",
+        "cannot log in",
+        "unable to access",
+        "can't access",
+        "cannot access",
+        "authentication",
+        "credential",
     ]
     if any(w in msg for w in login_words):
         result["intent"] = "login"
@@ -371,9 +470,15 @@ def detect_issue_intent(text: str) -> dict[str, str | bool | None]:
 
     # Account locked
     lock_words = [
-        "locked", "blocked", "disabled", "suspended",
-        "account locked", "account blocked", "too many attempts",
-        "incorrect password", "wrong password",
+        "locked",
+        "blocked",
+        "disabled",
+        "suspended",
+        "account locked",
+        "account blocked",
+        "too many attempts",
+        "incorrect password",
+        "wrong password",
     ]
     if any(w in msg for w in lock_words):
         result["is_account_locked"] = True
@@ -392,8 +497,13 @@ def detect_issue_intent(text: str) -> dict[str, str | bool | None]:
 
     # Error message
     error_words = [
-        "error", "error message", "failed", "failure",
-        "exception", "not working", "broken",
+        "error",
+        "error message",
+        "failed",
+        "failure",
+        "exception",
+        "not working",
+        "broken",
     ]
     if any(w in msg for w in error_words):
         result["has_error_message"] = True
@@ -402,15 +512,13 @@ def detect_issue_intent(text: str) -> dict[str, str | bool | None]:
 
     # Performance
     perf_words = ["slow", "hanging", "frozen", "freezing", "taking too long"]
-    if any(w in msg for w in perf_words):
-        if result["intent"] == "other":
-            result["intent"] = "performance"
+    if any(w in msg for w in perf_words) and result["intent"] == "other":
+        result["intent"] = "performance"
 
     # Crash
     crash_words = ["crash", "crashing", "stopped working", "force close"]
-    if any(w in msg for w in crash_words):
-        if result["intent"] == "other":
-            result["intent"] = "crash"
+    if any(w in msg for w in crash_words) and result["intent"] == "other":
+        result["intent"] = "crash"
 
     return result
 

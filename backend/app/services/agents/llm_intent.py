@@ -143,7 +143,7 @@ INTENT TAXONOMY (pick exactly one)
 
 OUTPUT JSON
 {{
-  "intent": "<one of: {', '.join(_INTENT_ENUM)}>",
+  "intent": "<one of: {", ".join(_INTENT_ENUM)}>",
   "confidence": 0.0-1.0,
   "rationale": "<short, ≤ 20 words; cite which rule applied>",
   "slot_hints": {{ "affected_system": "<system or null>", "issue_summary": "<one-line or null>" }}
@@ -185,10 +185,12 @@ def _parse_llm_output(payload: dict) -> _LLMIntentRaw:
 # confidence, the LLM is overruled. These are the bug-class fixes
 # (ITA-000007 NEW_TOPIC, explicit ESCALATE_REQUEST) we proved with tests and
 # refuse to regress.
-_SAFETY_OVERRIDE_INTENTS = frozenset({
-    ConversationIntent.NEW_TOPIC,
-    ConversationIntent.ESCALATE_REQUEST,
-})
+_SAFETY_OVERRIDE_INTENTS = frozenset(
+    {
+        ConversationIntent.NEW_TOPIC,
+        ConversationIntent.ESCALATE_REQUEST,
+    }
+)
 
 # Below this LLM confidence, fall back to keywords entirely.
 _LLM_CONFIDENCE_FLOOR = 0.5
@@ -234,10 +236,7 @@ async def classify_intent_with_llm(
         steps_given=steps_given,
         issue_resolved=issue_resolved,
     )
-    if (
-        keyword_result.intent in _SAFETY_OVERRIDE_INTENTS
-        and keyword_result.confidence >= 0.85
-    ):
+    if keyword_result.intent in _SAFETY_OVERRIDE_INTENTS and keyword_result.confidence >= 0.85:
         return IntentClassification(
             intent=keyword_result.intent,
             confidence=keyword_result.confidence,
@@ -292,13 +291,19 @@ async def classify_intent_with_llm(
     invalid_intent_reason: str | None = None
     if raw.intent is ConversationIntent.NEW_TOPIC and not has_active_issue:
         invalid_intent_reason = "newtopic-without-active-issue"
-    elif raw.intent in (ConversationIntent.CONFIRM, ConversationIntent.DENY) \
-            and not awaiting_confirmation:
+    elif (
+        raw.intent in (ConversationIntent.CONFIRM, ConversationIntent.DENY)
+        and not awaiting_confirmation
+    ):
         invalid_intent_reason = "confirm-or-deny-without-question"
-    elif raw.intent in (
-        ConversationIntent.POSITIVE_FEEDBACK,
-        ConversationIntent.NEGATIVE_FEEDBACK,
-    ) and not steps_given:
+    elif (
+        raw.intent
+        in (
+            ConversationIntent.POSITIVE_FEEDBACK,
+            ConversationIntent.NEGATIVE_FEEDBACK,
+        )
+        and not steps_given
+    ):
         invalid_intent_reason = "feedback-without-steps"
     elif raw.intent is ConversationIntent.GREETING and has_active_issue:
         invalid_intent_reason = "greeting-during-active-issue"
@@ -343,7 +348,8 @@ async def classify_intent_with_llm(
 
 
 def _wrap_keyword_for_audit(
-    keyword_result: IntentClassification, reason: str,
+    keyword_result: IntentClassification,
+    reason: str,
 ) -> IntentClassification:
     """Return the keyword result but tag the audit trail with WHY we fell back."""
     return IntentClassification(

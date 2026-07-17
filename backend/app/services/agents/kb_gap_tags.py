@@ -14,12 +14,12 @@ unit-testable and safe to call from the side-effect-free escalation path.
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 KB_GAP_TAG_VOCAB_VERSION = "1.0"
 
 
-class KbGapTag(str, Enum):
+class KbGapTag(StrEnum):
     """Controlled vocabulary of knowledge-gap reasons at escalation time."""
 
     NO_MATCHING_ARTICLE = "no_matching_article"
@@ -37,8 +37,15 @@ KB_GAP_TAGS: frozenset[str] = frozenset(t.value for t in KbGapTag)
 # Keywords that strongly indicate a policy / access exception rather than a
 # technical fault the KB could plausibly cover.
 _POLICY_KEYWORDS = (
-    "permission", "access denied", "not authorized", "approval",
-    "policy", "exception", "license", "entitlement", "provision",
+    "permission",
+    "access denied",
+    "not authorized",
+    "approval",
+    "policy",
+    "exception",
+    "license",
+    "entitlement",
+    "provision",
 )
 
 

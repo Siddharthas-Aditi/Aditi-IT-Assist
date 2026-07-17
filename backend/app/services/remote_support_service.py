@@ -3,7 +3,7 @@
 import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import structlog
 from sqlalchemy import select
@@ -85,7 +85,9 @@ class MicrosoftRemoteHelpAdapter(RemoteSupportProvider):
         """Create a Remote Help session via Microsoft Graph API (stub)."""
         logger.info(
             "remote_help_create_session",
-            agent_id=agent_id, employee_id=employee_id, session_type=session_type,
+            agent_id=agent_id,
+            employee_id=employee_id,
+            session_type=session_type,
         )
         # Stub: In production, call Microsoft Graph API
         # POST /deviceManagement/remoteAssistancePartners/.../sessions
@@ -188,9 +190,7 @@ class RemoteSupportService:
         )
         return consent
 
-    async def deny_consent(
-        self, session_id: uuid.UUID, employee: User
-    ) -> None:
+    async def deny_consent(self, session_id: uuid.UUID, employee: User) -> None:
         """Employee denies remote assistance consent."""
         session = await self._get_session(session_id)
         if not session or session.employee_id != employee.id:
@@ -224,7 +224,7 @@ class RemoteSupportService:
         )
 
         session.status = "active"
-        session.started_at = datetime.now(timezone.utc)
+        session.started_at = datetime.now(UTC)
         session.provider_session_id = provider_info.provider_session_id
 
         logger.info("remote_session_started", session_id=str(session_id))
@@ -244,7 +244,7 @@ class RemoteSupportService:
             await provider.terminate_session(session.provider_session_id)
 
         session.status = "completed"
-        session.ended_at = datetime.now(timezone.utc)
+        session.ended_at = datetime.now(UTC)
         session.resolution_notes = resolution_notes
 
         logger.info("remote_session_ended", session_id=str(session_id))

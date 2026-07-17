@@ -1,6 +1,6 @@
 """Analytics snapshot model for dashboard metrics."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import DateTime, Float, Integer, String
 from sqlalchemy.dialects.postgresql import JSONB
@@ -44,5 +44,5 @@ class AnalyticsSnapshot(UUIDPrimaryKeyMixin, Base):
     agent_workload: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )

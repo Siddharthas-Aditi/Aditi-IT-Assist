@@ -20,20 +20,18 @@ logger = get_logger(__name__)
 class RetrievalQuality:
     """Assessment of whether KB results match the diagnosed issue."""
 
-    is_relevant: bool          # True if articles are relevant to the issue
-    has_exact_match: bool      # True if exact subtype match found
-    confidence: float          # 0.0–1.0 confidence in relevance
-    mismatch_reason: str       # Why relevance is low (if applicable)
+    is_relevant: bool  # True if articles are relevant to the issue
+    has_exact_match: bool  # True if exact subtype match found
+    confidence: float  # 0.0–1.0 confidence in relevance
+    mismatch_reason: str  # Why relevance is low (if applicable)
     should_try_web_search: bool  # True if should try web search despite KB results
-    matched_subtype_count: int # How many articles matched exact issue_subtype
+    matched_subtype_count: int  # How many articles matched exact issue_subtype
 
 
 class RetrievalQualityAnalyzer:
     """Analyzes whether retrieved KB articles actually help with the diagnosed issue."""
 
-    def __init__(self,
-                 articles: list[dict],
-                 diag_ctx: DiagnosticContext):
+    def __init__(self, articles: list[dict], diag_ctx: DiagnosticContext):
         """
         Args:
             articles: Knowledge articles retrieved from KB
@@ -77,8 +75,7 @@ class RetrievalQualityAnalyzer:
         # cross-domain noise; same-category articles are the best we have.
         category = self.diag_ctx.issue_category or ""
         same_category = [
-            a for a in self.articles
-            if (a.get("category") or "").lower() == category.lower()
+            a for a in self.articles if (a.get("category") or "").lower() == category.lower()
         ]
 
         if not issue_subtype:
@@ -97,6 +94,7 @@ class RetrievalQualityAnalyzer:
         if same_category and issue_subtype:
             # We have articles in the right category, but wrong subtype
             # E.g., VPN article but user has internet connectivity issue
+            covered = ", ".join(set(a.get("subcategory", "unknown") for a in same_category))
             return RetrievalQuality(
                 is_relevant=False,
                 has_exact_match=False,
@@ -104,7 +102,7 @@ class RetrievalQualityAnalyzer:
                 mismatch_reason=(
                     f"Found {len(same_category)} {category} articles "
                     f"but none match subtype '{issue_subtype}' — "
-                    f"articles cover: {', '.join(set(a.get('subcategory', 'unknown') for a in same_category))}"
+                    f"articles cover: {covered}"
                 ),
                 should_try_web_search=True,  # ← KEY: Even though KB returned results, try web
                 matched_subtype_count=0,
@@ -135,10 +133,10 @@ class RetrievalQualityAnalyzer:
         count = 0
         for art in self.articles:
             art_subtype = (
-                art.get("subcategory") or
-                art.get("subtype") or
-                art.get("issue_type") or ""
-            ).replace("_", "-").lower()
+                (art.get("subcategory") or art.get("subtype") or art.get("issue_type") or "")
+                .replace("_", "-")
+                .lower()
+            )
             if not art_subtype:
                 continue
             # Exact match

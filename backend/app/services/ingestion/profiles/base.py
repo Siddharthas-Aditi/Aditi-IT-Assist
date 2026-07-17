@@ -10,10 +10,11 @@ Profiles encode that variability as data, not code.
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass, field
-from typing import Pattern
+from typing import TYPE_CHECKING
 
+if TYPE_CHECKING:
+    from re import Pattern
 
 # ── Section label mappings ────────────────────────────────────────────────────
 
@@ -24,9 +25,11 @@ SectionMarkers = dict[str, list[str]]
 
 # ── Confidence weights (per field) ────────────────────────────────────────────
 
+
 @dataclass
 class ConfidenceWeights:
     """How much each field contributes to the composite confidence score."""
+
     title: float = 0.25
     category: float = 0.15
     short_summary: float = 0.05
@@ -39,35 +42,45 @@ class ConfidenceWeights:
 
     def total(self) -> float:
         return (
-            self.title + self.category + self.short_summary
-            + self.symptoms + self.troubleshooting_steps
-            + self.resolution_steps + self.escalation_criteria
-            + self.tags + self.product_or_system
+            self.title
+            + self.category
+            + self.short_summary
+            + self.symptoms
+            + self.troubleshooting_steps
+            + self.resolution_steps
+            + self.escalation_criteria
+            + self.tags
+            + self.product_or_system
         )
 
 
 # ── Review thresholds ─────────────────────────────────────────────────────────
 
+
 @dataclass
 class ReviewThresholds:
     """Composite confidence thresholds for review routing."""
-    high: float = 0.75     # ≥ high → save directly as candidate
-    medium: float = 0.50   # ≥ medium → review recommended
-    low: float = 0.30      # ≥ low → review required
+
+    high: float = 0.75  # ≥ high → save directly as candidate
+    medium: float = 0.50  # ≥ medium → review recommended
+    low: float = 0.30  # ≥ low → review required
     # < low → failed extraction; keep job for retry
 
 
 # ── Detection criteria ────────────────────────────────────────────────────────
 
+
 @dataclass
 class DetectionCriteria:
     """Heuristics used to auto-select this profile for an uploaded document."""
+
     keyword_signals: list[str] = field(default_factory=list)
     filename_patterns: list[Pattern] = field(default_factory=list)
     min_keyword_matches: int = 1
 
 
 # ── The parser profile ────────────────────────────────────────────────────────
+
 
 @dataclass
 class ParserProfile:
@@ -86,6 +99,7 @@ class ParserProfile:
     - ``thresholds`` — review routing thresholds
     - ``detection`` — how to auto-detect this profile
     """
+
     name: str
     version: str
     description: str = ""

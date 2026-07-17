@@ -16,7 +16,6 @@ from app.services.ingestion.profiles.it_support import IT_SUPPORT_PROFILE
 from app.services.ingestion.schema import ConfidenceLevel, ExtractionMethod
 from app.services.ingestion.segmenter import segment_document
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Test fixtures — raw document texts
 # ─────────────────────────────────────────────────────────────────────────────
@@ -140,14 +139,14 @@ contact IT helpdesk and reference this article.
 # Helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def _run(raw_text: str):
     """Run normalize → segment → extract_fields and return list of candidates."""
     norm_doc = normalize_document(raw_text.strip())
     segments = segment_document(norm_doc, IT_SUPPORT_PROFILE)
     assert segments, "Segmenter produced 0 segments"
     candidates = [
-        extract_fields(seg, IT_SUPPORT_PROFILE, candidate_index=i)
-        for i, seg in enumerate(segments)
+        extract_fields(seg, IT_SUPPORT_PROFILE, candidate_index=i) for i, seg in enumerate(segments)
     ]
     return candidates
 
@@ -155,6 +154,7 @@ def _run(raw_text: str):
 # ─────────────────────────────────────────────────────────────────────────────
 # Fixture: labeled headings (ideal format)
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TestHeadingLabeledFormat:
     def test_segment_count(self):
@@ -191,12 +191,15 @@ class TestHeadingLabeledFormat:
     def test_category_email(self):
         c = _run(FIXTURE_HEADING_LABELED)[0]
         assert c.category.is_present
-        assert "email" in str(c.category.value).lower() or "outlook" in str(c.category.value).lower()
+        assert (
+            "email" in str(c.category.value).lower() or "outlook" in str(c.category.value).lower()
+        )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Fixture: numbered list only (no explicit headings or labels)
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TestNumberedOnlyFormat:
     def test_segment_count(self):
@@ -211,9 +214,7 @@ class TestNumberedOnlyFormat:
     def test_steps_extracted(self):
         c = _run(FIXTURE_NUMBERED_ONLY)[0]
         # Resolution or troubleshooting should capture the numbered list
-        has_steps = (
-            c.resolution_steps.is_present or c.troubleshooting_steps.is_present
-        )
+        has_steps = c.resolution_steps.is_present or c.troubleshooting_steps.is_present
         assert has_steps
 
     def test_category_zoom(self):
@@ -230,6 +231,7 @@ class TestNumberedOnlyFormat:
 # Fixture: bullets only, no headings or labels
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestBulletsNoHeadingsFormat:
     def test_produces_candidate(self):
         candidates = _run(FIXTURE_BULLETS_NO_HEADINGS)
@@ -244,12 +246,15 @@ class TestBulletsNoHeadingsFormat:
     def test_category_intune(self):
         c = _run(FIXTURE_BULLETS_NO_HEADINGS)[0]
         assert c.category.is_present
-        assert "intune" in str(c.category.value).lower() or "device" in str(c.category.value).lower()
+        assert (
+            "intune" in str(c.category.value).lower() or "device" in str(c.category.value).lower()
+        )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Fixture: multi-topic file
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TestMultiTopicFile:
     def test_segment_count(self):
@@ -284,6 +289,7 @@ class TestMultiTopicFile:
 # Fixture: "Label:" colon format (different section labels)
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestLabelColonFormat:
     def test_title_from_label(self):
         c = _run(FIXTURE_LABEL_COLON_FORMAT)[0]
@@ -311,6 +317,7 @@ class TestLabelColonFormat:
 # Fixture: incomplete / minimal document
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestIncompleteMinimalDocument:
     def test_produces_candidate(self):
         candidates = _run(FIXTURE_INCOMPLETE_MINIMAL)
@@ -324,6 +331,7 @@ class TestIncompleteMinimalDocument:
     def test_low_confidence(self):
         """Incomplete docs should have lower overall extraction confidence."""
         from app.services.ingestion.confidence import score_candidate
+
         c = _run(FIXTURE_INCOMPLETE_MINIMAL)[0]
         c = score_candidate(c, IT_SUPPORT_PROFILE)
         # Must not falsely claim HIGH confidence when data is sparse
@@ -331,6 +339,7 @@ class TestIncompleteMinimalDocument:
 
     def test_review_required_on_low_confidence(self):
         from app.services.ingestion.confidence import score_candidate
+
         c = _run(FIXTURE_INCOMPLETE_MINIMAL)[0]
         c = score_candidate(c, IT_SUPPORT_PROFILE)
         if c.extraction_confidence < 0.50:
@@ -340,6 +349,7 @@ class TestIncompleteMinimalDocument:
 # ─────────────────────────────────────────────────────────────────────────────
 # Fixture: ALL-CAPS headings
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TestAllCapsHeadings:
     def test_title_extracted(self):
@@ -362,10 +372,12 @@ class TestAllCapsHeadings:
 # Confidence scoring integration tests
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestConfidenceScoring:
     def test_complete_doc_high_confidence(self):
         """A well-structured doc should score HIGH."""
         from app.services.ingestion.confidence import score_candidate
+
         candidates = _run(FIXTURE_HEADING_LABELED)
         c = score_candidate(candidates[0], IT_SUPPORT_PROFILE)
         assert c.extraction_confidence > 0.5, (
@@ -374,24 +386,28 @@ class TestConfidenceScoring:
 
     def test_label_format_respectable_confidence(self):
         from app.services.ingestion.confidence import score_candidate
+
         candidates = _run(FIXTURE_LABEL_COLON_FORMAT)
         c = score_candidate(candidates[0], IT_SUPPORT_PROFILE)
         assert c.extraction_confidence >= 0.40
 
     def test_confidence_level_is_set(self):
         from app.services.ingestion.confidence import score_candidate
+
         candidates = _run(FIXTURE_HEADING_LABELED)
         c = score_candidate(candidates[0], IT_SUPPORT_PROFILE)
         assert c.confidence_level in [lvl.value for lvl in ConfidenceLevel]
 
     def test_parser_warnings_are_list(self):
         from app.services.ingestion.confidence import score_candidate
+
         candidates = _run(FIXTURE_INCOMPLETE_MINIMAL)
         c = score_candidate(candidates[0], IT_SUPPORT_PROFILE)
         assert isinstance(c.parser_warnings, list)
 
     def test_review_required_for_low_score(self):
         from app.services.ingestion.confidence import score_candidate
+
         candidates = _run(FIXTURE_INCOMPLETE_MINIMAL)
         c = score_candidate(candidates[0], IT_SUPPORT_PROFILE)
         if c.extraction_confidence < 0.50:
@@ -399,6 +415,7 @@ class TestConfidenceScoring:
 
     def test_review_not_required_for_high_score(self):
         from app.services.ingestion.confidence import score_candidate
+
         candidates = _run(FIXTURE_HEADING_LABELED)
         c = score_candidate(candidates[0], IT_SUPPORT_PROFILE)
         if c.extraction_confidence >= 0.75:

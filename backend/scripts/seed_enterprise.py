@@ -6,7 +6,7 @@ Run: uv run python -m scripts.seed_enterprise
 
 import asyncio
 import uuid
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,23 +14,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import async_session_factory
 from app.core.permissions import (
     PERMISSION_REGISTRY,
-    ROLE_PERMISSIONS as CANONICAL_ROLE_PERMISSIONS,
     UserRole,
     get_effective_permissions,
 )
 from app.core.security import hash_password
-from app.models.auth import Group, Permission, Role, RolePermission, User, UserRoleAssignment
-from app.models.ticket import Ticket, TicketComment, TicketEvent
-from app.models.support import SupportSession, Message
-
+from app.models.auth import Permission, Role, RolePermission, User, UserRoleAssignment
+from app.models.ticket import Ticket
 
 # ─────────────────────────────────────────────────────────────────────
 # Permission Definitions — sourced from core/permissions.py registry
 # ─────────────────────────────────────────────────────────────────────
 
 PERMISSIONS: list[tuple[str, str, str, str]] = [
-    (p.code, p.name, p.resource.value, p.action.value)
-    for p in PERMISSION_REGISTRY
+    (p.code, p.name, p.resource.value, p.action.value) for p in PERMISSION_REGISTRY
 ]
 
 # ─────────────────────────────────────────────────────────────────────
@@ -38,8 +34,7 @@ PERMISSIONS: list[tuple[str, str, str, str]] = [
 # ─────────────────────────────────────────────────────────────────────
 
 ROLE_PERMISSIONS: dict[str, list[str]] = {
-    role.value: sorted(get_effective_permissions(role))
-    for role in UserRole
+    role.value: sorted(get_effective_permissions(role)) for role in UserRole
 }
 
 # ─────────────────────────────────────────────────────────────────────
@@ -143,8 +138,11 @@ async def seed_roles(db: AsyncSession, perm_ids: dict[str, uuid.UUID]) -> dict[s
         role = existing.scalar_one_or_none()
         if not role:
             role = Role(
-                name=name, display_name=display_name,
-                description=description, is_system=True, priority=priority,
+                name=name,
+                display_name=display_name,
+                description=description,
+                is_system=True,
+                priority=priority,
             )
             db.add(role)
             await db.flush()
@@ -203,13 +201,16 @@ async def seed_sample_tickets(db: AsyncSession, users: dict[str, User]) -> None:
     if not alice or not bob or not charlie:
         return
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     sample_tickets = [
         {
             "ticket_number": "ITA-000001",
             "title": "Outlook not syncing emails on laptop",
-            "description": "My Outlook desktop app stopped syncing new emails since this morning. Web version works fine.",
+            "description": (
+                "My Outlook desktop app stopped syncing new emails since this morning. "
+                "Web version works fine."
+            ),
             "requester_id": alice.id,
             "assigned_to": charlie.id,
             "priority": "high",
@@ -223,7 +224,10 @@ async def seed_sample_tickets(db: AsyncSession, users: dict[str, User]) -> None:
         {
             "ticket_number": "ITA-000002",
             "title": "VPN connection drops frequently",
-            "description": "VPN disconnects every 15-20 minutes when working from home. Using GlobalProtect client.",
+            "description": (
+                "VPN disconnects every 15-20 minutes when working from home. "
+                "Using GlobalProtect client."
+            ),
             "requester_id": bob.id,
             "priority": "medium",
             "status": "new",
@@ -235,7 +239,9 @@ async def seed_sample_tickets(db: AsyncSession, users: dict[str, User]) -> None:
         {
             "ticket_number": "ITA-000003",
             "title": "Cannot access SharePoint site",
-            "description": "Getting 'Access Denied' when trying to access the Engineering team SharePoint.",
+            "description": (
+                "Getting 'Access Denied' when trying to access the Engineering team SharePoint."
+            ),
             "requester_id": alice.id,
             "assigned_to": charlie.id,
             "priority": "medium",
@@ -264,7 +270,9 @@ async def seed_sample_tickets(db: AsyncSession, users: dict[str, User]) -> None:
         {
             "ticket_number": "ITA-000005",
             "title": "Critical: Production server unresponsive",
-            "description": "Production app server not responding to health checks. All services affected.",
+            "description": (
+                "Production app server not responding to health checks. All services affected."
+            ),
             "requester_id": alice.id,
             "priority": "critical",
             "status": "escalated",

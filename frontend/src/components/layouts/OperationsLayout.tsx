@@ -1,6 +1,7 @@
 /** IT Operations layout for agents, leads, admins — brand-consistent shell. */
 
-import { Outlet, NavLink } from 'react-router-dom';
+import { Outlet, NavLink, useLocation } from 'react-router-dom';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import {
   Inbox,
   ClipboardList,
@@ -10,6 +11,7 @@ import {
   Headset,
   ArrowLeft,
   ShieldCheck,
+  Cpu,
 } from 'lucide-react';
 
 import { useAuthStore } from '@/stores/auth-store';
@@ -18,10 +20,12 @@ const NAV = [
   { to: '/operations/queue', label: 'Live Queue', icon: Inbox },
   { to: '/operations/assigned', label: 'My Assigned', icon: ClipboardList },
   { to: '/operations/remote-assist', label: 'Remote Assist', icon: Monitor },
+  { to: '/operations/device-actions', label: 'Device Actions', icon: Cpu },
   { to: '/operations/approvals', label: 'Approvals', icon: ShieldCheck },
 ];
 
 export function OperationsLayout() {
+  const location = useLocation();
   const { user, logout, isAdmin } = useAuthStore();
 
   return (
@@ -101,7 +105,9 @@ export function OperationsLayout() {
 
       {/* Main content */}
       <main className="flex flex-1 flex-col overflow-auto">
-        <Outlet />
+        <ErrorBoundary key={location.pathname} boundaryName="operations">
+          <Outlet />
+        </ErrorBoundary>
       </main>
     </div>
   );

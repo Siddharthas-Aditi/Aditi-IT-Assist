@@ -20,8 +20,9 @@ from app.services.agents.tasks.store import InMemoryAgentTaskStore
 
 def _runner(handlers=None, *, concurrency=2):
     store = InMemoryAgentTaskStore()
-    return AgentTaskRunner(store, handlers or {}, concurrency=concurrency,
-                           audit_sink=lambda e: None), store
+    return AgentTaskRunner(
+        store, handlers or {}, concurrency=concurrency, audit_sink=lambda e: None
+    ), store
 
 
 class TestStore:

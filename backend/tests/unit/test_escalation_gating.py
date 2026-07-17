@@ -19,12 +19,17 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.services.agents import chat_service as cs_mod
 from app.services.agents.chat_service import ChatService
 from app.services.agents.diagnostic_state import DiagnosticContext
 from app.services.agents.escalation_policy import (
     GATHER_PROBLEM_PROMPT,
     handoff_context_sufficient,
+)
+from app.services.agents.session_store import (
+    ChatSession,
+    InMemorySessionStore,
+    get_session_store,
+    set_session_store,
 )
 from app.services.specialist_chat_service import (
     clear_typing,
@@ -52,8 +57,7 @@ def _requester() -> MagicMock:
 
 
 def _clear() -> None:
-    cs_mod._sessions.clear()
-    cs_mod._session_tickets.clear()
+    set_session_store(InMemorySessionStore())
 
 
 # ── Pure policy ────────────────────────────────────────────────────────────
@@ -123,7 +127,9 @@ class TestRequestLiveAgentGate:
         _clear()
         svc = _ticket_service()
         chat = ChatService(svc)
-        cs_mod._sessions["sess-empty"] = {"diagnostic_context": {}}
+        await get_session_store().save(
+            "sess-empty", ChatSession(user_id=None, state={"diagnostic_context": {}})
+        )
 
         message, ref = await chat.request_live_agent("sess-empty", _requester())
 
@@ -136,9 +142,13 @@ class TestRequestLiveAgentGate:
         _clear()
         svc = _ticket_service()
         chat = ChatService(svc)
-        cs_mod._sessions["sess-offered"] = {
-            "diagnostic_context": {"escalation_offered_in_session": True},
-        }
+        await get_session_store().save(
+            "sess-offered",
+            ChatSession(
+                user_id=None,
+                state={"diagnostic_context": {"escalation_offered_in_session": True}},
+            ),
+        )
 
         message, ref = await chat.request_live_agent("sess-offered", _requester())
 

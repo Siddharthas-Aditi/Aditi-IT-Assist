@@ -7,10 +7,7 @@ These tests validate that:
 4. Entity + intent combine to produce correct classification
 """
 
-import pytest
-
 from app.services.agents.entity_normalizer import (
-    EntityMatch,
     detect_issue_intent,
     normalize_entity,
 )
@@ -110,8 +107,11 @@ class TestIntentDetection:
     def test_login_variants(self):
         """All login-related phrasings should be detected."""
         for msg in [
-            "can't login", "cannot log in", "unable to sign in",
-            "sign-in failed", "unable to access",
+            "can't login",
+            "cannot log in",
+            "unable to sign in",
+            "sign-in failed",
+            "unable to access",
         ]:
             result = detect_issue_intent(msg)
             assert result["is_login_issue"] is True, f"Failed for: {msg}"

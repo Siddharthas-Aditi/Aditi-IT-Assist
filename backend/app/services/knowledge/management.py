@@ -15,6 +15,7 @@ permission for a transition using the actor's resolved permission set.
 
 from __future__ import annotations
 
+import contextlib
 import re
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -260,10 +261,8 @@ class KnowledgeManagementService:
             # Allow the caller to assign an ownership group inline during the
             # publish transition so the admin doesn't have to navigate away.
             if ownership_group_id and not article.ownership_group_id:
-                try:
+                with contextlib.suppress(ValueError):
                     article.ownership_group_id = uuid.UUID(ownership_group_id)
-                except ValueError:
-                    pass
             issues = lifecycle.validate_for_publish(article_to_dict(article))
             if issues:
                 raise KnowledgeManagementError(
@@ -474,8 +473,8 @@ class KnowledgeManagementService:
         return detect_staleness(article_to_dict(article))
 
     async def create_from_template(
-        self, actor: "User", template_key: str, overrides: dict
-    ) -> "KnowledgeArticle":
+        self, actor: User, template_key: str, overrides: dict
+    ) -> KnowledgeArticle:
         """Create a draft article pre-filled from a template.
 
         ``overrides`` may supply title, category, subcategory, ownership_group_id,
@@ -504,9 +503,7 @@ class KnowledgeManagementService:
 
         for step_field in ("troubleshooting_steps", "resolution_steps", "validation_steps"):
             raw_steps = merged.get(step_field) or []
-            merged[step_field] = [
-                StepSchema(**s) if isinstance(s, dict) else s for s in raw_steps
-            ]
+            merged[step_field] = [StepSchema(**s) if isinstance(s, dict) else s for s in raw_steps]
 
         data = ArticleCreate(**merged)
         return await self.create_draft(actor, data)

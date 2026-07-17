@@ -76,19 +76,58 @@ def search_articles(query: str, limit: int = 5) -> list[dict]:
     """
     knowledge = load_all_knowledge()
 
-    _STOPWORDS = frozenset(
-        {"i", "a", "an", "the", "is", "am", "are", "was", "were", "be",
-         "been", "being", "have", "has", "had", "do", "does", "did", "will",
-         "would", "could", "should", "may", "might", "shall", "can", "need",
-         "to", "of", "in", "on", "at", "by", "for", "with", "or", "and",
-         "but", "not", "my", "me", "we", "you", "it", "its"}
+    stopwords = frozenset(
+        {
+            "i",
+            "a",
+            "an",
+            "the",
+            "is",
+            "am",
+            "are",
+            "was",
+            "were",
+            "be",
+            "been",
+            "being",
+            "have",
+            "has",
+            "had",
+            "do",
+            "does",
+            "did",
+            "will",
+            "would",
+            "could",
+            "should",
+            "may",
+            "might",
+            "shall",
+            "can",
+            "need",
+            "to",
+            "of",
+            "in",
+            "on",
+            "at",
+            "by",
+            "for",
+            "with",
+            "or",
+            "and",
+            "but",
+            "not",
+            "my",
+            "me",
+            "we",
+            "you",
+            "it",
+            "its",
+        }
     )
 
     # Split query into meaningful content words (>2 chars, not stop-words)
-    query_words = [
-        w for w in query.lower().split()
-        if len(w) > 2 and w not in _STOPWORDS
-    ]
+    query_words = [w for w in query.lower().split() if len(w) > 2 and w not in stopwords]
     # Fall back to all non-trivially-short words if nothing survives
     if not query_words:
         query_words = [w for w in query.lower().split() if len(w) > 1]

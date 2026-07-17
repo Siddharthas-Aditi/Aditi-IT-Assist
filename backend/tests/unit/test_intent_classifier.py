@@ -18,22 +18,26 @@ from app.services.agents.intent_classifier import (
 
 # ── NEW_TOPIC ──────────────────────────────────────────────────────────────
 
+
 class TestNewTopic:
     """The bug-class that motivated the classifier."""
 
-    @pytest.mark.parametrize("msg", [
-        "I have another problem",
-        "I have an another problem",  # the exact phrase from the bug report
-        "I've got another issue",
-        "I have a different question",
-        "different problem now",
-        "new issue",
-        "one more thing",
-        "something else - my VPN isn't working",
-        "btw I have another issue",
-        "unrelated, but my camera is dead",
-        "Switch topic - I can't join the meeting",
-    ])
+    @pytest.mark.parametrize(
+        "msg",
+        [
+            "I have another problem",
+            "I have an another problem",  # the exact phrase from the bug report
+            "I've got another issue",
+            "I have a different question",
+            "different problem now",
+            "new issue",
+            "one more thing",
+            "something else - my VPN isn't working",
+            "btw I have another issue",
+            "unrelated, but my camera is dead",
+            "Switch topic - I can't join the meeting",
+        ],
+    )
     def test_explicit_new_topic_phrases(self, msg: str) -> None:
         result = classify_intent(msg, has_active_issue=True, steps_given=True)
         assert result.intent is ConversationIntent.NEW_TOPIC, (
@@ -72,24 +76,27 @@ class TestNewTopic:
 
 # ── ESCALATE_REQUEST ───────────────────────────────────────────────────────
 
+
 class TestEscalate:
-    @pytest.mark.parametrize("msg", [
-        "I want to talk to a human",
-        "Can you connect me with a specialist?",
-        "please escalate this",
-        "create a ticket for me",
-        "I need a real person",
-        "raise a ticket",
-        "speak to someone",
-        "connect with an agent",
-    ])
+    @pytest.mark.parametrize(
+        "msg",
+        [
+            "I want to talk to a human",
+            "Can you connect me with a specialist?",
+            "please escalate this",
+            "create a ticket for me",
+            "I need a real person",
+            "raise a ticket",
+            "speak to someone",
+            "connect with an agent",
+        ],
+    )
     def test_explicit_escalate(self, msg: str) -> None:
         assert classify_intent(msg).intent is ConversationIntent.ESCALATE_REQUEST
 
     def test_whole_word_agent_matches(self) -> None:
         assert (
-            classify_intent("please give me an agent").intent
-            is ConversationIntent.ESCALATE_REQUEST
+            classify_intent("please give me an agent").intent is ConversationIntent.ESCALATE_REQUEST
         )
 
     def test_another_does_not_match_agent(self) -> None:
@@ -116,6 +123,7 @@ class TestEscalate:
 
 # ── CONFIRM / DENY ─────────────────────────────────────────────────────────
 
+
 class TestConfirmDeny:
     def test_yes_during_confirmation_is_confirm(self) -> None:
         result = classify_intent("yes", awaiting_confirmation=True)
@@ -127,10 +135,7 @@ class TestConfirmDeny:
         assert result.intent is ConversationIntent.CONTINUE
 
     def test_no_during_confirmation_is_deny(self) -> None:
-        assert (
-            classify_intent("no", awaiting_confirmation=True).intent
-            is ConversationIntent.DENY
-        )
+        assert classify_intent("no", awaiting_confirmation=True).intent is ConversationIntent.DENY
 
     def test_thats_right(self) -> None:
         assert (
@@ -153,11 +158,10 @@ class TestConfirmDeny:
 
 # ── FEEDBACK ────────────────────────────────────────────────────────────────
 
+
 class TestFeedback:
     def test_didnt_work_is_negative(self) -> None:
-        result = classify_intent(
-            "that didn't work", has_active_issue=True, steps_given=True
-        )
+        result = classify_intent("that didn't work", has_active_issue=True, steps_given=True)
         assert result.intent is ConversationIntent.NEGATIVE_FEEDBACK
 
     def test_it_worked_is_positive(self) -> None:
@@ -166,9 +170,7 @@ class TestFeedback:
 
     def test_not_resolved_is_not_positive(self) -> None:
         """Negation must demote a positive phrase."""
-        result = classify_intent(
-            "still not resolved", has_active_issue=True, steps_given=True
-        )
+        result = classify_intent("still not resolved", has_active_issue=True, steps_given=True)
         assert result.intent is ConversationIntent.NEGATIVE_FEEDBACK
 
     def test_positive_requires_steps_given(self) -> None:
@@ -179,6 +181,7 @@ class TestFeedback:
 
 
 # ── GREETING / GRATITUDE / SMALL TALK ─────────────────────────────────────
+
 
 class TestSocial:
     def test_hello_on_fresh_session(self) -> None:
@@ -191,9 +194,7 @@ class TestSocial:
 
     def test_thanks_pure(self) -> None:
         assert classify_intent("thanks!").intent is ConversationIntent.GRATITUDE
-        assert (
-            classify_intent("thank you so much").intent is ConversationIntent.GRATITUDE
-        )
+        assert classify_intent("thank you so much").intent is ConversationIntent.GRATITUDE
 
     def test_how_are_you(self) -> None:
         assert classify_intent("how are you").intent is ConversationIntent.SMALL_TALK
@@ -201,14 +202,18 @@ class TestSocial:
 
 # ── REPEAT / SIMPLIFY ─────────────────────────────────────────────────────
 
+
 class TestSimplify:
-    @pytest.mark.parametrize("msg", [
-        "can you explain again?",
-        "I'm confused",
-        "in plain English please",
-        "break it down step by step",
-        "I don't follow",
-    ])
+    @pytest.mark.parametrize(
+        "msg",
+        [
+            "can you explain again?",
+            "I'm confused",
+            "in plain English please",
+            "break it down step by step",
+            "I don't follow",
+        ],
+    )
     def test_simplify_phrases(self, msg: str) -> None:
         assert (
             classify_intent(msg, has_active_issue=True, steps_given=True).intent
@@ -217,6 +222,7 @@ class TestSimplify:
 
 
 # ── DEFAULT / EDGE CASES ──────────────────────────────────────────────────
+
 
 class TestDefaults:
     def test_empty_message(self) -> None:
@@ -238,6 +244,7 @@ class TestDefaults:
 
 
 # ── PRIORITY RESOLUTION ───────────────────────────────────────────────────
+
 
 class TestPriority:
     def test_new_topic_beats_negative_feedback(self) -> None:

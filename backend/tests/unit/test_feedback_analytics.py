@@ -9,7 +9,7 @@ Tests cover:
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -78,8 +78,8 @@ class TestFeedbackAnalyticsService:
         ]
         service = self._make_service(rows)
         summary = await service.get_summary(
-            from_dt=datetime(2024, 1, 1, tzinfo=timezone.utc),
-            to_dt=datetime(2024, 12, 31, tzinfo=timezone.utc),
+            from_dt=datetime(2024, 1, 1, tzinfo=UTC),
+            to_dt=datetime(2024, 12, 31, tzinfo=UTC),
         )
         # 2 True out of 3 with non-None values
         assert summary.helpful_rate == pytest.approx(2 / 3, abs=0.001)
@@ -93,8 +93,8 @@ class TestFeedbackAnalyticsService:
         ]
         service = self._make_service(rows)
         summary = await service.get_summary(
-            from_dt=datetime(2024, 1, 1, tzinfo=timezone.utc),
-            to_dt=datetime(2024, 12, 31, tzinfo=timezone.utc),
+            from_dt=datetime(2024, 1, 1, tzinfo=UTC),
+            to_dt=datetime(2024, 12, 31, tzinfo=UTC),
         )
         assert summary.csat_avg == pytest.approx(4.0)
 
@@ -102,8 +102,8 @@ class TestFeedbackAnalyticsService:
     async def test_empty_dataset_returns_none_rates(self):
         service = self._make_service([])
         summary = await service.get_summary(
-            from_dt=datetime(2024, 1, 1, tzinfo=timezone.utc),
-            to_dt=datetime(2024, 12, 31, tzinfo=timezone.utc),
+            from_dt=datetime(2024, 1, 1, tzinfo=UTC),
+            to_dt=datetime(2024, 12, 31, tzinfo=UTC),
         )
         assert summary.helpful_rate is None
         assert summary.csat_avg is None
@@ -119,8 +119,8 @@ class TestFeedbackAnalyticsService:
         ]
         service = self._make_service(rows)
         summary = await service.get_summary(
-            from_dt=datetime(2024, 1, 1, tzinfo=timezone.utc),
-            to_dt=datetime(2024, 12, 31, tzinfo=timezone.utc),
+            from_dt=datetime(2024, 1, 1, tzinfo=UTC),
+            to_dt=datetime(2024, 12, 31, tzinfo=UTC),
         )
         assert summary.ai_only_count == 2
         assert summary.live_agent_only_count == 1
@@ -175,8 +175,8 @@ class TestFeedbackAnalyticsService:
 
         summary = await service.get_agent_summary(
             agent_id,
-            from_dt=datetime(2024, 1, 1, tzinfo=timezone.utc),
-            to_dt=datetime(2024, 12, 31, tzinfo=timezone.utc),
+            from_dt=datetime(2024, 1, 1, tzinfo=UTC),
+            to_dt=datetime(2024, 12, 31, tzinfo=UTC),
         )
         assert summary.total_sessions == 2
         assert summary.csat_avg == pytest.approx(3.0)

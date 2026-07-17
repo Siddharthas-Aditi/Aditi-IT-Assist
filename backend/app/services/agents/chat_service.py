@@ -1,6 +1,7 @@
 """Chat service — orchestrates the support conversation flow."""
 
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from langchain_core.messages import AIMessage, HumanMessage
@@ -24,21 +25,24 @@ from app.services.agents.escalation_policy import (
 )
 from app.services.agents.intent_classifier import ConversationIntent
 from app.services.agents.llm_intent import classify_intent_with_llm
+from app.services.agents.session_store import ChatSession, get_session_store
 from app.services.llm_service import get_llm_service
 from app.services.ticket_service import TicketService
 
+if TYPE_CHECKING:
+    from app.schemas.chat import WaitingStatusResponse
+
 logger = get_logger(__name__)
 
-# In-memory session store (dev/single-server; production → Redis or DB)
-_sessions: dict[str, dict] = {}
 
-# Idempotency map: session_id → created ticket reference (dict form of TicketRef).
-# Ensures multi-turn escalation / repeated "Connect" clicks reuse one ticket
-# instead of spawning duplicates. Production: persist alongside the session.
-_session_tickets: dict[str, dict] = {}
+class SessionOwnershipError(PermissionError):
+    """Raised when a caller references a chat session they do not own (IDOR)."""
 
-# Track when each session started waiting for a specialist (for timeout logic).
-_waiting_since: dict[str, datetime] = {}
+
+# Session state, the created-ticket idempotency record, and the waiting-start
+# timestamp all live in the SessionStore now (see session_store.py) — bound to
+# the owning user, bounded/TTL'd, and Redis-durable when configured. The old
+# process-local dicts were an IDOR + memory-leak + multi-worker liability.
 
 # After this many seconds of waiting without a specialist joining, we surface
 # a fallback message offering async ticket/email resolution. Bound from the
@@ -63,6 +67,30 @@ class ChatService:
         # Optional so workflow-only/unit contexts can run without a DB; ticket
         # creation simply degrades to "offer only" when no ticket_service.
         self.ticket_service = ticket_service
+        self._store = get_session_store()
+
+    async def _load_owned(self, session_id: str, user_id: str | None) -> ChatSession | None:
+        """Load a session, enforcing ownership.
+
+        Returns None when the session doesn't exist yet. Raises
+        :class:`SessionOwnershipError` when it exists but belongs to a
+        different user — this both prevents reading another user's
+        conversation (disclosure) and prevents clobbering it (a fresh turn
+        under the same id). uuid4 session ids make collisions astronomically
+        unlikely; this closes the deliberate-guess (IDOR) path.
+        """
+        session = await self._store.load(session_id)
+        if session is None:
+            return None
+        if user_id and session.user_id and session.user_id != user_id:
+            logger.warning(
+                "chat_session_ownership_denied",
+                session_id=session_id,
+                owner=session.user_id,
+                requester=user_id,
+            )
+            raise SessionOwnershipError("Session does not belong to the requesting user")
+        return session
 
     async def process_message(
         self,
@@ -93,14 +121,29 @@ class ChatService:
         )
 
         try:
+            session = await self._load_owned(session_id, user_id)
+            if session is None:
+                session = ChatSession(user_id=user_id, state={})
             result = await self._invoke_workflow(
-                session_id, user_message, user_id,
-                user_name=user_name, user_email=user_email,
+                session_id,
+                session,
+                user_message,
+                user_id,
+                user_name=user_name,
+                user_email=user_email,
             )
-            ticket_ref = await self._handle_ticketing(session_id, result, requester)
+            ticket_ref = await self._handle_ticketing(session, result, requester)
+            # Persist the whole envelope (state + ticket idempotency) once the
+            # turn succeeded — never mid-turn (a failed ainvoke must not leave a
+            # half-updated session behind for the next turn).
+            session.state = result
+            await self._store.save(session_id, session)
             return self._format_response(
                 session_id, result, ticket_ref=ticket_ref, include_debug=include_debug
             )
+        except SessionOwnershipError:
+            # Don't disclose that the session exists — same generic error.
+            return self._error_response(session_id)
         except Exception as e:
             logger.error("process_message_error", error=str(e), session_id=session_id)
             return self._error_response(session_id)
@@ -108,6 +151,7 @@ class ChatService:
     async def _invoke_workflow(
         self,
         session_id: str,
+        session: ChatSession,
         user_message: str,
         user_id: str,
         *,
@@ -117,13 +161,19 @@ class ChatService:
         """Invoke the LangGraph workflow with session continuity.
 
         If the session already exists, resumes with accumulated messages
-        and state. Otherwise, creates a fresh session.
+        and state. Otherwise, creates a fresh session. Does NOT persist —
+        the caller saves the envelope after a successful turn.
         """
         from app.workflows.graph import build_support_workflow
 
         # Resume existing session or create new one
-        if session_id in _sessions:
-            state = _sessions[session_id]
+        if session.state:
+            # Work on a COPY of the stored state: the caller only persists after
+            # a successful ainvoke. Mutating the stored dict in place meant a
+            # mid-turn workflow error left the session half-updated (message
+            # appended, turn bumped, resolution fields cleared), so the NEXT turn
+            # resumed from corrupted state.
+            state = dict(session.state)
             # Append new human message and increment turn count
             state["messages"] = state["messages"] + [HumanMessage(content=user_message)]
             state["turn_count"] = state.get("turn_count", 0) + 1
@@ -159,6 +209,11 @@ class ChatService:
             state["ticket_draft"] = None
             state["ticket_offered"] = False
             state["ticket_created"] = False
+            # Start a fresh per-turn audit trail. The state channel uses an
+            # `operator.add` reducer, so nodes append to this within the turn;
+            # resetting here keeps it to one turn's trace (no unbounded growth
+            # across a long conversation).
+            state["audit_trail"] = []
         else:
             state = {
                 "messages": [HumanMessage(content=user_message)],
@@ -209,7 +264,14 @@ class ChatService:
             diagnostic_context = result.get("diagnostic_context")
             if diagnostic_context:
                 try:
-                    summary = await summarizer.summarize(diagnostic_context)
+                    # `diagnostic_context` on the workflow state is the SERIALIZED
+                    # dict (DiagnosticContext.to_dict()); the summarizer needs the
+                    # object (it reads .get_filled_slots()/.issue_subtype/...).
+                    # Passing the dict raised AttributeError every time, so this
+                    # whole feature was silently dead. Rehydrate first, then write
+                    # the summary back onto the state dict.
+                    diag_obj = DiagnosticContext.from_dict(diagnostic_context)
+                    summary = await summarizer.summarize(diag_obj)
                     diagnostic_context["conversation_summary"] = summary.issue_one_liner
                     logger.info(
                         "context_summarized",
@@ -223,19 +285,17 @@ class ChatService:
                         turn_count=turn_count,
                     )
 
-        # Persist session state for future turns
-        _sessions[session_id] = result
+        # The caller persists the envelope (state + ticket) after this returns.
 
         # If the workflow detected a NEW_TOPIC this turn (triage reset the
         # diagnostic context), drop the session's cached ticket reference.
-        # The OLD ticket remains in the database; the cache is only for
+        # The OLD ticket remains in the database; the reference is only for
         # idempotency of the *current* escalation flow. The new issue, if it
         # ever escalates, gets its own ticket.
         diag = result.get("diagnostic_context") or {}
-        if diag.get("last_response_type") == "new_topic":
-            _session_tickets.pop(session_id, None)
-            logger.info("session_ticket_cache_cleared_on_new_topic",
-                        session_id=session_id)
+        if diag.get("last_response_type") == "new_topic" and session.ticket is not None:
+            session.ticket = None
+            logger.info("session_ticket_cache_cleared_on_new_topic", session_id=session_id)
 
         return result
 
@@ -285,8 +345,7 @@ class ChatService:
         raw_replies = result.get("quick_replies")
         if raw_replies:
             quick_replies = [
-                QuickReplyOption(label=r["label"], value=r["value"])
-                for r in raw_replies
+                QuickReplyOption(label=r["label"], value=r["value"]) for r in raw_replies
             ]
 
         debug = self._build_debug(result) if include_debug else None
@@ -321,7 +380,7 @@ class ChatService:
     # ── Ticketing / live-agent handoff ───────────────────────────────
 
     async def _handle_ticketing(
-        self, session_id: str, result: dict, requester: User | None
+        self, session: ChatSession, result: dict, requester: User | None
     ) -> TicketRef | None:
         """Create a real ticket when (and only when) escalation is confirmed.
 
@@ -344,12 +403,10 @@ class ChatService:
         3. **Per-turn caching** — once a ticket exists, we only re-surface it
            when this turn is also requesting escalation.
         """
-        existing = _session_tickets.get(session_id)
+        existing = session.ticket
         wants_escalation_this_turn = bool(
             result.get("escalation_confirmed")
-            or (
-                (result.get("diagnostic_context") or {}).get("live_agent_requested")
-            )
+            or ((result.get("diagnostic_context") or {}).get("live_agent_requested"))
         )
 
         # Idempotency for re-clicks: return the existing ticket only when this
@@ -370,7 +427,7 @@ class ChatService:
         if not await self._user_intent_authorizes_ticket(result):
             logger.warning(
                 "ticket_creation_blocked_by_intent_guard",
-                session_id=session_id,
+                session_id=session.state.get("session_id"),
                 reason="last user message did not classify as CONFIRM/ESCALATE_REQUEST",
             )
             return None
@@ -380,7 +437,9 @@ class ChatService:
             # Confirmed but we can't persist (no DB/user) — degrade to offer.
             return None
 
-        return await self._persist_and_queue(session_id, draft, requester, state=result)
+        return await self._persist_and_queue(
+            result.get("session_id"), session, draft, requester, state=result
+        )
 
     @staticmethod
     async def _user_intent_authorizes_ticket(result: dict) -> bool:
@@ -400,9 +459,7 @@ class ChatService:
         """
         last_user_text = ""
         for msg in reversed(result.get("messages", []) or []):
-            if isinstance(msg, HumanMessage) or (
-                hasattr(msg, "type") and msg.type == "human"
-            ):
+            if isinstance(msg, HumanMessage) or (hasattr(msg, "type") and msg.type == "human"):
                 last_user_text = getattr(msg, "content", "") or ""
                 break
         if not last_user_text:
@@ -447,25 +504,34 @@ class ChatService:
         if self.ticket_service is None:
             raise ValueError("Live-agent handoff is unavailable (no ticket backend).")
 
-        existing = _session_tickets.get(session_id)
-        if existing:
-            ref = TicketRef(**existing)
+        try:
+            session = await self._load_owned(session_id, str(requester.id))
+        except SessionOwnershipError:
+            # Foreign/guessed session id — never act on someone else's session.
+            return (GATHER_PROBLEM_PROMPT, None)
+
+        if session and session.ticket:
+            ref = TicketRef(**session.ticket)
             return (
                 f"You're already in the queue — ticket **{ref.ticket_number}** is with "
                 f"our IT specialists and they'll follow up shortly.",
                 ref,
             )
 
-        state = _sessions.get(session_id)
-        if state is not None and not self._handoff_allowed(state):
+        state = session.state if session else {}
+        if state and not self._handoff_allowed(state):
             return (GATHER_PROBLEM_PROMPT, None)
 
-        state = state or {}
+        if session is None:
+            session = ChatSession(user_id=str(requester.id), state={})
         draft = state.get("ticket_draft") or self._minimal_draft(state, requester)
-        ref = await self._persist_and_queue(session_id, draft, requester, state=state)
+        ref = await self._persist_and_queue(
+            session_id, session, draft, requester, state=state or None
+        )
 
-        # Record the waiting start time for timeout tracking
-        _waiting_since[session_id] = datetime.now(UTC)
+        # Record the waiting start time for timeout tracking, then persist.
+        session.waiting_since = datetime.now(UTC)
+        await self._store.save(session_id, session)
 
         return (
             f"✅ I've created ticket **{ref.ticket_number}** and connected it to our IT "
@@ -479,16 +545,20 @@ class ChatService:
         The ticket remains open for async follow-up, but the user is no
         longer in the active live-connection queue.
         """
-        _waiting_since.pop(session_id, None)
+        try:
+            session = await self._load_owned(session_id, str(requester.id))
+        except SessionOwnershipError:
+            session = None
 
-        ticket_cache = _session_tickets.get(session_id)
-        if not ticket_cache:
+        if session is None or not session.ticket:
             return (
                 "You're not currently waiting for a specialist. "
                 "I'm here to help — describe your issue and I'll assist you."
             )
 
-        ticket_number = ticket_cache.get("ticket_number", "")
+        session.waiting_since = None
+        await self._store.save(session_id, session)
+        ticket_number = session.ticket.get("ticket_number", "")
         return (
             f"I've cancelled the live connection request. Your ticket "
             f"**{ticket_number}** is still open and our team will follow up "
@@ -496,9 +566,7 @@ class ChatService:
             f"or describe a new issue."
         )
 
-    async def get_waiting_status(
-        self, session_id: str, requester: User
-    ) -> "WaitingStatusResponse":
+    async def get_waiting_status(self, session_id: str, requester: User) -> "WaitingStatusResponse":
         """Check waiting status with specialist-unavailable fallback.
 
         After WAIT_TIMEOUT_SECONDS (default 15 minutes), the system
@@ -507,8 +575,13 @@ class ChatService:
         """
         from app.schemas.chat import WaitingStatusResponse
 
-        ticket_cache = _session_tickets.get(session_id)
-        waiting_start = _waiting_since.get(session_id)
+        try:
+            session = await self._load_owned(session_id, str(requester.id))
+        except SessionOwnershipError:
+            session = None
+
+        ticket_cache = session.ticket if session else None
+        waiting_start = session.waiting_since if session else None
 
         if not ticket_cache or not waiting_start:
             return WaitingStatusResponse(
@@ -560,6 +633,7 @@ class ChatService:
     async def _persist_and_queue(
         self,
         session_id: str,
+        session: ChatSession,
         draft: dict,
         requester: User,
         *,
@@ -606,7 +680,10 @@ class ChatService:
             "priority": ticket.priority,
             "live_agent_requested": True,
         }
-        _session_tickets[session_id] = ref
+        # Idempotency record lives on the session envelope now (Redis-durable
+        # when configured), so a restart or a second worker won't mint a
+        # duplicate ticket. The caller persists the envelope.
+        session.ticket = ref
         logger.info(
             "chat_ticket_created",
             session_id=session_id,
@@ -632,7 +709,7 @@ class ChatService:
         try:
             from app.services.escalation_service import EscalationService
 
-            resolved_state = state if state is not None else _sessions.get(session_id)
+            resolved_state = state
             await EscalationService(svc.db).create_escalation_artifacts(
                 ticket=ticket,
                 chat_session_id=session_id,
@@ -713,4 +790,3 @@ def get_chat_service(db: AsyncSession | None = None) -> ChatService:
     degrades to offer-only escalation.
     """
     return ChatService(TicketService(db) if db is not None else None)
-

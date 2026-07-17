@@ -10,21 +10,18 @@ Tests:
 """
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from app.services.remote_support.service import (
-    CONSENT_WINDOW_MINUTES,
     ConsentRequired,
     InvalidTransition,
     PolicyViolation,
     RemoteSupportService,
-    SessionNotFound,
     _assert_transition,
 )
-
 
 # ─────────────────────────────────────────────────────────────────────
 # Helpers
@@ -54,7 +51,7 @@ def _make_session(
     session.session_type = session_type
     session.provider = "microsoft_remote_help"
     session.provider_session_id = None
-    session.consent_deadline = datetime.now(timezone.utc) + timedelta(minutes=10)
+    session.consent_deadline = datetime.now(UTC) + timedelta(minutes=10)
     session.active_consent = None
     return session
 
@@ -126,6 +123,7 @@ class TestPolicyEnforcement:
     def test_it_agent_can_request_screen_view(self):
         """IT agent can request screen_view sessions."""
         from app.services.remote_support.service import RemoteSupportService
+
         agent = _make_user("it_agent")
         # Should not raise
         RemoteSupportService._enforce_request_policy(agent, "screen_view", None)
@@ -133,6 +131,7 @@ class TestPolicyEnforcement:
     def test_employee_cannot_request_session(self):
         """Employees cannot request remote support sessions."""
         from app.services.remote_support.service import RemoteSupportService
+
         employee = _make_user("employee")
         with pytest.raises(PolicyViolation, match="Only IT staff"):
             RemoteSupportService._enforce_request_policy(employee, "screen_view", None)
@@ -140,6 +139,7 @@ class TestPolicyEnforcement:
     def test_it_agent_cannot_request_screen_control(self):
         """IT agent (not lead) cannot request screen_control."""
         from app.services.remote_support.service import RemoteSupportService
+
         agent = _make_user("it_agent")
         with pytest.raises(PolicyViolation, match="IT Lead or Admin"):
             RemoteSupportService._enforce_request_policy(agent, "screen_control", "fix issue")
@@ -147,6 +147,7 @@ class TestPolicyEnforcement:
     def test_it_lead_can_request_screen_control_with_justification(self):
         """IT lead can request screen_control with justification."""
         from app.services.remote_support.service import RemoteSupportService
+
         lead = _make_user("it_lead")
         # Should not raise
         RemoteSupportService._enforce_request_policy(lead, "screen_control", "Critical fix needed")
@@ -154,6 +155,7 @@ class TestPolicyEnforcement:
     def test_screen_control_requires_justification(self):
         """screen_control without justification is rejected even for IT lead."""
         from app.services.remote_support.service import RemoteSupportService
+
         lead = _make_user("it_lead")
         with pytest.raises(PolicyViolation, match="Justification"):
             RemoteSupportService._enforce_request_policy(lead, "screen_control", None)
@@ -161,6 +163,7 @@ class TestPolicyEnforcement:
     def test_it_admin_can_request_screen_control(self):
         """IT admin can always request screen_control."""
         from app.services.remote_support.service import RemoteSupportService
+
         admin = _make_user("it_admin")
         # Should not raise
         RemoteSupportService._enforce_request_policy(admin, "screen_control", "Admin override")
@@ -188,13 +191,15 @@ class TestConsentEnforcement:
             employee_id=target_employee_id,
         )
 
-        with patch.object(service, "_get_or_raise", return_value=mock_session):
-            with pytest.raises(PolicyViolation, match="Only the target employee"):
-                await service.grant_consent(
-                    session_id=mock_session.id,
-                    employee=other_employee,
-                    granted=True,
-                )
+        with (
+            patch.object(service, "_get_or_raise", return_value=mock_session),
+            pytest.raises(PolicyViolation, match="Only the target employee"),
+        ):
+            await service.grant_consent(
+                session_id=mock_session.id,
+                employee=other_employee,
+                granted=True,
+            )
 
     async def test_expired_consent_window_raises_policy_violation(self):
         """Trying to consent after deadline raises PolicyViolation."""
@@ -207,16 +212,18 @@ class TestConsentEnforcement:
             employee_id=employee.id,
         )
         # Set consent_deadline in the past
-        mock_session.consent_deadline = datetime.now(timezone.utc) - timedelta(minutes=1)
+        mock_session.consent_deadline = datetime.now(UTC) - timedelta(minutes=1)
 
-        with patch.object(service, "_get_or_raise", return_value=mock_session):
-            with patch.object(service, "_expire_session", new_callable=AsyncMock):
-                with pytest.raises(PolicyViolation, match="expired"):
-                    await service.grant_consent(
-                        session_id=mock_session.id,
-                        employee=employee,
-                        granted=True,
-                    )
+        with (
+            patch.object(service, "_get_or_raise", return_value=mock_session),
+            patch.object(service, "_expire_session", new_callable=AsyncMock),
+            pytest.raises(PolicyViolation, match="expired"),
+        ):
+            await service.grant_consent(
+                session_id=mock_session.id,
+                employee=employee,
+                granted=True,
+            )
 
     async def test_launch_without_consent_raises(self):
         """Session cannot launch if no active consent."""
@@ -230,9 +237,11 @@ class TestConsentEnforcement:
         )
         mock_session.active_consent = None  # No active consent
 
-        with patch.object(service, "_get_or_raise", return_value=mock_session):
-            with pytest.raises(ConsentRequired):
-                await service.launch_session(mock_session.id, agent)
+        with (
+            patch.object(service, "_get_or_raise", return_value=mock_session),
+            pytest.raises(ConsentRequired),
+        ):
+            await service.launch_session(mock_session.id, agent)
 
     async def test_only_employee_can_revoke_consent(self):
         """Only the employee can revoke their own consent."""
@@ -248,12 +257,14 @@ class TestConsentEnforcement:
             employee_id=employee_id,
         )
 
-        with patch.object(service, "_get_or_raise", return_value=mock_session):
-            with pytest.raises(PolicyViolation, match="Only the employee"):
-                await service.revoke_consent(
-                    session_id=mock_session.id,
-                    employee=intruder,
-                )
+        with (
+            patch.object(service, "_get_or_raise", return_value=mock_session),
+            pytest.raises(PolicyViolation, match="Only the employee"),
+        ):
+            await service.revoke_consent(
+                session_id=mock_session.id,
+                employee=intruder,
+            )
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -298,9 +309,11 @@ class TestSessionVisibility:
 
         mock_session = _make_session()  # Different employee/agent IDs
 
-        with patch.object(service, "_get_or_raise", return_value=mock_session):
-            with pytest.raises(PolicyViolation, match="do not have access"):
-                await service.get_session(mock_session.id, random_user)
+        with (
+            patch.object(service, "_get_or_raise", return_value=mock_session),
+            pytest.raises(PolicyViolation, match="do not have access"),
+        ):
+            await service.get_session(mock_session.id, random_user)
 
     async def test_it_admin_can_see_any_session(self):
         """IT admin can view any session."""

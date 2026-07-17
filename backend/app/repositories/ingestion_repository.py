@@ -36,14 +36,10 @@ class IngestionRepository:
         return job
 
     async def get_job(self, job_id: uuid.UUID) -> IngestionJob | None:
-        result = await self.db.execute(
-            select(IngestionJob).where(IngestionJob.id == job_id)
-        )
+        result = await self.db.execute(select(IngestionJob).where(IngestionJob.id == job_id))
         return result.scalar_one_or_none()
 
-    async def update_job(
-        self, job_id: uuid.UUID, updates: dict
-    ) -> IngestionJob | None:
+    async def update_job(self, job_id: uuid.UUID, updates: dict) -> IngestionJob | None:
         job = await self.get_job(job_id)
         if job is None:
             return None
@@ -91,9 +87,7 @@ class IngestionRepository:
     # IngestionCandidate
     # ──────────────────────────────────────────────────────────────
 
-    async def create_candidate(
-        self, candidate: IngestionCandidate
-    ) -> IngestionCandidate:
+    async def create_candidate(self, candidate: IngestionCandidate) -> IngestionCandidate:
         self.db.add(candidate)
         await self.db.flush()
         await self.db.refresh(candidate)
@@ -109,9 +103,7 @@ class IngestionRepository:
             await self.db.refresh(c)
         return candidates
 
-    async def get_candidate(
-        self, candidate_id: uuid.UUID
-    ) -> IngestionCandidate | None:
+    async def get_candidate(self, candidate_id: uuid.UUID) -> IngestionCandidate | None:
         result = await self.db.execute(
             select(IngestionCandidate).where(IngestionCandidate.id == candidate_id)
         )
@@ -168,8 +160,6 @@ class IngestionRepository:
         self, candidate_ids: list[uuid.UUID]
     ) -> list[IngestionCandidate]:
         result = await self.db.execute(
-            select(IngestionCandidate).where(
-                IngestionCandidate.id.in_(candidate_ids)
-            )
+            select(IngestionCandidate).where(IngestionCandidate.id.in_(candidate_ids))
         )
         return list(result.scalars().all())

@@ -470,19 +470,19 @@ class DimensionScoreSchema(BaseModel):
 class CompletenessReportSchema(BaseModel):
     """Multi-dimension completeness report for the article editor."""
 
-    score: float                    # 0 – 100
-    grade: str                      # A / B / C / D / F
+    score: float  # 0 – 100
+    grade: str  # A / B / C / D / F
     dimensions: list[DimensionScoreSchema]
     ready_for_review: bool
     ready_for_publish: bool
-    blocking_issues: list[str]      # hard blockers preventing publication
-    suggestions: list[str]          # non-blocking improvements
+    blocking_issues: list[str]  # hard blockers preventing publication
+    suggestions: list[str]  # non-blocking improvements
 
 
 class AuthorWarningSchema(BaseModel):
     """Inline warning item shown in the article editor."""
 
-    severity: str           # "error" | "warning" | "info"
+    severity: str  # "error" | "warning" | "info"
     field: str | None = None
     message: str
     guidance: str | None = None
@@ -492,7 +492,7 @@ class StaleAnalysisSchema(BaseModel):
     """Detailed staleness analysis for an article."""
 
     is_stale: bool
-    staleness_score: float          # 0.0 (fresh) – 1.0 (very stale)
+    staleness_score: float  # 0.0 (fresh) – 1.0 (very stale)
     days_since_update: int | None = None
     days_overdue: int | None = None
     reasons: list[str]
@@ -517,4 +517,3 @@ class DuplicateHintSchema(BaseModel):
     id: str
     title: str
     status: str
-

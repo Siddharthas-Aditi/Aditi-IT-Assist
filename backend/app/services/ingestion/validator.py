@@ -14,10 +14,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Result type
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 @dataclass
 class ValidationResult:
@@ -53,6 +53,7 @@ def _info(code: str, message: str) -> dict:
 # Public entry point
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def validate_candidate(candidate_dict: dict) -> ValidationResult:
     """Validate a candidate payload dict, returning a ``ValidationResult``.
 
@@ -77,61 +78,79 @@ def validate_candidate(candidate_dict: dict) -> ValidationResult:
     # ── Blocking checks ──────────────────────────────────────────────────────
 
     if not title or len(title.strip()) < 5:
-        blockers.append(_error(
-            "MISSING_TITLE",
-            "Title is required and must be at least 5 characters.",
-        ))
+        blockers.append(
+            _error(
+                "MISSING_TITLE",
+                "Title is required and must be at least 5 characters.",
+            )
+        )
 
     if not category:
-        blockers.append(_error(
-            "MISSING_CATEGORY",
-            "Category could not be determined. Select one before saving.",
-        ))
+        blockers.append(
+            _error(
+                "MISSING_CATEGORY",
+                "Category could not be determined. Select one before saving.",
+            )
+        )
 
     has_body = bool(troubleshooting or resolution or symptoms)
     if not has_body:
-        blockers.append(_error(
-            "NO_ACTIONABLE_CONTENT",
-            "The candidate has no symptoms, troubleshooting steps, or resolution steps.",
-        ))
+        blockers.append(
+            _error(
+                "NO_ACTIONABLE_CONTENT",
+                "The candidate has no symptoms, troubleshooting steps, or resolution steps.",
+            )
+        )
 
     # ── Quality warnings ─────────────────────────────────────────────────────
 
     if not summary or len(summary) < 30:
-        warnings.append(_warn(
-            "MISSING_SUMMARY",
-            "A short summary (≥ 30 chars) improves discoverability.",
-        ))
+        warnings.append(
+            _warn(
+                "MISSING_SUMMARY",
+                "A short summary (≥ 30 chars) improves discoverability.",
+            )
+        )
 
     if not escalation:
-        warnings.append(_warn(
-            "MISSING_ESCALATION",
-            "No escalation criteria found. Consider adding when to contact IT support.",
-        ))
+        warnings.append(
+            _warn(
+                "MISSING_ESCALATION",
+                "No escalation criteria found. Consider adding when to contact IT support.",
+            )
+        )
 
     if len(tags) < 2:
-        warnings.append(_warn(
-            "WEAK_TAGS",
-            "Fewer than 2 tags detected. Add tags to improve search ranking.",
-        ))
+        warnings.append(
+            _warn(
+                "WEAK_TAGS",
+                "Fewer than 2 tags detected. Add tags to improve search ranking.",
+            )
+        )
 
     if len(troubleshooting) == 0 and len(resolution) > 0:
-        warnings.append(_info(
-            "NO_TROUBLESHOOTING_STEPS",
-            "Only resolution steps found — no troubleshooting steps. This may be intentional.",
-        ))
+        warnings.append(
+            _info(
+                "NO_TROUBLESHOOTING_STEPS",
+                "Only resolution steps found — no troubleshooting steps. This may be intentional.",
+            )
+        )
 
     if confidence < 0.4:
-        warnings.append(_warn(
-            "LOW_EXTRACTION_CONFIDENCE",
-            f"Extraction confidence is {confidence:.0%}. Review all fields carefully.",
-        ))
+        warnings.append(
+            _warn(
+                "LOW_EXTRACTION_CONFIDENCE",
+                f"Extraction confidence is {confidence:.0%}. Review all fields carefully.",
+            )
+        )
 
     if title and len(title) > 200:
-        warnings.append(_warn(
-            "LONG_TITLE",
-            "Title is very long (> 200 chars). Consider shortening for display.",
-        ))
+        warnings.append(
+            _warn(
+                "LONG_TITLE",
+                "Title is very long (> 200 chars). Consider shortening for display.",
+            )
+        )
 
     # ── Compute composite confidence ─────────────────────────────────────────
     computed_confidence = _compute_confidence(
@@ -155,6 +174,7 @@ def validate_candidate(candidate_dict: dict) -> ValidationResult:
 # ─────────────────────────────────────────────────────────────────────────────
 # Confidence formula
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def _compute_confidence(
     *,

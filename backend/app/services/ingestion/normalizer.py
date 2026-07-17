@@ -13,38 +13,40 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from dataclasses import dataclass, field
-from enum import Enum
-
+from dataclasses import dataclass
+from enum import StrEnum
 
 # ── Line types ────────────────────────────────────────────────────────────────
 
-class LineType(str, Enum):
+
+class LineType(StrEnum):
     BLANK = "blank"
-    HEADING = "heading"           # High-confidence heading
-    HEADING_WEAK = "heading_weak" # Possible heading — needs corroboration
-    BULLET = "bullet"             # Bulleted list item
-    NUMBERED = "numbered"         # Numbered list item
-    LABEL = "label"               # "SomeLabel: content" format
-    CONTINUATION = "continuation" # Normal paragraph / sentence
-    TABLE_ROW = "table_row"       # Pipe-separated table row
-    SEPARATOR = "separator"       # Decorative separator line (---, ===)
+    HEADING = "heading"  # High-confidence heading
+    HEADING_WEAK = "heading_weak"  # Possible heading — needs corroboration
+    BULLET = "bullet"  # Bulleted list item
+    NUMBERED = "numbered"  # Numbered list item
+    LABEL = "label"  # "SomeLabel: content" format
+    CONTINUATION = "continuation"  # Normal paragraph / sentence
+    TABLE_ROW = "table_row"  # Pipe-separated table row
+    SEPARATOR = "separator"  # Decorative separator line (---, ===)
 
 
 # ── Normalized line ────────────────────────────────────────────────────────────
 
+
 @dataclass
 class NormalizedLine:
-    raw: str                    # Original line as-is
-    text: str                   # Cleaned text with marker stripped
-    marker: str | None          # Original bullet/number token
+    raw: str  # Original line as-is
+    text: str  # Cleaned text with marker stripped
+    marker: str | None  # Original bullet/number token
     line_type: LineType
-    indent: int                 # 0-based indent level (0 = left margin)
-    number: int | None = None   # Parsed number for NUMBERED lines
-    label: str | None = None    # Label name for LABEL lines ("Resolution")
+    indent: int  # 0-based indent level (0 = left margin)
+    number: int | None = None  # Parsed number for NUMBERED lines
+    label: str | None = None  # Label name for LABEL lines ("Resolution")
 
 
 # ── Normalized document ────────────────────────────────────────────────────────
+
 
 @dataclass
 class NormalizedDocument:
@@ -63,15 +65,15 @@ _BULLET_CHARS = frozenset("•●○▪▸◦→⇒►▶-–—*+")
 
 # Regex patterns for different number formats
 _NUMBER_PATTERNS: list[re.Pattern] = [
-    re.compile(r"^(\d{1,2})[\.\)]\s+(.+)$"),       # 1. text  or  1) text
-    re.compile(r"^\((\d{1,2})\)\s+(.+)$"),          # (1) text
+    re.compile(r"^(\d{1,2})[\.\)]\s+(.+)$"),  # 1. text  or  1) text
+    re.compile(r"^\((\d{1,2})\)\s+(.+)$"),  # (1) text
     re.compile(r"^[Ss]tep\s+(\d{1,2})[:\.\)]\s+(.+)$", re.I),  # Step 1: text
-    re.compile(r"^(\d{1,2})[:\-–]\s+(.+)$"),        # 1: text  or  1- text
+    re.compile(r"^(\d{1,2})[:\-–]\s+(.+)$"),  # 1: text  or  1- text
 ]
 
 # Heading signals (each independently contributes evidence)
 _HEADING_MARKDOWN = re.compile(r"^#{1,4}\s+(.+)$")
-_HEADING_UNDERLINE_NEXT: str = "underline"   # handled during post-processing
+_HEADING_UNDERLINE_NEXT: str = "underline"  # handled during post-processing
 
 # All-caps: ≥ 4 uppercase alpha chars, allows spaces, slashes, dashes
 _HEADING_ALL_CAPS = re.compile(r"^[A-Z][A-Z\s\-/&()]{3,}[A-Z]$")
@@ -84,6 +86,7 @@ _SEPARATOR = re.compile(r"^[\-=*_~]{3,}\s*$")
 
 
 # ── Public entry point ────────────────────────────────────────────────────────
+
 
 def normalize_document(raw_text: str) -> NormalizedDocument:
     """Convert *raw_text* into a ``NormalizedDocument`` with typed lines."""
@@ -100,15 +103,18 @@ def normalize_document(raw_text: str) -> NormalizedDocument:
     doc = NormalizedDocument(
         lines=norm_lines,
         raw_text=raw_text,
-        heading_count=sum(1 for l in norm_lines if l.line_type in (LineType.HEADING, LineType.HEADING_WEAK)),
-        bullet_count=sum(1 for l in norm_lines if l.line_type == LineType.BULLET),
-        numbered_count=sum(1 for l in norm_lines if l.line_type == LineType.NUMBERED),
-        label_count=sum(1 for l in norm_lines if l.line_type == LineType.LABEL),
+        heading_count=sum(
+            1 for ln in norm_lines if ln.line_type in (LineType.HEADING, LineType.HEADING_WEAK)
+        ),
+        bullet_count=sum(1 for ln in norm_lines if ln.line_type == LineType.BULLET),
+        numbered_count=sum(1 for ln in norm_lines if ln.line_type == LineType.NUMBERED),
+        label_count=sum(1 for ln in norm_lines if ln.line_type == LineType.LABEL),
     )
     return doc
 
 
 # ── Line classification ────────────────────────────────────────────────────────
+
 
 def _classify_line(raw: str) -> NormalizedLine:
     """Assign a ``LineType`` and extract structural metadata from one raw line."""
@@ -122,19 +128,24 @@ def _classify_line(raw: str) -> NormalizedLine:
 
     # Separator (--- or ===)
     if _SEPARATOR.match(clean):
-        return NormalizedLine(raw=raw, text=clean, marker=None, line_type=LineType.SEPARATOR, indent=0)
+        return NormalizedLine(
+            raw=raw, text=clean, marker=None, line_type=LineType.SEPARATOR, indent=0
+        )
 
     # Table row (contains | and multiple cells)
     if clean.count("|") >= 2:
-        return NormalizedLine(raw=raw, text=clean, marker=None, line_type=LineType.TABLE_ROW, indent=indent)
+        return NormalizedLine(
+            raw=raw, text=clean, marker=None, line_type=LineType.TABLE_ROW, indent=indent
+        )
 
     # Markdown heading
     m = _HEADING_MARKDOWN.match(clean)
     if m:
         hash_match = re.match(r"^(#+)", clean)
         marker = hash_match.group(1) if hash_match else "#"
-        return NormalizedLine(raw=raw, text=m.group(1).strip(), marker=marker,
-                              line_type=LineType.HEADING, indent=0)
+        return NormalizedLine(
+            raw=raw, text=m.group(1).strip(), marker=marker, line_type=LineType.HEADING, indent=0
+        )
 
     # Numbered list item
     for pat in _NUMBER_PATTERNS:
@@ -142,14 +153,21 @@ def _classify_line(raw: str) -> NormalizedLine:
         if m:
             num = int(m.group(1))
             text = m.group(2).strip()
-            return NormalizedLine(raw=raw, text=text, marker=m.group(1),
-                                  line_type=LineType.NUMBERED, indent=indent, number=num)
+            return NormalizedLine(
+                raw=raw,
+                text=text,
+                marker=m.group(1),
+                line_type=LineType.NUMBERED,
+                indent=indent,
+                number=num,
+            )
 
     # Bullet list item
     if clean and clean[0] in _BULLET_CHARS:
         text = clean[1:].lstrip()
-        return NormalizedLine(raw=raw, text=text, marker=clean[0],
-                              line_type=LineType.BULLET, indent=indent)
+        return NormalizedLine(
+            raw=raw, text=text, marker=clean[0], line_type=LineType.BULLET, indent=indent
+        )
 
     # Label line: "SomeLabel: optional text"
     m = _LABEL_LINE.match(clean)
@@ -157,22 +175,36 @@ def _classify_line(raw: str) -> NormalizedLine:
         label_name = m.group(1).strip()
         content = m.group(2).strip()
         ltype = LineType.LABEL if not content else LineType.LABEL
-        return NormalizedLine(raw=raw, text=content or clean, marker=None,
-                              line_type=ltype, indent=indent, label=label_name)
+        return NormalizedLine(
+            raw=raw,
+            text=content or clean,
+            marker=None,
+            line_type=ltype,
+            indent=indent,
+            label=label_name,
+        )
 
     # All-caps heading heuristic
     if _HEADING_ALL_CAPS.match(clean) and len(clean) >= 4:
-        return NormalizedLine(raw=raw, text=clean, marker=None,
-                              line_type=LineType.HEADING_WEAK, indent=0)
+        return NormalizedLine(
+            raw=raw, text=clean, marker=None, line_type=LineType.HEADING_WEAK, indent=0
+        )
 
     # Short, non-sentence line (possible topic title without markup)
-    if len(clean) <= 80 and not clean.endswith((".", "!", "?")) and not clean[0].islower():
-        if re.match(r"^[A-Z]", clean) and len(clean.split()) <= 10:
-            return NormalizedLine(raw=raw, text=clean, marker=None,
-                                  line_type=LineType.HEADING_WEAK, indent=indent)
+    if (
+        len(clean) <= 80
+        and not clean.endswith((".", "!", "?"))
+        and not clean[0].islower()
+        and re.match(r"^[A-Z]", clean)
+        and len(clean.split()) <= 10
+    ):
+        return NormalizedLine(
+            raw=raw, text=clean, marker=None, line_type=LineType.HEADING_WEAK, indent=indent
+        )
 
-    return NormalizedLine(raw=raw, text=clean, marker=None,
-                          line_type=LineType.CONTINUATION, indent=indent)
+    return NormalizedLine(
+        raw=raw, text=clean, marker=None, line_type=LineType.CONTINUATION, indent=indent
+    )
 
 
 def _detect_underline_headings(lines: list[NormalizedLine]) -> list[NormalizedLine]:
@@ -187,13 +219,13 @@ def _detect_underline_headings(lines: list[NormalizedLine]) -> list[NormalizedLi
             and len(curr.text) <= 80
         ):
             result[i] = NormalizedLine(
-                raw=curr.raw, text=curr.text, marker=None,
-                line_type=LineType.HEADING, indent=0
+                raw=curr.raw, text=curr.text, marker=None, line_type=LineType.HEADING, indent=0
             )
     return result
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
+
 
 def _normalize_unicode(text: str) -> str:
     """NFKD normalize, unify smart quotes/dashes/arrows."""

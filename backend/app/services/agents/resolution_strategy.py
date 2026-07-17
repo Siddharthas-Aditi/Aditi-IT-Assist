@@ -6,8 +6,7 @@ from multiple approaches based on confidence and available data.
 """
 
 from dataclasses import dataclass
-from enum import Enum
-from typing import Optional
+from enum import StrEnum
 
 from app.core.logging import get_logger
 from app.services.agents.diagnostic_state import DiagnosticContext
@@ -15,15 +14,15 @@ from app.services.agents.diagnostic_state import DiagnosticContext
 logger = get_logger(__name__)
 
 
-class ResolutionStrategy(str, Enum):
+class ResolutionStrategy(StrEnum):
     """Strategy for generating resolution guidance."""
 
-    GROUNDED_LLM = "grounded_llm"        # Use LLM to explain KB steps (high quality)
-    DIRECT_STEPS = "direct_steps"        # Raw KB steps (fallback)
-    WEB_SEARCH = "web_search"            # External sources (for novel issues)
-    SIMPLIFIED = "simplified"            # Ultra-simple 1-step guidance
-    ESCALATE = "escalate"                # Human handoff
-    UNKNOWN_ISSUE = "unknown_issue"      # Issue not recognizable
+    GROUNDED_LLM = "grounded_llm"  # Use LLM to explain KB steps (high quality)
+    DIRECT_STEPS = "direct_steps"  # Raw KB steps (fallback)
+    WEB_SEARCH = "web_search"  # External sources (for novel issues)
+    SIMPLIFIED = "simplified"  # Ultra-simple 1-step guidance
+    ESCALATE = "escalate"  # Human handoff
+    UNKNOWN_ISSUE = "unknown_issue"  # Issue not recognizable
 
 
 @dataclass
@@ -42,11 +41,13 @@ class StrategyDecision:
 class ResolutionStrategySelector:
     """Intelligent selector that chooses best resolution approach."""
 
-    def __init__(self,
-                 kb_articles: list[dict],
-                 subtype_match_count: int = 0,
-                 has_failed_steps: bool = False,
-                 diag_ctx: Optional[DiagnosticContext] = None):
+    def __init__(
+        self,
+        kb_articles: list[dict],
+        subtype_match_count: int = 0,
+        has_failed_steps: bool = False,
+        diag_ctx: DiagnosticContext | None = None,
+    ):
         """
         Args:
             kb_articles: Knowledge articles retrieved (may include cross-family)
@@ -75,7 +76,9 @@ class ResolutionStrategySelector:
             return StrategyDecision(
                 strategy=ResolutionStrategy.GROUNDED_LLM,
                 confidence=0.85,
-                reasoning=f"Found {self.subtype_match_count} article(s) matching exact issue subtype",
+                reasoning=(
+                    f"Found {self.subtype_match_count} article(s) matching exact issue subtype"
+                ),
             )
 
         # ── We have same-category articles but no exact subtype match ──
@@ -85,7 +88,9 @@ class ResolutionStrategySelector:
             return StrategyDecision(
                 strategy=ResolutionStrategy.GROUNDED_LLM,
                 confidence=0.55,  # Risky, but try
-                reasoning=f"Found {len(self.kb_articles)} same-family articles but no exact subtype match",
+                reasoning=(
+                    f"Found {len(self.kb_articles)} same-family articles but no exact subtype match"
+                ),
                 should_retry=True,  # If this fails, escalate
             )
 
@@ -114,13 +119,8 @@ class ResolutionStrategySelector:
 
     def _user_confused(self) -> bool:
         """Check if user is asking for simpler explanation."""
-        keywords = {
-            "simpler", "simple", "easier", "explain", "understand", "confusing",
-            "confused", "don't understand", "not clear", "unclear", "break down",
-            "step by step", "more detail", "more clearly", "plain english",
-        }
         # This would need the actual message; for now use context flag if available
-        return getattr(self.diag_ctx, '_user_asked_simpler', False)
+        return getattr(self.diag_ctx, "_user_asked_simpler", False)
 
 
 # Helper: Map strategy to which agent node should handle it

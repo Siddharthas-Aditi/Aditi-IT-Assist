@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 # ── Result type ───────────────────────────────────────────────────────────────
 
+
 @dataclass
 class ExtractionResult:
     """Outcome of text extraction from a single document."""
@@ -38,6 +39,7 @@ class ExtractionResult:
 
 
 # ── Dispatcher ────────────────────────────────────────────────────────────────
+
 
 def extract_text(file_path: str | Path) -> ExtractionResult:
     """Extract raw text from *file_path*.
@@ -70,6 +72,7 @@ def extract_text(file_path: str | Path) -> ExtractionResult:
 
 
 # ── Format-specific extractors ────────────────────────────────────────────────
+
 
 def _extract_docx(path: Path) -> ExtractionResult:
     """Extract text from a .docx file using python-docx."""

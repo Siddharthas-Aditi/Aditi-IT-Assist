@@ -123,7 +123,8 @@ class TestSpecialistRouting:
         d2 = decide(
             intent=_ic(ConversationIntent.CONTINUE),
             **_base_kwargs(
-                issue_category="unknown/whatever", resolution_attempts=2,
+                issue_category="unknown/whatever",
+                resolution_attempts=2,
             ),
         )
         assert d2.action is NextAction.ESCALATE

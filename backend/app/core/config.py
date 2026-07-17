@@ -66,6 +66,12 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     JWT_ALGORITHM: str = "HS256"
+    # Local email/password auth. In an SSO deployment this MUST be disabled so
+    # users can only enter via the IdP; leaving it on lets anyone self-provision
+    # a local account and bypass SSO. Defaults on for local dev; production boot
+    # fails if this is on while AUTH_PROVIDER is a real SSO provider (see
+    # validate_production). Gates both /auth/register and /auth/login.
+    LOCAL_AUTH_ENABLED: bool = True
     # Token revocation (logout / refresh rotation) uses a Redis jti denylist.
     # False = fail-open when Redis is down (tokens age out via exp; warning
     # logged). True = fail-closed (401 until Redis is back). See token_store.py.
@@ -135,6 +141,14 @@ class Settings(BaseSettings):
         key = self.effective_llm_api_key
         return bool(key and key not in ("your-api-key-here", "your-azure-key-here", ""))
 
+    # Chat session store — where multi-turn chat state + ticket idempotency live.
+    # "memory" = bounded in-process LRU (single worker; default, dev/test-safe).
+    # "redis"  = durable + shared across workers/restarts (recommended for any
+    # multi-worker or production deployment; degrades to in-memory if Redis is
+    # unreachable). See app/services/agents/session_store.py.
+    CHAT_SESSION_BACKEND: str = "memory"  # "memory" | "redis"
+    CHAT_SESSION_TTL_SECONDS: int = 86_400  # 24h idle expiry for a conversation
+
     # Vector Store
     VECTOR_STORE_TYPE: str = "pgvector"
 
@@ -176,6 +190,13 @@ class Settings(BaseSettings):
     RATE_LIMIT_BURST: int = 10
     # Tighter budget for credential endpoints (login/refresh) — brute-force guard.
     RATE_LIMIT_AUTH_REQUESTS_PER_MINUTE: int = 10
+    # Number of TRUSTED reverse proxies in front of the app (our nginx appends
+    # the real client via `$proxy_add_x_forwarded_for`, so the trustworthy IP is
+    # the Nth entry from the RIGHT of X-Forwarded-For). The rate limiter selects
+    # `xff[-HOPS]`; anything a client spoofs sits to the LEFT and is ignored.
+    # 0 = don't trust XFF at all (use the socket peer) — set this when the app is
+    # exposed directly without a proxy.
+    RATE_LIMIT_TRUSTED_PROXY_HOPS: int = 1
 
     # Background scheduler — the live-specialist-chat idle sweeper runs in
     # the same event loop as the API. Turn off in tests or when running
@@ -257,6 +278,20 @@ class Settings(BaseSettings):
     AGENT_BACKGROUND_POLL_SECONDS: int = 60  # runner poll interval
     AGENT_TASK_MAX_ATTEMPTS: int = 3  # retry budget per task
 
+    # ── Device execution (Phase 9) ───────────────────────────────────
+    # Master build gate: whether the catalog-bound Intune execution tools
+    # (install approved app, run approved remediation, benign device action)
+    # are constructed/exposed at all. Requires the msgraph_intune_exec server in
+    # MCP_ENABLED_SERVERS. Default OFF. See docs/architecture/
+    # device-execution-decision.md.
+    FEATURE_DEVICE_EXECUTION: bool = False
+    # Autonomy kill-switch: when False, EVERY device action routes to human
+    # approval even if the feature is on (nothing auto-executes). Turn on only
+    # after the catalog + evals are validated in the tenant.
+    DEVICE_EXECUTION_AUTONOMOUS: bool = False
+    # Opt medium-risk catalog actions into autonomy. High-risk is never autonomous.
+    DEVICE_EXECUTION_AUTONOMOUS_MEDIUM: bool = False
+
     # Document Ingestion
     UPLOAD_DIR: str = "/tmp/aditi_uploads"
     MAX_UPLOAD_MB: int = 50
@@ -293,6 +328,12 @@ class Settings(BaseSettings):
             violations.append("REDIS_PASSWORD must be set in production")
         if self.MCP_USE_MOCK and self.FEATURE_MCP_TOOLS:
             violations.append("FEATURE_MCP_TOOLS is on but MCP_USE_MOCK is still true")
+        if self.FEATURE_DEVICE_EXECUTION and self.MCP_USE_MOCK:
+            violations.append("FEATURE_DEVICE_EXECUTION is on but MCP_USE_MOCK is still true")
+        if self.DEVICE_EXECUTION_AUTONOMOUS and not self.FEATURE_DEVICE_EXECUTION:
+            violations.append(
+                "DEVICE_EXECUTION_AUTONOMOUS is on but FEATURE_DEVICE_EXECUTION is off"
+            )
         if self.REMOTE_SUPPORT_USE_MOCK is False and not (
             self.REMOTE_HELP_TENANT_ID
             and self.REMOTE_HELP_CLIENT_ID
@@ -302,8 +343,23 @@ class Settings(BaseSettings):
                 "REMOTE_SUPPORT_USE_MOCK=false requires REMOTE_HELP_TENANT_ID/"
                 "CLIENT_ID/CLIENT_SECRET"
             )
-        if any(o.startswith("http://localhost") for o in self.CORS_ORIGINS):
-            violations.append("CORS_ORIGINS still contains localhost origins")
+        # CORS is registered with allow_credentials=True, so a wildcard or any
+        # plaintext origin is a credential-exposure risk — require https and no "*".
+        for origin in self.CORS_ORIGINS:
+            if origin.strip() == "*":
+                violations.append(
+                    "CORS_ORIGINS must not be '*' in production (credentials are allowed)"
+                )
+            elif not origin.startswith("https://"):
+                violations.append(f"CORS_ORIGINS must use https:// in production (got: {origin!r})")
+        # In a real SSO deployment, local email/password auth must be OFF so the
+        # IdP is the only entry point (open /register + local /login otherwise
+        # bypass SSO entirely).
+        if self.AUTH_PROVIDER.lower() != "local" and self.LOCAL_AUTH_ENABLED:
+            violations.append(
+                f"LOCAL_AUTH_ENABLED must be false when AUTH_PROVIDER={self.AUTH_PROVIDER!r} "
+                "(local password auth would bypass SSO)"
+            )
         return violations
 
 

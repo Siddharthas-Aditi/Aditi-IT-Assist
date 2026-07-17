@@ -47,7 +47,7 @@ class ChatDebugInfo(BaseModel):
     # would route to (shadow mode), the retrieval engine used, and the grounded
     # citations behind the answer.
     routed_specialist: str | None = None
-    retrieval_source: str | None = None          # db_hybrid | db_keyword | yaml_fallback
+    retrieval_source: str | None = None  # db_hybrid | db_keyword | yaml_fallback
     citations: list[dict] = []
 
 
@@ -151,4 +151,3 @@ class SessionDetail(BaseModel):
     messages: list[dict] = []
     confidence_score: float = 0.0
     created_at: str
-

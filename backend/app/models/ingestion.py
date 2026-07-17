@@ -10,7 +10,7 @@ knowledge article candidates extracted from them.
 from __future__ import annotations
 
 import uuid  # noqa: TC003
-from enum import Enum as PyEnum
+from enum import StrEnum
 
 from sqlalchemy import (
     Enum,
@@ -26,7 +26,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 
 
-class ParseStatus(str, PyEnum):
+class ParseStatus(StrEnum):
     """Overall job processing status."""
 
     PENDING = "pending"
@@ -36,7 +36,7 @@ class ParseStatus(str, PyEnum):
     FAILED = "failed"
 
 
-class ExtractionStatus(str, PyEnum):
+class ExtractionStatus(StrEnum):
     """Text extraction sub-status."""
 
     PENDING = "pending"
@@ -44,7 +44,7 @@ class ExtractionStatus(str, PyEnum):
     FAILED = "failed"
 
 
-class CandidateReviewStatus(str, PyEnum):
+class CandidateReviewStatus(StrEnum):
     """Human review decision on a candidate."""
 
     PENDING = "pending"
@@ -120,7 +120,9 @@ class IngestionJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
 
     def __repr__(self) -> str:
-        return f"<IngestionJob id={self.id} file={self.source_filename!r} status={self.parse_status}>"
+        return (
+            f"<IngestionJob id={self.id} file={self.source_filename!r} status={self.parse_status}>"
+        )
 
 
 class IngestionCandidate(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -160,9 +162,7 @@ class IngestionCandidate(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     extracted_escalation_criteria: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # ── Taxonomy ──────────────────────────────────────────────────────────────
-    extracted_tags: Mapped[list | None] = mapped_column(
-        JSONB, nullable=True, comment="list[str]"
-    )
+    extracted_tags: Mapped[list | None] = mapped_column(JSONB, nullable=True, comment="list[str]")
     extracted_keywords: Mapped[list | None] = mapped_column(
         JSONB, nullable=True, comment="list[str]"
     )

@@ -14,12 +14,9 @@ Endpoints:
 
 from __future__ import annotations
 
-import uuid
-from datetime import datetime
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.permissions import P
@@ -32,9 +29,15 @@ from app.schemas.feedback import (
     MessageFeedbackCreate,
     MessageFeedbackResponse,
 )
-from app.services.auth.dependencies import CurrentUser, ITAgentUser, ITLeadUser, require_permissions
+from app.services.auth.dependencies import ITAgentUser, require_permissions
 from app.services.feedback_analytics_service import FeedbackAnalyticsService
 from app.services.feedback_service import FeedbackService
+
+if TYPE_CHECKING:
+    import uuid
+    from datetime import datetime
+
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter()
 
@@ -163,9 +166,7 @@ async def submit_message_feedback(
     summary="Aggregate feedback metrics (lead+)",
 )
 async def get_analytics_summary(
-    _current_user: Annotated[
-        object, Depends(require_permissions(P.FEEDBACK_VIEW_ANALYTICS))
-    ],
+    _current_user: Annotated[object, Depends(require_permissions(P.FEEDBACK_VIEW_ANALYTICS))],
     from_dt: datetime | None = Query(default=None, alias="from"),
     to_dt: datetime | None = Query(default=None, alias="to"),
     category: str | None = Query(default=None),
@@ -188,17 +189,13 @@ async def get_analytics_summary(
 )
 async def get_article_health(
     article_ids: list[str] = Query(..., description="Comma-separated article UUIDs"),
-    _current_user: Annotated[
-        object, Depends(require_permissions(P.FEEDBACK_VIEW_ANALYTICS))
-    ] = ...,
+    _current_user: Annotated[object, Depends(require_permissions(P.FEEDBACK_VIEW_ANALYTICS))] = ...,
     from_dt: datetime | None = Query(default=None, alias="from"),
     to_dt: datetime | None = Query(default=None, alias="to"),
     analytics: FeedbackAnalyticsService = Depends(get_analytics_service),  # noqa: B008
 ) -> dict[str, ArticleFeedbackSummary]:
     """Return feedback signals for specified knowledge articles."""
-    return await analytics.get_article_health(
-        article_ids, from_dt=from_dt, to_dt=to_dt
-    )
+    return await analytics.get_article_health(article_ids, from_dt=from_dt, to_dt=to_dt)
 
 
 @router.get(
@@ -208,9 +205,7 @@ async def get_article_health(
 )
 async def get_agent_feedback_summary(
     agent_id: uuid.UUID,
-    _current_user: Annotated[
-        object, Depends(require_permissions(P.FEEDBACK_VIEW_ANALYTICS))
-    ],
+    _current_user: Annotated[object, Depends(require_permissions(P.FEEDBACK_VIEW_ANALYTICS))],
     from_dt: datetime | None = Query(default=None, alias="from"),
     to_dt: datetime | None = Query(default=None, alias="to"),
     analytics: FeedbackAnalyticsService = Depends(get_analytics_service),  # noqa: B008
@@ -232,16 +227,12 @@ async def get_agent_feedback_summary(
     summary="Flagged feedback review queue (lead+)",
 )
 async def get_review_queue(
-    _current_user: Annotated[
-        object, Depends(require_permissions(P.FEEDBACK_REVIEW))
-    ],
+    _current_user: Annotated[object, Depends(require_permissions(P.FEEDBACK_REVIEW))],
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     category: str | None = Query(default=None),
     service: FeedbackService = Depends(get_service),  # noqa: B008
 ) -> dict:
     """Return paginated list of review-flagged feedback entries."""
-    items, total = await service.list_flagged(
-        limit=limit, offset=offset, category=category
-    )
+    items, total = await service.list_flagged(limit=limit, offset=offset, category=category)
     return {"items": items, "total": total, "limit": limit, "offset": offset}

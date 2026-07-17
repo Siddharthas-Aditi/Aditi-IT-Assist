@@ -35,14 +35,10 @@ class AdminStatsService:
             select(func.count(Ticket.id)).where(Ticket.status.in_(OPEN_TICKET_STATUSES))
         )
         published_articles = await self._count(
-            select(func.count(KnowledgeArticle.id)).where(
-                KnowledgeArticle.status == "published"
-            )
+            select(func.count(KnowledgeArticle.id)).where(KnowledgeArticle.status == "published")
         )
         draft_articles = await self._count(
-            select(func.count(KnowledgeArticle.id)).where(
-                KnowledgeArticle.status == "draft"
-            )
+            select(func.count(KnowledgeArticle.id)).where(KnowledgeArticle.status == "draft")
         )
         since = datetime.now(UTC) - timedelta(hours=24)
         audit_24h = await self._count(

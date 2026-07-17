@@ -36,16 +36,16 @@ from pydantic import BaseModel
 class SideEffect(StrEnum):
     """How dangerous a tool's execution is. Drives the default approval gate."""
 
-    READ = "read"            # no state change anywhere (KB search, quota math)
-    WRITE = "write"          # mutates a system (reset MFA, create incident)
+    READ = "read"  # no state change anywhere (KB search, quota math)
+    WRITE = "write"  # mutates a system (reset MFA, create incident)
     DESTRUCTIVE = "destructive"  # irreversible / high blast radius (delete, disable)
 
 
 class Approval(StrEnum):
     """Who must approve a tool call before it executes."""
 
-    NONE = "none"                    # auto-executes (read-only tools)
-    HUMAN = "human"                  # an IT specialist must approve (default for writes)
+    NONE = "none"  # auto-executes (read-only tools)
+    HUMAN = "human"  # an IT specialist must approve (default for writes)
     AUTO_ALLOWLISTED = "auto_allowlisted"  # signed-off auto-exec; tiny blast radius only
 
 
@@ -53,12 +53,12 @@ class ToolOutcomeStatus(StrEnum):
     """Terminal status of a single tool invocation through the runtime."""
 
     EXECUTED = "executed"
-    REJECTED_NOT_ALLOWED = "rejected_not_allowed"   # tool not in the agent's allow-list
-    REJECTED_UNKNOWN = "rejected_unknown"           # tool name not in the registry
-    REJECTED_FORBIDDEN = "rejected_forbidden"       # caller lacks required permission(s)
-    INVALID_ARGS = "invalid_args"                   # args failed schema validation
-    NEEDS_APPROVAL = "needs_approval"               # gated; surfaced for human approval
-    ERROR = "error"                                 # the tool raised at execution time
+    REJECTED_NOT_ALLOWED = "rejected_not_allowed"  # tool not in the agent's allow-list
+    REJECTED_UNKNOWN = "rejected_unknown"  # tool name not in the registry
+    REJECTED_FORBIDDEN = "rejected_forbidden"  # caller lacks required permission(s)
+    INVALID_ARGS = "invalid_args"  # args failed schema validation
+    NEEDS_APPROVAL = "needs_approval"  # gated; surfaced for human approval
+    ERROR = "error"  # the tool raised at execution time
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -70,9 +70,9 @@ class ToolSpec:
     validated — the LLM never hands raw dicts into tool logic.
     """
 
-    name: str                       # stable id, e.g. "kb_search"
-    version: str = "1.0.0"          # bump on arg/behaviour change
-    description: str = ""           # surfaced to the LLM as the function description
+    name: str  # stable id, e.g. "kb_search"
+    version: str = "1.0.0"  # bump on arg/behaviour change
+    description: str = ""  # surfaced to the LLM as the function description
     args_model: type[BaseModel] = BaseModel
     result_model: type[BaseModel] = BaseModel
     side_effect: SideEffect = SideEffect.READ

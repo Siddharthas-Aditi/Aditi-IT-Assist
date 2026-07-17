@@ -126,9 +126,7 @@ class AdminUserService:
 
         # Guardrail: an admin cannot suspend their own account (self-lockout).
         if actor is not None and actor.id == user.id and is_active is False:
-            raise AdminUserError(
-                "You cannot suspend your own account.", status_code=409
-            )
+            raise AdminUserError("You cannot suspend your own account.", status_code=409)
 
         before = {
             "full_name": user.full_name,

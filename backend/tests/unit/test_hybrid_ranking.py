@@ -103,9 +103,7 @@ class TestRank:
         assert ranked[0].vector_score is None  # no vector path
 
     def test_vector_scores_take_priority(self) -> None:
-        ranked = ranking.rank(
-            "anything", self._corpus(), vector_scores={"a": 0.95, "b": 0.05}
-        )
+        ranked = ranking.rank("anything", self._corpus(), vector_scores={"a": 0.95, "b": 0.05})
         assert ranked[0].key == "a"
         assert ranked[0].vector_score == 0.95
 

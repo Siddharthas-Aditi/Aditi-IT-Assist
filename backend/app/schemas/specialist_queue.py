@@ -82,8 +82,13 @@ class HandoffPackage(BaseModel):
     conversation: list[ConversationTurn] = Field(default_factory=list)
     handoff_reason: str
     handoff_triggered_by: Literal[
-        "user_request", "ai_low_confidence", "exhausted_grounded_steps",
-        "loop_detected", "repeated_failure", "policy_block", "missing_data",
+        "user_request",
+        "ai_low_confidence",
+        "exhausted_grounded_steps",
+        "loop_detected",
+        "repeated_failure",
+        "policy_block",
+        "missing_data",
     ]
     supervisor_decision_trace: list[dict] = Field(
         default_factory=list,
@@ -102,8 +107,13 @@ class QueueEntry(BaseModel):
     title: str
     priority: Literal["low", "medium", "high", "critical"]
     status: Literal[
-        "new", "triaged", "in_progress",
-        "waiting_for_user", "escalated", "resolved", "closed",
+        "new",
+        "triaged",
+        "in_progress",
+        "waiting_for_user",
+        "escalated",
+        "resolved",
+        "closed",
     ]
     category: str | None = None
     issue_subtype: str | None = None

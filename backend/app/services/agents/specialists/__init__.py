@@ -49,4 +49,3 @@ def get_specialist(name: str) -> SpecialistAgent | None:
 
 
 __all__ = ["SPECIALIST_REGISTRY", "get_specialist"]
-

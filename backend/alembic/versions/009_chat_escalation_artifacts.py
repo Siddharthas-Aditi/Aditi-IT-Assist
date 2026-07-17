@@ -59,7 +59,10 @@ def upgrade() -> None:
             server_default=sa.text("'[]'::jsonb"),
         ),
         sa.Column(
-            "context_version", sa.String(16), nullable=False, server_default="1.0",
+            "context_version",
+            sa.String(16),
+            nullable=False,
+            server_default="1.0",
         ),
         sa.Column(
             "created_at",
@@ -75,7 +78,9 @@ def upgrade() -> None:
         ),
     )
     op.create_index(
-        "ix_transcript_snapshots_ticket_id", "transcript_snapshots", ["ticket_id"],
+        "ix_transcript_snapshots_ticket_id",
+        "transcript_snapshots",
+        ["ticket_id"],
     )
     op.create_index(
         "ix_transcript_snapshots_chat_session_id",
@@ -147,7 +152,10 @@ def upgrade() -> None:
         sa.Column("supervisor_decision_trace", postgresql.JSONB, nullable=True),
         sa.Column("diagnostic_slots", postgresql.JSONB, nullable=True),
         sa.Column(
-            "context_version", sa.String(16), nullable=False, server_default="1.0",
+            "context_version",
+            sa.String(16),
+            nullable=False,
+            server_default="1.0",
         ),
         # Resolution comparison (filled post-resolution)
         sa.Column("specialist_resolution_summary", sa.Text, nullable=True),
@@ -188,19 +196,24 @@ def upgrade() -> None:
         ["chat_session_id"],
     )
     op.create_index(
-        "ix_escalation_contexts_category", "escalation_contexts", ["category"],
+        "ix_escalation_contexts_category",
+        "escalation_contexts",
+        ["category"],
     )
 
 
 def downgrade() -> None:
     op.drop_index(
-        "ix_escalation_contexts_category", table_name="escalation_contexts",
+        "ix_escalation_contexts_category",
+        table_name="escalation_contexts",
     )
     op.drop_index(
-        "ix_escalation_contexts_chat_session_id", table_name="escalation_contexts",
+        "ix_escalation_contexts_chat_session_id",
+        table_name="escalation_contexts",
     )
     op.drop_index(
-        "ix_escalation_contexts_ticket_id", table_name="escalation_contexts",
+        "ix_escalation_contexts_ticket_id",
+        table_name="escalation_contexts",
     )
     op.drop_table("escalation_contexts")
 
@@ -209,6 +222,7 @@ def downgrade() -> None:
         table_name="transcript_snapshots",
     )
     op.drop_index(
-        "ix_transcript_snapshots_ticket_id", table_name="transcript_snapshots",
+        "ix_transcript_snapshots_ticket_id",
+        table_name="transcript_snapshots",
     )
     op.drop_table("transcript_snapshots")

@@ -314,7 +314,13 @@ async def poll_session_status(
     """
     svc = _get_service(db)
     try:
-        session = await svc.poll_provider_status(uuid.UUID(session_id))
+        # Authorization: enforce the SAME participant/role visibility check as
+        # GET /sessions/{id} before touching the provider. Without this, any
+        # authenticated user could enumerate session UUIDs, read another user's
+        # session, and drive a provider-side state transition on it (IDOR).
+        session_uuid = uuid.UUID(session_id)
+        await svc.get_session(session_uuid, current_user)
+        session = await svc.poll_provider_status(session_uuid)
         await db.commit()
     except Exception as exc:
         _handle_errors(exc)

@@ -26,7 +26,7 @@ class AgentOpsStatus(BaseModel):
     background_agents_enabled: bool
     mcp_use_mock: bool
     # Retrieval
-    retrieval_mode: str                      # "hybrid" | "keyword"
+    retrieval_mode: str  # "hybrid" | "keyword"
     ranking_version: str
     # Registry / tooling
     registry_version: str

@@ -57,7 +57,8 @@ from enum import StrEnum
 # Bump on any registry change (new agent, scope change, threshold change).
 # 1.1.0 — Phase 5: specialists may declare ``allowed_tools`` (tool-calling).
 # 1.2.0 — Phase 7: specialists may declare MCP-backed diagnostic tools.
-REGISTRY_VERSION = "1.2.0"
+# 1.3.0 — Phase 9: device_intune may declare catalog-bound execution tools.
+REGISTRY_VERSION = "1.3.0"
 
 
 class AgentRole(StrEnum):
@@ -80,10 +81,10 @@ class AgentRole(StrEnum):
 class ConfidenceThresholds:
     """Thresholds for the four routing decisions the supervisor makes."""
 
-    clarify_below: float = 0.40       # below → ask a follow-up question
+    clarify_below: float = 0.40  # below → ask a follow-up question
     answer_with_disclaimer: float = 0.55  # answer but flag uncertainty
-    answer_directly: float = 0.75     # confident — answer plainly
-    escalate_below: float = 0.30      # below → hand off to a human
+    answer_directly: float = 0.75  # confident — answer plainly
+    escalate_below: float = 0.30  # below → hand off to a human
 
 
 DEFAULT_THRESHOLDS = ConfidenceThresholds()
@@ -98,14 +99,14 @@ class AgentSpec:
     rule that Python dataclasses normally enforce.
     """
 
-    name: str                          # stable id, e.g. "supervisor", "outlook"
+    name: str  # stable id, e.g. "supervisor", "outlook"
     role: AgentRole
     description: str
-    owner: str = "platform-team"       # accountable team / individual
-    version: str = "1.0.0"             # bump on behavior change
+    owner: str = "platform-team"  # accountable team / individual
+    version: str = "1.0.0"  # bump on behavior change
     # Resource bounds — the supervisor enforces these.
-    max_handoffs: int = 3              # max times this agent may receive a handoff in one session
-    max_turns: int = 10                # safety cap; supervisor escalates beyond this
+    max_handoffs: int = 3  # max times this agent may receive a handoff in one session
+    max_turns: int = 10  # safety cap; supervisor escalates beyond this
     timeout_seconds: float = 25.0
     # Confidence floors — below escalate_below the supervisor escalates instead
     # of asking this agent to keep trying.
@@ -122,9 +123,9 @@ class SubAgentSpec(AgentSpec):
     """
 
     role: AgentRole = AgentRole.SUB_AGENT
-    parent_specialist: str = ""        # the SpecialistAgentSpec.name this belongs to
+    parent_specialist: str = ""  # the SpecialistAgentSpec.name this belongs to
     subtypes: tuple[str, ...] = field(default_factory=tuple)
-    playbook_id: str = ""              # link into playbooks.py
+    playbook_id: str = ""  # link into playbooks.py
     required_slots: tuple[str, ...] = field(default_factory=tuple)
 
 
@@ -280,7 +281,10 @@ _OUTLOOK = SpecialistAgentSpec(
     # Phase 7: mailbox_quota_status is MCP-backed (real Exchange usage), live
     # only when FEATURE_MCP_TOOLS + the msgraph server are enabled.
     allowed_tools=(
-        "kb_search", "mailbox_quota_estimate", "ticket_draft", "mailbox_quota_status",
+        "kb_search",
+        "mailbox_quota_estimate",
+        "ticket_draft",
+        "mailbox_quota_status",
     ),
 )
 
@@ -342,7 +346,17 @@ _DEVICE_INTUNE = SpecialistAgentSpec(
     required_slots=("normalized_system", "platform_os"),
     kb_domain_filter=("device-management/intune",),
     # Phase 7: MCP-backed Intune compliance read (capability declared).
-    allowed_tools=("kb_search", "intune_device_compliance"),
+    # Phase 9: catalog-bound Intune execution — install approved apps (Python,
+    # Docker Desktop, …), run approved remediations, take benign device actions.
+    # Live only when FEATURE_DEVICE_EXECUTION + the msgraph_intune_exec server are
+    # enabled; every call is autonomy-policy-gated in the tool layer.
+    allowed_tools=(
+        "kb_search",
+        "intune_device_compliance",
+        "install_win32_app",
+        "run_remediation_script",
+        "device_action",
+    ),
 )
 
 _SIXTH_SENSE = SpecialistAgentSpec(
@@ -371,8 +385,11 @@ _NETWORK_VPN = SpecialistAgentSpec(
     systems=("vpn", "3cx"),
     categories=("network/connectivity",),
     subtypes=(
-        "vpn-not-connecting", "wifi-disconnecting", "internet-slow",
-        "specific-site-unreachable", "3cx-voip-issue",
+        "vpn-not-connecting",
+        "wifi-disconnecting",
+        "internet-slow",
+        "specific-site-unreachable",
+        "3cx-voip-issue",
     ),
     required_slots=("network_type",),
     kb_domain_filter=("network/connectivity",),
@@ -384,10 +401,20 @@ _NETWORK_VPN = SpecialistAgentSpec(
 AGENT_REGISTRY: dict[str, AgentSpec] = {
     spec.name: spec
     for spec in (
-        _SUPERVISOR, _TRIAGE, _RETRIEVAL, _RESPONSE,
-        _ESCALATION, _WEB_RESEARCH, _KNOWLEDGE_IMPROVEMENT,
-        _OUTLOOK, _ACCESS_MFA, _ZOOM, _DEVICE_INTUNE,
-        _SIXTH_SENSE, _HARDWARE, _NETWORK_VPN,
+        _SUPERVISOR,
+        _TRIAGE,
+        _RETRIEVAL,
+        _RESPONSE,
+        _ESCALATION,
+        _WEB_RESEARCH,
+        _KNOWLEDGE_IMPROVEMENT,
+        _OUTLOOK,
+        _ACCESS_MFA,
+        _ZOOM,
+        _DEVICE_INTUNE,
+        _SIXTH_SENSE,
+        _HARDWARE,
+        _NETWORK_VPN,
     )
 }
 
@@ -466,9 +493,7 @@ def find_specialist_for(
     return None
 
 
-def find_sub_agent_for(
-    specialist: SpecialistAgentSpec, subtype: str | None
-) -> SubAgentSpec | None:
+def find_sub_agent_for(specialist: SpecialistAgentSpec, subtype: str | None) -> SubAgentSpec | None:
     """Inside a specialist, find the sub-agent that owns ``subtype``, if any."""
     if not subtype:
         return None

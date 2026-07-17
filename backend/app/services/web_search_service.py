@@ -3,17 +3,17 @@
 import logging
 import os
 from dataclasses import dataclass
-from enum import Enum
-from typing import Optional
+from enum import StrEnum
 from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
 
-class DomainTrust(str, Enum):
+class DomainTrust(StrEnum):
     """Trustworthiness level of a source."""
-    OFFICIAL = "official"      # microsoft.com, apple.com, etc.
-    VENDOR = "vendor"          # Dell, Lenovo, etc.
+
+    OFFICIAL = "official"  # microsoft.com, apple.com, etc.
+    VENDOR = "vendor"  # Dell, Lenovo, etc.
     TRUSTED_COMMUNITY = "trusted_community"  # stackoverflow, reddit
     GENERAL_BLOG = "general_blog"  # Medium, personal blogs
 
@@ -21,6 +21,7 @@ class DomainTrust(str, Enum):
 @dataclass
 class WebSearchResult:
     """Result from a web search."""
+
     title: str
     url: str
     snippet: str
@@ -31,7 +32,7 @@ class WebSearchResult:
 class WebSearchService:
     """Search web for guidance when KB is empty."""
 
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: str | None = None):
         """
         Initialize web search service.
 
@@ -49,7 +50,7 @@ class WebSearchService:
         self,
         query: str,
         category: str,  # e.g., "outlook", "access"
-        system: str,    # e.g., "Windows", "Mac"
+        system: str,  # e.g., "Windows", "Mac"
     ) -> list[WebSearchResult]:
         """
         Search web for guidance.

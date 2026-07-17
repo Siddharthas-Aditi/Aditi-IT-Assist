@@ -26,7 +26,8 @@ if TYPE_CHECKING:
     from app.services.agents.tools.base import Tool, ToolSpec
 
 # Bump on any tool addition, removal, or arg/behaviour change.
-TOOL_REGISTRY_VERSION = "1.0.0"
+# 1.1.0 — Phase 9: device-execution tools mergeable via build_default_runtime.
+TOOL_REGISTRY_VERSION = "1.1.0"
 
 
 def _build_registry() -> dict[str, Tool]:
@@ -68,6 +69,7 @@ def build_default_runtime(
     audit_sink: AuditSink | None = None,
     *,
     include_mcp: bool = False,
+    include_device_execution: bool = False,
     mcp_session_provider=None,
 ) -> AgentToolRuntime:
     """Construct an :class:`AgentToolRuntime` over the local registry.
@@ -76,12 +78,24 @@ def build_default_runtime(
     enabled servers (Phase 7). MCP tools are governed identically to local
     tools by the runtime; they appear only when ``FEATURE_MCP_TOOLS`` is on and
     the server is enabled. Local tools take precedence on a name clash.
+
+    When ``include_device_execution`` is set, also merge the catalog-bound
+    Intune device-execution tools (Phase 9). They appear only when
+    ``FEATURE_DEVICE_EXECUTION`` is on and the ``msgraph_intune_exec`` server is
+    enabled; each call is catalog-bound and autonomy-policy-gated inside the tool.
     """
     tools: dict = dict(TOOL_REGISTRY)
     if include_mcp:
         from app.services.agents.mcp.tools import build_mcp_tools
 
         for name, tool in build_mcp_tools(session_provider=mcp_session_provider).items():
+            tools.setdefault(name, tool)
+    if include_device_execution:
+        from app.services.agents.device_actions.tools import build_device_execution_tools
+
+        for name, tool in build_device_execution_tools(
+            session_provider=mcp_session_provider
+        ).items():
             tools.setdefault(name, tool)
     return AgentToolRuntime(tools, audit_sink=audit_sink)
 

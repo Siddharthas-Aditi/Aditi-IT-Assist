@@ -1,6 +1,7 @@
 /** Employee workspace layout — brand-consistent sidebar navigation. */
 
-import { Outlet, NavLink } from 'react-router-dom';
+import { Outlet, NavLink, useLocation } from 'react-router-dom';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { MessageSquare, Ticket, User, LogOut, LifeBuoy, ArrowRight } from 'lucide-react';
 
 import { ConsentWatcher } from '@/components/remote-support/ConsentWatcher';
@@ -13,6 +14,7 @@ const NAV = [
 ];
 
 export function EmployeeLayout() {
+  const location = useLocation();
   const { user, logout, isITStaff } = useAuthStore();
 
   return (
@@ -85,7 +87,9 @@ export function EmployeeLayout() {
 
       {/* Main content */}
       <main className="flex flex-1 flex-col overflow-auto">
-        <Outlet />
+        <ErrorBoundary key={location.pathname} boundaryName="employee">
+          <Outlet />
+        </ErrorBoundary>
       </main>
 
       {/* Remote-support consent prompts reach the employee on any page. */}

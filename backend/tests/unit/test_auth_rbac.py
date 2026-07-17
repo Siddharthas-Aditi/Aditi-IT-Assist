@@ -8,15 +8,14 @@ Tests:
 """
 
 import uuid
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
 from app.services.auth.dependencies import (
-    require_roles,
     get_current_active_user,
+    require_roles,
 )
-
 
 # ─────────────────────────────────────────────────────────────────────
 # Helpers
@@ -35,7 +34,9 @@ def _make_user(role: str, roles: list[str] | None = None) -> MagicMock:
     assignment = MagicMock()
     assignment.role = MagicMock()
     assignment.role.name = role
-    assignment.role.priority = {"employee": 0, "it_agent": 10, "it_lead": 20, "it_admin": 30}.get(role, 0)
+    assignment.role.priority = {"employee": 0, "it_agent": 10, "it_lead": 20, "it_admin": 30}.get(
+        role, 0
+    )
     user.role_assignments = [assignment]
     return user
 

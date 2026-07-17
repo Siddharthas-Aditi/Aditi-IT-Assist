@@ -80,9 +80,7 @@ async def escalation_node(state: WorkflowState) -> dict:
         "should_escalate": True,
         # Explicit confirmation (typed "yes"/"connect me") or a prior live-agent
         # request → the service layer may now create + queue the real ticket.
-        "escalation_confirmed": bool(
-            is_confirming_escalation or diag_ctx.live_agent_requested
-        ),
+        "escalation_confirmed": bool(is_confirming_escalation or diag_ctx.live_agent_requested),
         "escalation_reason": reason,
         "handoff_summary": handoff_summary,
         "messages": [AIMessage(content=message)],
@@ -168,9 +166,7 @@ def _build_escalation_message(diag_ctx: DiagnosticContext, reason: str) -> str:
     )
 
 
-def _build_handoff_summary(
-    state: WorkflowState, reason: str, diag_ctx: DiagnosticContext
-) -> dict:
+def _build_handoff_summary(state: WorkflowState, reason: str, diag_ctx: DiagnosticContext) -> dict:
     """Build structured handoff summary with rich diagnostic context."""
     messages = state.get("messages", [])
     conversation_points = []
@@ -194,8 +190,10 @@ def _build_handoff_summary(
     if diag_ctx.blocked_account_flag == "yes":
         issue_parts.append("Account appears locked/blocked")
 
-    issue_description = "; ".join(issue_parts) if issue_parts else (
-        conversation_points[0] if conversation_points else "No description"
+    issue_description = (
+        "; ".join(issue_parts)
+        if issue_parts
+        else (conversation_points[0] if conversation_points else "No description")
     )
 
     return {
@@ -203,9 +201,7 @@ def _build_handoff_summary(
         "issue_category": state.get("issue_category", "unknown"),
         "issue_description": issue_description,
         "steps_attempted": (
-            state.get("steps_attempted")
-            or diag_ctx.failed_steps
-            or diag_ctx.attempted_steps
+            state.get("steps_attempted") or diag_ctx.failed_steps or diag_ctx.attempted_steps
         ),
         "ai_confidence": state.get("resolution_confidence", 0),
         "recommended_actions": _suggest_actions(diag_ctx),
@@ -231,15 +227,19 @@ def _suggest_actions(diag_ctx: DiagnosticContext) -> list[str]:
     actions = ["Review conversation history"]
 
     if diag_ctx.normalized_system == "sixth_sense":
-        actions.extend([
-            "Check Naukri account lock status",
-            "Verify user's registered email/phone for OTP delivery",
-        ])
+        actions.extend(
+            [
+                "Check Naukri account lock status",
+                "Verify user's registered email/phone for OTP delivery",
+            ]
+        )
     elif diag_ctx.login_issue_flag:
-        actions.extend([
-            "Check user's AD account status",
-            "Verify MFA configuration",
-        ])
+        actions.extend(
+            [
+                "Check user's AD account status",
+                "Verify MFA configuration",
+            ]
+        )
     elif diag_ctx.normalized_system == "outlook":
         actions.append("Check Exchange/M365 service status")
     else:
@@ -249,7 +249,9 @@ def _suggest_actions(diag_ctx: DiagnosticContext) -> list[str]:
 
 
 async def _is_user_confirming_escalation(
-    message: str, *, was_offered: bool = False,
+    message: str,
+    *,
+    was_offered: bool = False,
 ) -> bool:
     """Check whether the user is confirming an escalation offer.
 

@@ -38,21 +38,21 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 
 CANDIDATE_STATES = (
-    "proposed",   # freshly generated, awaiting first-pass triage
-    "triaged",    # a human has looked at it and queued it for review
-    "approved",   # ready to be promoted to a real article
-    "promoted",   # promoted; promoted_article_id set
-    "rejected",   # rejected with a reason
+    "proposed",  # freshly generated, awaiting first-pass triage
+    "triaged",  # a human has looked at it and queued it for review
+    "approved",  # ready to be promoted to a real article
+    "promoted",  # promoted; promoted_article_id set
+    "rejected",  # rejected with a reason
     "duplicate",  # merged into an existing article
 )
 
 CANDIDATE_SOURCES = (
-    "specialist_resolution",   # specialist closed an issue with steps worth keeping
-    "unresolved_session",      # session ended without resolution — KB gap
-    "negative_feedback",       # user feedback flagged the answer as unhelpful
-    "web_fallback",            # web research surfaced content not yet in KB
-    "missing_subtype",         # supervisor noticed no specialist owns this subtype
-    "manual",                  # SME / admin entered a candidate by hand
+    "specialist_resolution",  # specialist closed an issue with steps worth keeping
+    "unresolved_session",  # session ended without resolution — KB gap
+    "negative_feedback",  # user feedback flagged the answer as unhelpful
+    "web_fallback",  # web research surfaced content not yet in KB
+    "missing_subtype",  # supervisor noticed no specialist owns this subtype
+    "manual",  # SME / admin entered a candidate by hand
 )
 
 
@@ -72,13 +72,19 @@ class KnowledgeCandidate(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         index=True,
     )
     source_session_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), nullable=True, index=True,
+        UUID(as_uuid=True),
+        nullable=True,
+        index=True,
     )
     source_ticket_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("tickets.id"), nullable=True, index=True,
+        UUID(as_uuid=True),
+        ForeignKey("tickets.id"),
+        nullable=True,
+        index=True,
     )
     source_feedback_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), nullable=True,
+        UUID(as_uuid=True),
+        nullable=True,
     )
     source_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
 
@@ -86,7 +92,9 @@ class KnowledgeCandidate(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     # this candidate. Joins on registry.AGENT_REGISTRY for analytics.
     proposed_by_agent: Mapped[str] = mapped_column(String(80), index=True)
     proposed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True,
+        UUID(as_uuid=True),
+        ForeignKey("users.id"),
+        nullable=True,
     )
 
     # ── Content (draft) ─────────────────────────────────────────────────
@@ -111,29 +119,40 @@ class KnowledgeCandidate(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         index=True,
     )
     triaged_by: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True,
+        UUID(as_uuid=True),
+        ForeignKey("users.id"),
+        nullable=True,
     )
     triaged_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True,
+        DateTime(timezone=True),
+        nullable=True,
     )
     reviewed_by: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True,
+        UUID(as_uuid=True),
+        ForeignKey("users.id"),
+        nullable=True,
     )
     reviewed_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True,
+        DateTime(timezone=True),
+        nullable=True,
     )
     review_notes: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     rejected_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
     duplicate_of: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("knowledge_articles.id"), nullable=True,
+        UUID(as_uuid=True),
+        ForeignKey("knowledge_articles.id"),
+        nullable=True,
     )
 
     # Set when a candidate is approved and promoted into a real article.
     promoted_article_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("knowledge_articles.id"), nullable=True,
+        UUID(as_uuid=True),
+        ForeignKey("knowledge_articles.id"),
+        nullable=True,
     )
     promoted_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True,
+        DateTime(timezone=True),
+        nullable=True,
     )
 
     # ── Quality signals ────────────────────────────────────────────────
@@ -142,5 +161,6 @@ class KnowledgeCandidate(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     confidence: Mapped[float] = mapped_column(Float, default=0.5)
     times_seen: Mapped[int] = mapped_column(default=1)  # bumped on duplicate proposals
     last_seen_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True,
+        DateTime(timezone=True),
+        nullable=True,
     )

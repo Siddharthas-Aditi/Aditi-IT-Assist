@@ -15,10 +15,10 @@ Design:
 
 from __future__ import annotations
 
-from app.services.ingestion.profiles.base import ConfidenceWeights, ParserProfile
+from typing import TYPE_CHECKING
+
 from app.services.ingestion.schema import (
     MEDIUM_THRESHOLD,
-    ConfidenceLevel,
     ExtractionCandidate,
     FieldExtraction,
     SemanticSignal,
@@ -26,6 +26,8 @@ from app.services.ingestion.schema import (
     review_required_for_score,
 )
 
+if TYPE_CHECKING:
+    from app.services.ingestion.profiles.base import ConfidenceWeights, ParserProfile
 
 # ── Fields included in composite scoring ─────────────────────────────────────
 # Ordered by typical impact on article quality.
@@ -43,6 +45,7 @@ _SCOREABLE_FIELDS: list[str] = [
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
+
 
 def score_candidate(
     candidate: ExtractionCandidate,
@@ -67,6 +70,7 @@ def score_candidate(
 
 
 # ── Scoring helpers ────────────────────────────────────────────────────────────
+
 
 def _weighted_score(candidate: ExtractionCandidate, weights: ConfidenceWeights) -> float:
     """Return sum of (field_weight × field_confidence) normalised to 0–1."""
@@ -121,9 +125,7 @@ def _build_warnings(candidate: ExtractionCandidate) -> list[str]:
         warnings.append("Category could not be determined — select from dropdown.")
 
     if not candidate.field_value("resolution_steps"):
-        warnings.append(
-            "No resolution steps found — consider adding them before publishing."
-        )
+        warnings.append("No resolution steps found — consider adding them before publishing.")
 
     if not candidate.field_value("symptoms"):
         warnings.append("No symptoms detected — article may be hard to find via search.")
@@ -131,7 +133,8 @@ def _build_warnings(candidate: ExtractionCandidate) -> list[str]:
     title_conf = candidate.field_confidence("title")
     if 0 < title_conf < MEDIUM_THRESHOLD:
         warnings.append(
-            f"Title confidence is low ({title_conf:.0%}) — verify it describes the issue accurately."
+            f"Title confidence is low ({title_conf:.0%}) — "
+            "verify it describes the issue accurately."
         )
 
     res_conf = candidate.field_confidence("resolution_steps")
@@ -142,7 +145,8 @@ def _build_warnings(candidate: ExtractionCandidate) -> list[str]:
 
     if candidate.extraction_confidence < MEDIUM_THRESHOLD:
         warnings.append(
-            "Overall extraction confidence is below 50% — thorough review required before publishing."
+            "Overall extraction confidence is below 50% — "
+            "thorough review required before publishing."
         )
 
     return warnings

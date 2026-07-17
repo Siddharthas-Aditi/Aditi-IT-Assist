@@ -150,9 +150,7 @@ def validate_for_submit(article: dict) -> list[str]:
             issues.append(f"Missing required field: {field}")
 
     # Must have *something* actionable for reviewers to evaluate.
-    has_body = any(
-        article.get(f) for f in ("resolution_steps", "troubleshooting_steps", "content")
-    )
+    has_body = any(article.get(f) for f in ("resolution_steps", "troubleshooting_steps", "content"))
     if not has_body:
         issues.append(
             "Article must include at least resolution steps, troubleshooting steps, "

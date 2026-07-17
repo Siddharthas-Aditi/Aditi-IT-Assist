@@ -1,6 +1,6 @@
 """Analytics service — aggregates metrics for IT dashboards."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import structlog
 from sqlalchemy import and_, func, select
@@ -24,7 +24,7 @@ class AnalyticsService:
     ) -> dict:
         """Get high-level dashboard metrics."""
         if not end_date:
-            end_date = datetime.now(timezone.utc)
+            end_date = datetime.now(UTC)
         if not start_date:
             start_date = end_date - timedelta(days=30)
 
@@ -67,7 +67,11 @@ class AnalyticsService:
         category_stmt = (
             select(Ticket.category, func.count(Ticket.id))
             .where(
-                and_(Ticket.created_at >= start, Ticket.created_at <= end, Ticket.category.isnot(None))
+                and_(
+                    Ticket.created_at >= start,
+                    Ticket.created_at <= end,
+                    Ticket.category.isnot(None),
+                )
             )
             .group_by(Ticket.category)
             .order_by(func.count(Ticket.id).desc())
@@ -145,7 +149,7 @@ class AnalyticsService:
         target. It is ``None`` (rendered as "No data") when there is nothing to
         measure, so the UI never shows ``NaN%``.
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # SLA at risk (open, within 1 hour of breach)
         at_risk_stmt = select(func.count(Ticket.id)).where(
@@ -244,7 +248,4 @@ class AnalyticsService:
             .group_by(Ticket.assigned_to)
         )
         result = await self.db.execute(stmt)
-        return [
-            {"agent_id": str(row[0]), "active_tickets": row[1]}
-            for row in result.all()
-        ]
+        return [{"agent_id": str(row[0]), "active_tickets": row[1]} for row in result.all()]

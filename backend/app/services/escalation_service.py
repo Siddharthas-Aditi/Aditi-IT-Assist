@@ -18,7 +18,6 @@ Creation is **idempotent per ticket**: a second call returns the existing contex
 
 from __future__ import annotations
 
-import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -43,6 +42,8 @@ from app.schemas.escalation import (
 from app.services.agents.kb_gap_tags import derive_kb_gap_tags
 
 if TYPE_CHECKING:
+    import uuid
+
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from app.models.auth import User
@@ -101,9 +102,7 @@ def _normalize_steps(raw_steps: list | None, *, default_outcome: str) -> list[di
         if isinstance(step, dict):
             steps.append(
                 {
-                    "instruction": str(
-                        step.get("instruction") or step.get("step") or step
-                    ),
+                    "instruction": str(step.get("instruction") or step.get("step") or step),
                     "outcome": step.get("outcome", default_outcome),
                     "source_kb_title": step.get("source_kb_title"),
                 }
@@ -119,19 +118,14 @@ def _normalize_steps(raw_steps: list | None, *, default_outcome: str) -> list[di
     return steps
 
 
-def _normalize_kb_refs(
-    citations: list | None, knowledge_results: list | None
-) -> list[dict]:
+def _normalize_kb_refs(citations: list | None, knowledge_results: list | None) -> list[dict]:
     """Best-effort normalization of KB citations/results into typed refs."""
     source = citations or knowledge_results or []
     refs: list[dict] = []
     for item in source:
         if isinstance(item, dict):
             article_id = str(
-                item.get("article_id")
-                or item.get("id")
-                or item.get("knowledge_article_id")
-                or ""
+                item.get("article_id") or item.get("id") or item.get("knowledge_article_id") or ""
             )
             title = str(item.get("title") or item.get("name") or "Untitled article")
             relevance = item.get("relevance") or item.get("score")
@@ -211,8 +205,7 @@ class EscalationService:
         has_problem_statement = bool(problem_statement)
 
         specialist_only_signal = bool(
-            diag.get("blocked_account_flag") == "yes"
-            or diag.get("requires_privileged_action")
+            diag.get("blocked_account_flag") == "yes" or diag.get("requires_privileged_action")
         )
         escalation_reason = (
             state.get("escalation_reason")
@@ -233,18 +226,12 @@ class EscalationService:
         )
 
         live_requested = bool(diag.get("live_agent_requested"))
-        ai_status = (
-            "user_requested_human" if live_requested else "unresolved"
-        )
+        ai_status = "user_requested_human" if live_requested else "unresolved"
         if ai_status not in AI_RESOLUTION_STATUSES:  # defensive
             ai_status = "unresolved"
 
         supervisor = state.get("supervisor_decision") or {}
-        queue_target = (
-            supervisor.get("specialist")
-            or supervisor.get("agent")
-            or ticket.category
-        )
+        queue_target = supervisor.get("specialist") or supervisor.get("agent") or ticket.category
 
         context = EscalationContext(
             ticket_id=ticket.id,
@@ -269,9 +256,7 @@ class EscalationService:
             escalation_reason=escalation_reason,
             live_support_required=True,
             specialist_queue_target=queue_target,
-            handoff_triggered_by=(
-                "user_request" if live_requested else "exhausted_grounded_steps"
-            ),
+            handoff_triggered_by=("user_request" if live_requested else "exhausted_grounded_steps"),
             supervisor_decision_trace=state.get("supervisor_decision_trace") or [],
             diagnostic_slots={
                 k: v
@@ -348,9 +333,7 @@ class EscalationService:
             escalation_created_at=context.escalation_created_at,
             user_problem_statement=context.user_problem_statement,
             detected_intent=context.detected_intent,
-            steps_attempted=[
-                AttemptedStepOut(**s) for s in (context.ai_attempted_steps or [])
-            ],
+            steps_attempted=[AttemptedStepOut(**s) for s in (context.ai_attempted_steps or [])],
             kb_articles_referenced=[
                 KBArticleRefOut(**r) for r in (context.kb_articles_referenced or [])
             ],
@@ -407,12 +390,8 @@ class EscalationService:
 
     # ── Helpers ──────────────────────────────────────────────────────────
 
-    async def _get_context_by_ticket(
-        self, ticket_id: uuid.UUID
-    ) -> EscalationContext | None:
-        stmt = select(EscalationContext).where(
-            EscalationContext.ticket_id == ticket_id
-        )
+    async def _get_context_by_ticket(self, ticket_id: uuid.UUID) -> EscalationContext | None:
+        stmt = select(EscalationContext).where(EscalationContext.ticket_id == ticket_id)
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
@@ -433,9 +412,7 @@ class EscalationService:
             sentiment=c.sentiment,
             ai_attempted_steps=[AttemptedStepOut(**s) for s in (c.ai_attempted_steps or [])],
             user_feedback_on_steps=c.user_feedback_on_steps or [],
-            kb_articles_referenced=[
-                KBArticleRefOut(**r) for r in (c.kb_articles_referenced or [])
-            ],
+            kb_articles_referenced=[KBArticleRefOut(**r) for r in (c.kb_articles_referenced or [])],
             kb_gap_tags=c.kb_gap_tags or [],
             ai_confidence=c.ai_confidence,
             ai_resolution_status=c.ai_resolution_status,
@@ -483,9 +460,7 @@ class EscalationService:
         except Exception as exc:  # audit must never break the escalation path
             logger.warning("escalation_audit_failed", error=str(exc))
 
-    async def _audit_comparison(
-        self, context: EscalationContext, actor: User | None
-    ) -> None:
+    async def _audit_comparison(self, context: EscalationContext, actor: User | None) -> None:
         try:
             from app.services.audit_service import AuditService
 
@@ -495,8 +470,7 @@ class EscalationService:
                 actor=actor,
                 resource_id=str(context.id),
                 description=(
-                    f"Specialist resolution comparison recorded for ticket "
-                    f"{context.ticket_id}"
+                    f"Specialist resolution comparison recorded for ticket {context.ticket_id}"
                 ),
                 new_value={
                     "ticket_id": str(context.ticket_id),

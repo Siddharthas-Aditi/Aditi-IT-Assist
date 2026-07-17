@@ -59,7 +59,6 @@ def upgrade() -> None:
     op.create_table(
         "specialist_chat_sessions",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-
         # Foreign keys
         sa.Column(
             "ticket_id",
@@ -89,7 +88,6 @@ def upgrade() -> None:
             sa.ForeignKey("support_sessions.id", ondelete="SET NULL"),
             nullable=True,
         ),
-
         # Lifecycle
         sa.Column(
             "status",
@@ -119,7 +117,9 @@ def upgrade() -> None:
             server_default=sa.func.now(),
         ),
         sa.Column(
-            "idle_warning_at", sa.DateTime(timezone=True), nullable=True,
+            "idle_warning_at",
+            sa.DateTime(timezone=True),
+            nullable=True,
         ),
         sa.Column("ended_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column(
@@ -141,7 +141,6 @@ def upgrade() -> None:
             sa.ForeignKey("users.id", ondelete="SET NULL"),
             nullable=True,
         ),
-
         # Resolution metadata
         sa.Column("resolution_notes", sa.Text, nullable=True),
         sa.Column(
@@ -156,7 +155,6 @@ def upgrade() -> None:
             sa.ForeignKey("knowledge_candidates.id", ondelete="SET NULL"),
             nullable=True,
         ),
-
         # Tunable thresholds
         sa.Column(
             "idle_warning_seconds",
@@ -170,10 +168,8 @@ def upgrade() -> None:
             nullable=False,
             server_default="180",
         ),
-
         # Snapshot
         sa.Column("final_snapshot", postgresql.JSONB, nullable=True),
-
         # Timestamps
         sa.Column(
             "created_at",
@@ -229,9 +225,7 @@ def upgrade() -> None:
         "specialist_chat_sessions",
         ["ticket_id"],
         unique=True,
-        postgresql_where=sa.text(
-            "status IN ('active', 'idle_warning')"
-        ),
+        postgresql_where=sa.text("status IN ('active', 'idle_warning')"),
     )
 
     # ── specialist_chat_messages ─────────────────────────────────────────
@@ -241,9 +235,7 @@ def upgrade() -> None:
         sa.Column(
             "session_id",
             postgresql.UUID(as_uuid=True),
-            sa.ForeignKey(
-                "specialist_chat_sessions.id", ondelete="CASCADE"
-            ),
+            sa.ForeignKey("specialist_chat_sessions.id", ondelete="CASCADE"),
             nullable=False,
         ),
         sa.Column(

@@ -8,11 +8,11 @@ and grounded resolution — avoiding the "dump everything" anti-pattern.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 
-class DiagnosticPhase(str, Enum):
+class DiagnosticPhase(StrEnum):
     """Current phase of the diagnostic conversation."""
 
     INTAKE = "intake"  # Initial message, broad category identified
@@ -23,7 +23,7 @@ class DiagnosticPhase(str, Enum):
     ESCALATING = "escalating"  # Handing off to human
 
 
-class ConfidenceLevel(str, Enum):
+class ConfidenceLevel(StrEnum):
     """Confidence bands for retrieval/resolution quality."""
 
     HIGH = "high"  # >= 0.8 — answer directly
@@ -55,15 +55,15 @@ class DiagnosticContext:
     # ── Core Classification ──────────────────────────────────────
     issue_category: str | None = None
     issue_subcategory: str | None = None
-    issue_subtype: str | None = None          # Specific subtype, e.g. "mailbox-full"
+    issue_subtype: str | None = None  # Specific subtype, e.g. "mailbox-full"
     subtype_confidence: float = 0.0
     symptom: str | None = None
     exact_problem_statement: str | None = None
 
     # ── Entity Normalization ─────────────────────────────────────
-    normalized_system: str | None = None     # Canonical system name from entity registry
-    raw_system_mention: str | None = None    # Original text the user typed
-    entity_confidence: float = 0.0           # Entity recognition confidence
+    normalized_system: str | None = None  # Canonical system name from entity registry
+    raw_system_mention: str | None = None  # Original text the user typed
+    entity_confidence: float = 0.0  # Entity recognition confidence
 
     # ── Environment Context ──────────────────────────────────────
     affected_system: str | None = None
@@ -73,7 +73,7 @@ class DiagnosticContext:
 
     # ── Issue-Specific Flags ─────────────────────────────────────
     login_issue_flag: bool = False
-    blocked_account_flag: str | None = None   # "yes" | "no" | "unsure"
+    blocked_account_flag: str | None = None  # "yes" | "no" | "unsure"
     otp_issue_flag: bool = False
     unhandled_message_flag: bool = False
 
@@ -175,9 +175,9 @@ class DiagnosticContext:
             return True
         if self.resolution_attempts >= 2 and self.resolution_confidence < 0.5:
             return True
-        if self.clarification_count >= self.max_clarifications and not self.has_enough_context():
-            return True
-        return False
+        return bool(
+            self.clarification_count >= self.max_clarifications and not self.has_enough_context()
+        )
 
     def reset_issue_context(self) -> None:
         """Clear everything specific to the *current* issue.
@@ -283,11 +283,22 @@ class DiagnosticContext:
         """Return all slots that have values."""
         result: dict[str, str] = {}
         for slot_name in [
-            "issue_category", "issue_subcategory", "issue_subtype", "symptom",
-            "exact_problem_statement", "affected_system", "device_type",
-            "platform_os", "error_message", "duration", "urgency",
-            "business_impact", "vpn_status", "network_type",
-            "normalized_system", "raw_system_mention",
+            "issue_category",
+            "issue_subcategory",
+            "issue_subtype",
+            "symptom",
+            "exact_problem_statement",
+            "affected_system",
+            "device_type",
+            "platform_os",
+            "error_message",
+            "duration",
+            "urgency",
+            "business_impact",
+            "vpn_status",
+            "network_type",
+            "normalized_system",
+            "raw_system_mention",
             "blocked_account_flag",
         ]:
             val = getattr(self, slot_name, None)

@@ -151,7 +151,10 @@ class AuthProvider(ABC):
         )
 
     async def initiate_logout(
-        self, *, user_id: str, session_index: str | None = None,
+        self,
+        *,
+        user_id: str,
+        session_index: str | None = None,
         name_id: str | None = None,
     ) -> SSOLogoutResult:
         """Initiate Single Logout with IdP.
@@ -169,4 +172,3 @@ class AuthProvider(ABC):
         Returns None if the provider doesn't publish metadata.
         """
         return None
-

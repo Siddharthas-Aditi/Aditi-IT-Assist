@@ -126,17 +126,15 @@ class SessionMetrics:
     (the calling node updates after the decision is acted on).
     """
 
-    handoffs: int = 0                  # total agent-to-agent handoffs this session
+    handoffs: int = 0  # total agent-to-agent handoffs this session
     delegations_per_agent: dict[str, int] = field(default_factory=dict)
     turn_count: int = 0
-    loop_signals: int = 0              # consecutive turns with no progress
-    last_progress_turn: int = 0        # turn # we last filled a slot / tried a step
+    loop_signals: int = 0  # consecutive turns with no progress
+    last_progress_turn: int = 0  # turn # we last filled a slot / tried a step
 
     def record_delegation(self, agent_name: str) -> None:
         self.handoffs += 1
-        self.delegations_per_agent[agent_name] = (
-            self.delegations_per_agent.get(agent_name, 0) + 1
-        )
+        self.delegations_per_agent[agent_name] = self.delegations_per_agent.get(agent_name, 0) + 1
 
     def per_agent(self, agent_name: str) -> int:
         return self.delegations_per_agent.get(agent_name, 0)
@@ -278,10 +276,7 @@ def decide(
 
     if metrics.per_agent(specialist.name) >= _PER_SPECIALIST_CAP:
         # Try web fallback if this specialist allows it; otherwise escalate.
-        if (
-            specialist.web_fallback_allowed
-            and metrics.per_agent("web_research") == 0
-        ):
+        if specialist.web_fallback_allowed and metrics.per_agent("web_research") == 0:
             return SupervisorDecision(
                 action=NextAction.WEB_FALLBACK,
                 reason=(
@@ -311,10 +306,7 @@ def decide(
     if missing:
         return SupervisorDecision(
             action=NextAction.CLARIFY,
-            reason=(
-                f"specialist {specialist.name} requires {sorted(missing)} "
-                f"before it can act"
-            ),
+            reason=(f"specialist {specialist.name} requires {sorted(missing)} before it can act"),
             agent=specialist.name,
             confidence=0.6,
             inputs_snapshot=snapshot,
@@ -360,8 +352,7 @@ def decide(
     return SupervisorDecision(
         action=NextAction.DELEGATE,
         reason=(
-            f"delegating to specialist {specialist.name} for category "
-            f"{specialist.categories!r}"
+            f"delegating to specialist {specialist.name} for category {specialist.categories!r}"
         ),
         agent=specialist.name,
         confidence=knowledge_confidence or 0.6,

@@ -8,12 +8,11 @@ Covers:
 
 from __future__ import annotations
 
-import uuid
-from datetime import datetime
+import uuid  # noqa: TC003 - pydantic evaluates these annotations at runtime
+from datetime import datetime  # noqa: TC003 - pydantic evaluates these annotations at runtime
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
-
+from pydantic import BaseModel, Field, field_validator
 
 # ─────────────────────────────────────────────────────────────────────
 # Enums (string literals for schema compatibility)
@@ -197,7 +196,7 @@ class ArticleFeedbackSummary(BaseModel):
     avg_rating: float | None = None
     helpful_rate: float | None = None
     resolved_rate: float | None = None
-    flag_count: int = 0          # sessions where review_flag=True and article was cited
+    flag_count: int = 0  # sessions where review_flag=True and article was cited
     flag_threshold_breached: bool = False
 
 

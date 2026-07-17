@@ -9,12 +9,11 @@ Covers:
 
 from __future__ import annotations
 
-import uuid
-from datetime import datetime
+import uuid  # noqa: TC003 - pydantic evaluates these annotations at runtime
+from datetime import datetime  # noqa: TC003 - pydantic evaluates these annotations at runtime
 from typing import Any
 
 from pydantic import BaseModel, Field, field_validator, model_validator
-
 
 # ── Enums (strings, mirror ORM enums) ─────────────────────────────────────────
 
@@ -26,6 +25,7 @@ ALLOWED_EXTENSIONS = ("docx", "pdf", "pptx", "txt", "md")
 
 # ── Step helper ────────────────────────────────────────────────────────────────
 
+
 class ExtractionStep(BaseModel):
     """One structured step in troubleshooting or resolution sections."""
 
@@ -35,6 +35,7 @@ class ExtractionStep(BaseModel):
 
 
 # ── Validation warning ─────────────────────────────────────────────────────────
+
 
 class IngestionWarning(BaseModel):
     """A validation issue attached to a candidate."""
@@ -47,6 +48,7 @@ class IngestionWarning(BaseModel):
 # ─────────────────────────────────────────────────────────────────────────────
 # IngestionJob schemas
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class IngestionJobCreate(BaseModel):
     """Internal schema populated after the upload handler saves the file."""
@@ -109,6 +111,7 @@ class IngestionJobUpdate(BaseModel):
 # ─────────────────────────────────────────────────────────────────────────────
 # IngestionCandidate schemas
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class IngestionCandidateSummary(BaseModel):
     """Card-level view for the candidate list page."""
@@ -192,15 +195,11 @@ class IngestionCandidateDetail(BaseModel):
     schema_version: str | None = Field(
         default=None, description="Extraction schema version (e.g. '2.0.0')"
     )
-    parser_profile: str | None = Field(
-        default=None, description="Name of the parser profile used"
-    )
+    parser_profile: str | None = Field(default=None, description="Name of the parser profile used")
     parser_version: str | None = Field(
         default=None, description="Pipeline version that produced this candidate"
     )
-    confidence_level: str | None = Field(
-        default=None, description="HIGH / MEDIUM / LOW / VERY_LOW"
-    )
+    confidence_level: str | None = Field(default=None, description="HIGH / MEDIUM / LOW / VERY_LOW")
     review_required: bool = Field(
         default=True, description="Whether human review is required before saving"
     )
@@ -225,9 +224,15 @@ class IngestionCandidateDetail(BaseModel):
         payload = data.get("normalized_payload_json") or {}
         if not isinstance(payload, dict):
             return data
-        for key in ("schema_version", "parser_profile", "parser_version",
-                    "confidence_level", "review_required",
-                    "field_confidences", "parser_warnings"):
+        for key in (
+            "schema_version",
+            "parser_profile",
+            "parser_version",
+            "confidence_level",
+            "review_required",
+            "field_confidences",
+            "parser_warnings",
+        ):
             if key not in data or data.get(key) is None:
                 data[key] = payload.get(key)
         return data
@@ -277,6 +282,7 @@ class RejectCandidateRequest(BaseModel):
 # Bulk operations
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class BulkSaveRequest(BaseModel):
     """Save multiple approved candidates from a single job."""
 
@@ -304,6 +310,7 @@ class BulkSaveResponse(BaseModel):
 # ─────────────────────────────────────────────────────────────────────────────
 # Pipeline / upload responses
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class UploadResponse(BaseModel):
     """Immediate response after a file is accepted for processing."""

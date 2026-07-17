@@ -119,7 +119,9 @@ class TestTriageNode:
         from langchain_core.messages import HumanMessage
 
         state = {
-            "messages": [HumanMessage(content="My Outlook is not syncing emails since this morning")],
+            "messages": [
+                HumanMessage(content="My Outlook is not syncing emails since this morning")
+            ],
             "session_id": "test-specific",
             "diagnostic_context": None,
         }
@@ -146,4 +148,3 @@ class TestTriageNode:
         audit = result["audit_trail"][0]
         assert "event" in audit
         assert "triage" in audit["event"]
-

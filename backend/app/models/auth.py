@@ -1,7 +1,7 @@
 """Authentication & RBAC models — Users, Roles, Permissions, Groups."""
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -125,9 +125,7 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     hashed_password: Mapped[str] = mapped_column(String(255), default="")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False)
-    last_login_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Relationships
     role_assignments: Mapped[list["UserRoleAssignment"]] = relationship(
@@ -163,9 +161,7 @@ class UserRoleAssignment(UUIDPrimaryKeyMixin, Base):
     """Assigns a role to a user with optional expiry."""
 
     __tablename__ = "user_role_assignments"
-    __table_args__ = (
-        UniqueConstraint("user_id", "role_id", name="uq_user_role"),
-    )
+    __table_args__ = (UniqueConstraint("user_id", "role_id", name="uq_user_role"),)
 
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), index=True
@@ -177,18 +173,13 @@ class UserRoleAssignment(UUIDPrimaryKeyMixin, Base):
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
     assigned_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
-    expires_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    user: Mapped["User"] = relationship(
-        back_populates="role_assignments", foreign_keys=[user_id]
-    )
-    role: Mapped["Role"] = relationship(
-        back_populates="user_assignments", lazy="selectin"
-    )
+    user: Mapped["User"] = relationship(back_populates="role_assignments", foreign_keys=[user_id])
+    role: Mapped["Role"] = relationship(back_populates="user_assignments", lazy="selectin")
+
 
 # ─────────────────────────────────────────────────────────────────────
 # Auth Identity (SSO/SAML mapping)
@@ -206,15 +197,11 @@ class AuthIdentity(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), index=True
     )
-    provider: Mapped[str] = mapped_column(
-        Enum(*AUTH_PROVIDER_TYPES, name="auth_provider_type")
-    )
+    provider: Mapped[str] = mapped_column(Enum(*AUTH_PROVIDER_TYPES, name="auth_provider_type"))
     provider_user_id: Mapped[str] = mapped_column(String(255))
     provider_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     provider_metadata: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
-    last_login_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     user: Mapped["User"] = relationship(back_populates="auth_identities")
 
@@ -237,12 +224,10 @@ class LoginSession(UUIDPrimaryKeyMixin, Base):
     user_agent: Mapped[str | None] = mapped_column(String(500), nullable=True)
     provider: Mapped[str] = mapped_column(String(50), default="local")
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    revoked_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     user: Mapped["User"] = relationship(back_populates="sessions")

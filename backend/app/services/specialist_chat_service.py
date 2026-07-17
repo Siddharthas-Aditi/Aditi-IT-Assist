@@ -68,9 +68,7 @@ def set_typing(session_id: uuid.UUID, role: str, *, is_typing: bool) -> None:
         roles.pop(role, None)
 
 
-def typing_roles(
-    session_id: uuid.UUID, *, exclude_role: str | None = None
-) -> list[str]:
+def typing_roles(session_id: uuid.UUID, *, exclude_role: str | None = None) -> list[str]:
     """Roles typing within the TTL window, optionally excluding the caller's."""
     roles = _typing_state.get(str(session_id))
     if not roles:
@@ -79,8 +77,7 @@ def typing_roles(
     return [
         role
         for role, seen in roles.items()
-        if role != exclude_role
-        and (now - seen).total_seconds() <= TYPING_TTL_SECONDS
+        if role != exclude_role and (now - seen).total_seconds() <= TYPING_TTL_SECONDS
     ]
 
 
@@ -149,10 +146,17 @@ class SpecialistChatService:
         )
         self.db.add(session)
         try:
-            await self.db.flush()
+            # SAVEPOINT: roll back ONLY this insert on conflict, not the caller's
+            # whole transaction. `start()` documents "does NOT commit — callers
+            # control the transaction", but the old `db.rollback()` here discarded
+            # everything the caller had staged. begin_nested() auto-rolls-back the
+            # savepoint on exception and re-raises.
+            async with self.db.begin_nested():
+                await self.db.flush()
         except IntegrityError:
-            # Active session already exists for this ticket — resume it.
-            await self.db.rollback()
+            # Active session already exists for this ticket — resume it. Drop the
+            # conflicting pending object so it isn't retried on the caller's commit.
+            self.db.expunge(session)
             existing = await self._get_active_for_ticket(ticket.id)
             if existing is None:
                 raise
@@ -205,13 +209,9 @@ class SpecialistChatService:
         """
         session = await self._load(session_id)
         if not _is_participant(session, sender):
-            raise LiveChatPermissionError(
-                "Only the user or assigned specialist may post messages"
-            )
+            raise LiveChatPermissionError("Only the user or assigned specialist may post messages")
         if session.status.startswith("ended"):
-            raise LiveChatStateError(
-                f"Cannot post to a {session.status} session"
-            )
+            raise LiveChatStateError(f"Cannot post to a {session.status} session")
 
         role = "user" if sender.id == session.user_id else "specialist"
         # Sending a message means you've stopped typing — clear the indicator.
@@ -251,14 +251,22 @@ class SpecialistChatService:
         return msg
 
     async def append_system_message(
-        self, session_id: uuid.UUID, *, content: str, event: str,
+        self,
+        session_id: uuid.UUID,
+        *,
+        content: str,
+        event: str,
     ) -> SpecialistChatMessage:
         """Public wrapper for inserting a system message (idle warning, etc.)."""
         session = await self._load(session_id)
         return await self._append_system_message(session, content=content, event=event)
 
     async def mark_typing(
-        self, session_id: uuid.UUID, *, sender: User, is_typing: bool,
+        self,
+        session_id: uuid.UUID,
+        *,
+        sender: User,
+        is_typing: bool,
     ) -> str:
         """Record the caller's typing state. Returns the caller's role.
 
@@ -310,7 +318,10 @@ class SpecialistChatService:
         error). When set, the actor must be the user (→ ``user_left``) or
         the specialist (→ ``specialist_ended`` / ``resolved``).
         """
-        session = await self._load(session_id)
+        # Lock the row: end() is the main read-modify-write and races with the
+        # idle sweeper and concurrent end() calls. The idempotent early-return
+        # below then reliably de-duplicates a second concurrent end.
+        session = await self._load(session_id, for_update=True)
         if session.status.startswith("ended"):
             return session  # idempotent
         clear_typing(session_id)
@@ -359,6 +370,28 @@ class SpecialistChatService:
         )
         return session
 
+    async def end_active_for_ticket(
+        self,
+        ticket_id: uuid.UUID,
+        *,
+        actor: User | None,
+        reason: str,
+        resolution_notes: str | None = None,
+    ) -> SpecialistChatSession | None:
+        """End the active/idle session bound to a ticket, if any.
+
+        Used by the queue service on resolve/release so the employee's live
+        chat doesn't keep polling a session that is effectively over (it would
+        otherwise linger as ``active`` until the idle timeout). Returns the
+        ended session, or None when the ticket has no live session.
+        """
+        existing = await self._get_active_for_ticket(ticket_id)
+        if existing is None:
+            return None
+        return await self.end(
+            existing.id, actor=actor, reason=reason, resolution_notes=resolution_notes
+        )
+
     # ── Idle handling ──────────────────────────────────────────────────
 
     def evaluate_idle(
@@ -378,7 +411,8 @@ class SpecialistChatService:
         )
 
     async def check_and_apply_idle(
-        self, session: SpecialistChatSession,
+        self,
+        session: SpecialistChatSession,
     ) -> SpecialistChatSession:
         """Apply idle rules. Mutates session + writes audit events.
 
@@ -394,7 +428,9 @@ class SpecialistChatService:
         ev = self.evaluate_idle(session)
         if ev.is_idle_end:
             return await self.end(
-                session.id, actor=None, reason="idle_timeout",
+                session.id,
+                actor=None,
+                reason="idle_timeout",
                 resolution_notes=None,
             )
         if ev.is_idle_warning and session.status == "active":
@@ -425,13 +461,15 @@ class SpecialistChatService:
             )
         return session
 
-    async def sweep_idle(self, batch_limit: int = 200) -> int:
-        """Background-worker entry point: end all sessions past their idle
-        threshold. Returns the count ended.
+    async def sweep_idle(self, batch_limit: int = 200) -> tuple[int, int]:
+        """Background-worker entry point: apply idle rules to stale sessions.
 
-        Phase 1 has no scheduler — call this from a cron / scheduler later.
-        For now the polling endpoint also runs the check, so users see the
-        right state the next time they fetch.
+        Returns ``(ended, warned)`` — the number of sessions ended AND the
+        number transitioned to ``idle_warning`` this pass. The caller MUST
+        commit when either is non-zero: a pass that only produced warnings
+        still mutated rows (status flip + system message + audit event), and
+        losing that commit means abandoned sessions never get their warning
+        persisted (only a live, polling tab would trigger it otherwise).
         """
         cutoff = datetime.now(UTC) - timedelta(seconds=60)
         stmt = (
@@ -443,10 +481,15 @@ class SpecialistChatService:
                 )
             )
             .limit(batch_limit)
+            # Claim rows so overlapping sweeper passes / multi-worker deploys
+            # don't both process the same session; already-locked rows are
+            # skipped this pass and picked up next time.
+            .with_for_update(skip_locked=True)
         )
         result = await self.db.execute(stmt)
         sessions = list(result.scalars().all())
         ended = 0
+        warned = 0
         for s in sessions:
             ev = self.evaluate_idle(s)
             if ev.is_idle_end:
@@ -454,7 +497,8 @@ class SpecialistChatService:
                 ended += 1
             elif ev.is_idle_warning and s.status == "active":
                 await self.check_and_apply_idle(s)
-        return ended
+                warned += 1
+        return ended, warned
 
     # ── Reads ──────────────────────────────────────────────────────────
 
@@ -482,7 +526,8 @@ class SpecialistChatService:
         return session
 
     async def list_active_for_specialist(
-        self, specialist_id: uuid.UUID,
+        self,
+        specialist_id: uuid.UUID,
     ) -> list[SpecialistChatSession]:
         stmt = (
             select(SpecialistChatSession)
@@ -497,7 +542,8 @@ class SpecialistChatService:
         return list((await self.db.execute(stmt)).scalars().all())
 
     async def get_transcript(
-        self, session_id: uuid.UUID,
+        self,
+        session_id: uuid.UUID,
     ) -> list[SpecialistChatMessage]:
         session = await self._load(session_id, with_messages=True)
         return list(session.messages)
@@ -505,13 +551,21 @@ class SpecialistChatService:
     # ── Internals ──────────────────────────────────────────────────────
 
     async def _load(
-        self, session_id: uuid.UUID, *, with_messages: bool = False,
+        self,
+        session_id: uuid.UUID,
+        *,
+        with_messages: bool = False,
+        for_update: bool = False,
     ) -> SpecialistChatSession:
-        stmt = select(SpecialistChatSession).where(
-            SpecialistChatSession.id == session_id
-        )
+        stmt = select(SpecialistChatSession).where(SpecialistChatSession.id == session_id)
         if with_messages:
             stmt = stmt.options(selectinload(SpecialistChatSession.messages))
+        if for_update:
+            # Row lock for read-modify-write paths (end/idle) so a concurrent
+            # end() or the idle sweeper can't interleave and lose an update
+            # (e.g. resurrect a timed-out session or double-post the end
+            # message). No-op on backends without SELECT ... FOR UPDATE.
+            stmt = stmt.with_for_update()
         result = await self.db.execute(stmt)
         session = result.scalar_one_or_none()
         if session is None:
@@ -519,7 +573,8 @@ class SpecialistChatService:
         return session
 
     async def get_active_for_participant(
-        self, user_id: uuid.UUID,
+        self,
+        user_id: uuid.UUID,
     ) -> SpecialistChatSession | None:
         """Most-recent non-ended session where this user is a participant.
 
@@ -544,7 +599,8 @@ class SpecialistChatService:
         return (await self.db.execute(stmt)).scalar_one_or_none()
 
     async def _get_active_for_ticket(
-        self, ticket_id: uuid.UUID,
+        self,
+        ticket_id: uuid.UUID,
     ) -> SpecialistChatSession | None:
         stmt = (
             select(SpecialistChatSession)

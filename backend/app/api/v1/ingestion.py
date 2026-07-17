@@ -21,7 +21,6 @@ GET    /duplicates                          — duplicate lookup by title
 
 from __future__ import annotations
 
-import shutil
 import uuid
 from pathlib import Path
 from typing import Annotated
@@ -53,8 +52,8 @@ from app.schemas.ingestion import (
     SaveCandidateResponse,
     UploadResponse,
 )
-from app.services.auth.dependencies import require_permissions
 from app.services.audit_service import AuditService
+from app.services.auth.dependencies import require_permissions
 from app.services.ingestion.deduplicator import find_duplicates
 from app.services.ingestion.mapper import map_candidate_to_article_create
 from app.services.ingestion.pipeline import run_pipeline
@@ -80,6 +79,7 @@ _ALLOWED_EXT = {"docx", "pdf", "pptx", "txt", "md"}
 # ─────────────────────────────────────────────────────────────────────────────
 # Upload
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 @router.post("/upload", response_model=UploadResponse, status_code=status.HTTP_202_ACCEPTED)
 async def upload_document(
@@ -148,19 +148,22 @@ async def upload_document(
 
 async def _run_pipeline_task(job_id: uuid.UUID) -> None:
     """Background task wrapper — creates its own DB session."""
-    from app.core.database import async_session_factory
     from app.core.config import settings as _settings
+    from app.core.database import async_session_factory
 
     # Wire LLM service for Stage 8 enrichment when configured.
     llm_service: object | None = None
     if getattr(_settings, "INGESTION_LLM_ENABLED", False):
         try:
             from app.services.llm_service import LLMService
+
             _svc = LLMService()
             if getattr(_svc, "is_available", False) or getattr(_svc, "llm_is_configured", False):
                 llm_service = _svc
         except Exception:
-            logger.warning("LLM service unavailable for pipeline enrichment, continuing without LLM")
+            logger.warning(
+                "LLM service unavailable for pipeline enrichment, continuing without LLM"
+            )
 
     async with async_session_factory() as db:
         try:
@@ -172,6 +175,7 @@ async def _run_pipeline_task(job_id: uuid.UUID) -> None:
 # ─────────────────────────────────────────────────────────────────────────────
 # Jobs
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 @router.get("/jobs", response_model=list[IngestionJobSummary])
 async def list_jobs(
@@ -242,6 +246,7 @@ async def retry_job(
 # Candidates — list + detail
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 @router.get("/jobs/{job_id}/candidates", response_model=list[IngestionCandidateSummary])
 async def list_candidates(
     job_id: uuid.UUID,
@@ -285,6 +290,7 @@ async def get_candidate(
 # ─────────────────────────────────────────────────────────────────────────────
 # Candidates — mutations
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 @router.patch(
     "/jobs/{job_id}/candidates/{candidate_id}",
@@ -438,6 +444,7 @@ async def reject_candidate(
 # Bulk save
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 @router.post("/jobs/{job_id}/bulk-save", response_model=BulkSaveResponse)
 async def bulk_save_candidates(
     job_id: uuid.UUID,
@@ -455,16 +462,21 @@ async def bulk_save_candidates(
 
     for c in candidates:
         if c.ingestion_job_id != job_id:
-            results.append(BulkSaveResult(
-                candidate_id=c.id, success=False, error="Candidate does not belong to this job."
-            ))
+            results.append(
+                BulkSaveResult(
+                    candidate_id=c.id, success=False, error="Candidate does not belong to this job."
+                )
+            )
             failed_count += 1
             continue
         if c.review_status in ("saved", "rejected"):
-            results.append(BulkSaveResult(
-                candidate_id=c.id, success=False,
-                error=f"Candidate status is '{c.review_status}', cannot save."
-            ))
+            results.append(
+                BulkSaveResult(
+                    candidate_id=c.id,
+                    success=False,
+                    error=f"Candidate status is '{c.review_status}', cannot save.",
+                )
+            )
             failed_count += 1
             continue
         try:
@@ -486,22 +498,20 @@ async def bulk_save_candidates(
                 },
                 job_id=str(job_id),
                 candidate_index=c.candidate_index,
-                ownership_group_id=str(payload.ownership_group_id) if payload.ownership_group_id else None,
+                ownership_group_id=str(payload.ownership_group_id)
+                if payload.ownership_group_id
+                else None,
             )
             mgmt = KnowledgeManagementService(db)
             article = await mgmt.create_draft(actor, article_create)
             await repo.update_candidate(
                 c.id, {"review_status": "saved", "mapped_article_id": article.id}
             )
-            results.append(BulkSaveResult(
-                candidate_id=c.id, success=True, article_id=article.id
-            ))
+            results.append(BulkSaveResult(candidate_id=c.id, success=True, article_id=article.id))
             saved_count += 1
         except Exception as exc:
             logger.exception("Bulk save failed for candidate %s", c.id)
-            results.append(BulkSaveResult(
-                candidate_id=c.id, success=False, error=str(exc)
-            ))
+            results.append(BulkSaveResult(candidate_id=c.id, success=False, error=str(exc)))
             failed_count += 1
 
     await db.commit()
@@ -511,6 +521,7 @@ async def bulk_save_candidates(
 # ─────────────────────────────────────────────────────────────────────────────
 # Duplicate lookup
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 @router.get("/duplicates", response_model=list[DuplicateCandidateMatch])
 async def check_duplicates(

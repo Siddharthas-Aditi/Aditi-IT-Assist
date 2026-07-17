@@ -2,7 +2,6 @@
 
 import logging
 from dataclasses import dataclass
-from typing import Optional
 
 from app.services.agents.diagnostic_state import DiagnosticContext
 from app.services.llm_service import LLMService
@@ -13,6 +12,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ContextSummary:
     """Compressed view of conversation so far."""
+
     issue_one_liner: str  # "Outlook mailbox full, user cleared cache but still failing"
     entity: str  # "Outlook"
     attempted_solutions: list[str]  # ["Cleared cache", "Restarted"]
@@ -42,15 +42,18 @@ class ContextSummarizerService:
         """
         filled_slots = diagnostic_context.get_filled_slots()
 
+        device_type = diagnostic_context.device_type or "Unknown"
+        platform_os = diagnostic_context.platform_os or "Unknown"
+
         # Build summary prompt
         summary_prompt = f"""
 Summarize this IT support conversation in 2-3 sentences:
 
-**Issue Type**: {diagnostic_context.issue_subtype or 'Unknown'}
+**Issue Type**: {diagnostic_context.issue_subtype or "Unknown"}
 **System/Product**: {diagnostic_context.normalized_system}
 **Problem**: {diagnostic_context.exact_problem_statement}
-**Attempts Made**: {', '.join(diagnostic_context.attempted_steps or ['None yet'])}
-**Key Environment**: Device: {diagnostic_context.device_type or 'Unknown'}, OS: {diagnostic_context.platform_os or 'Unknown'}
+**Attempts Made**: {", ".join(diagnostic_context.attempted_steps or ["None yet"])}
+**Key Environment**: Device: {device_type}, OS: {platform_os}
 
 Output format:
 "User has [issue with system]. Tried [attempts] but [result]. [key blocker or fact if any]."
@@ -61,7 +64,10 @@ Be concise. Focus on what matters for next troubleshooting step.
         try:
             summary_text = await self.llm.complete(
                 prompt=summary_prompt,
-                system_prompt="You are a support ticket analyst. Summarize conversations concisely for internal handoff.",
+                system_prompt=(
+                    "You are a support ticket analyst. Summarize conversations "
+                    "concisely for internal handoff."
+                ),
                 temperature=0.3,  # Deterministic
             )
 
@@ -80,7 +86,9 @@ Be concise. Focus on what matters for next troubleshooting step.
             logger.error(f"Context summarization failed: {e}. Using fallback summary.")
             # Fallback: simple concatenation
             return ContextSummary(
-                issue_one_liner=f"{diagnostic_context.issue_subtype} on {diagnostic_context.normalized_system}",
+                issue_one_liner=(
+                    f"{diagnostic_context.issue_subtype} on {diagnostic_context.normalized_system}"
+                ),
                 entity=diagnostic_context.normalized_system or "Unknown",
                 attempted_solutions=diagnostic_context.attempted_steps or [],
                 current_status=diagnostic_context.exact_problem_statement or "Ongoing issue",

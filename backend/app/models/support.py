@@ -1,7 +1,7 @@
 """Support session and message models."""
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import DateTime, Enum, Float, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -23,8 +23,13 @@ class SupportSession(UUIDPrimaryKeyMixin, Base):
     )
     status: Mapped[str] = mapped_column(
         Enum(
-            "active", "awaiting_user", "awaiting_agent", "live_support",
-            "resolved", "escalated", "closed",
+            "active",
+            "awaiting_user",
+            "awaiting_agent",
+            "live_support",
+            "resolved",
+            "escalated",
+            "closed",
             name="session_status",
         ),
         default="active",
@@ -40,14 +45,10 @@ class SupportSession(UUIDPrimaryKeyMixin, Base):
     confidence_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     resolution_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
-    resolved_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    closed_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     metadata_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
     messages: Mapped[list["Message"]] = relationship(back_populates="session")
@@ -74,7 +75,7 @@ class Message(UUIDPrimaryKeyMixin, Base):
     )
     metadata_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
 
     session: Mapped["SupportSession"] = relationship(back_populates="messages")

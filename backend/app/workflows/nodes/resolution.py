@@ -35,11 +35,13 @@ RESOLUTION_SYSTEM_PROMPT = (
     "- If unsure, say so and offer to bring in the IT team.\n"
     "- The precise click-by-click steps are shown to the user separately, so you don't need\n"
     "  to repeat them verbatim — summarise the gist naturally and point to them.\n"
-    "- TONE ADAPTATION: If the user is frustrated, lead with empathy. If urgent, prioritize speed over detail.\n"
+    "- TONE ADAPTATION: If the user is frustrated, lead with empathy. "
+    "If urgent, prioritize speed over detail.\n"
     "  If confused, simplify and clarify."
 )
 
-RESOLUTION_PROMPT = """An employee needs help. Reply to them directly in natural, conversational language.
+RESOLUTION_PROMPT = """An employee needs help. \
+Reply to them directly in natural, conversational language.
 
 What we understand about their issue (for your context — do NOT echo these labels back):
 - Plain-English problem: {problem_description}
@@ -96,8 +98,10 @@ def _build_progression(
 
     def _matches_subtype(art: dict) -> bool:
         sc = (
-            art.get("subcategory") or art.get("subtype") or art.get("issue_type") or ""
-        ).replace("_", "-").lower()
+            (art.get("subcategory") or art.get("subtype") or art.get("issue_type") or "")
+            .replace("_", "-")
+            .lower()
+        )
         return bool(subtype) and sc == subtype
 
     matched = [a for a in knowledge_results if _matches_subtype(a)]
@@ -112,15 +116,15 @@ def _build_progression(
             if not key or key in seen:
                 continue
             seen.add(key)
-            ordered.append({
-                "instruction": instruction,
-                "details": details,
-                "source": art.get("title", ""),
-            })
+            ordered.append(
+                {
+                    "instruction": instruction,
+                    "details": details,
+                    "source": art.get("title", ""),
+                }
+            )
 
-    remaining = [
-        s for s in ordered if not diag_ctx.is_step_exhausted_or_seen(s["instruction"])
-    ]
+    remaining = [s for s in ordered if not diag_ctx.is_step_exhausted_or_seen(s["instruction"])]
     return ordered, remaining
 
 
@@ -149,6 +153,7 @@ async def resolution_node(state: WorkflowState) -> dict:
     # This enables agent collaboration: if retrieval found same-category articles
     # but wrong subtype, we should try web search instead.
     from app.services.agents.retrieval_quality import RetrievalQualityAnalyzer
+
     quality = RetrievalQualityAnalyzer(knowledge_results, diag_ctx).analyze()
     logger.info(
         "retrieval_quality_check",
@@ -170,9 +175,7 @@ async def resolution_node(state: WorkflowState) -> dict:
             session_id=state.get("session_id"),
             attempts=diag_ctx.resolution_attempts,
         )
-        return await _handle_simplification_request(
-            state, diag_ctx, knowledge_results, trace
-        )
+        return await _handle_simplification_request(state, diag_ctx, knowledge_results, trace)
 
     # ── Mismatch detected: KB has wrong articles for this issue → try web search ──
     if quality.should_try_web_search and knowledge_results:
@@ -211,13 +214,15 @@ async def resolution_node(state: WorkflowState) -> dict:
                 "diagnostic_context": diag_ctx.to_dict(),
                 "conversation_phase": diag_ctx.phase.value,
                 "messages": [AIMessage(content=web_response)],
-                "audit_trail": [{
-                    "event": "resolution.web_search_mismatch_recovery",
-                    "confidence": 0.4,
-                    "kb_mismatch": quality.mismatch_reason,
-                    "web_results": len(web_results),
-                    "resolution_attempt": diag_ctx.resolution_attempts,
-                }],
+                "audit_trail": [
+                    {
+                        "event": "resolution.web_search_mismatch_recovery",
+                        "confidence": 0.4,
+                        "kb_mismatch": quality.mismatch_reason,
+                        "web_results": len(web_results),
+                        "resolution_attempt": diag_ctx.resolution_attempts,
+                    }
+                ],
             }
 
         # Web search also failed after mismatch → escalate with context
@@ -239,18 +244,24 @@ async def resolution_node(state: WorkflowState) -> dict:
             "resolution_confidence": 0.0,
             "diagnostic_context": diag_ctx.to_dict(),
             "conversation_phase": diag_ctx.phase.value,
-            "messages": [AIMessage(content=(
-                "I wasn't able to find a specific solution for this in our knowledge "
-                "base or online. Would you like me to create a support ticket so our IT team can "
-                "assist you directly?"
-            ))],
-            "audit_trail": [{
-                "event": "resolution.generated",
-                "confidence": 0.0,
-                "steps_count": 0,
-                "method": "none",
-                "resolution_attempt": diag_ctx.resolution_attempts,
-            }],
+            "messages": [
+                AIMessage(
+                    content=(
+                        "I wasn't able to find a specific solution for this in our knowledge "
+                        "base or online. Would you like me to create a support ticket "
+                        "so our IT team can assist you directly?"
+                    )
+                )
+            ],
+            "audit_trail": [
+                {
+                    "event": "resolution.generated",
+                    "confidence": 0.0,
+                    "steps_count": 0,
+                    "method": "none",
+                    "resolution_attempt": diag_ctx.resolution_attempts,
+                }
+            ],
         }
 
     ordered, remaining = _build_progression(knowledge_results, diag_ctx)
@@ -280,19 +291,23 @@ async def resolution_node(state: WorkflowState) -> dict:
             "escalation_reason": diag_ctx.escalation_reason,
             "diagnostic_context": diag_ctx.to_dict(),
             "conversation_phase": diag_ctx.phase.value,
-            "audit_trail": [{
-                "event": "resolution.exhausted",
-                "subtype": diag_ctx.issue_subtype,
-                "steps_tried": len(diag_ctx.failed_steps),
-                "loop_counter": diag_ctx.loop_counter,
-            }],
+            "audit_trail": [
+                {
+                    "event": "resolution.exhausted",
+                    "subtype": diag_ctx.issue_subtype,
+                    "steps_tried": len(diag_ctx.failed_steps),
+                    "loop_counter": diag_ctx.loop_counter,
+                }
+            ],
         }
 
     # ── Present the next batch of NEW steps ──────────────────────
-    batch = remaining[: _BATCH_SIZE]
+    batch = remaining[:_BATCH_SIZE]
     confidence_bd = _score_confidence(state, diag_ctx, trace)
 
-    resolution = await _render_resolution(batch, knowledge_results, state, diag_ctx, confidence_bd.final)
+    resolution = await _render_resolution(
+        batch, knowledge_results, state, diag_ctx, confidence_bd.final
+    )
 
     # Remember what we presented so the next turn advances past it.
     diag_ctx.record_suggested_steps([s["instruction"] for s in resolution["steps"]])
@@ -394,7 +409,9 @@ async def _llm_resolution(
     articles_text = f"Approved next steps (use ONLY these, do not invent others):\n{steps_text}"
 
     problem_desc = diag_ctx.exact_problem_statement or diag_ctx.symptom or "not specified"
-    symptom = diag_ctx.issue_subtype or diag_ctx.symptom or diag_ctx.issue_subcategory or "general issue"
+    symptom = (
+        diag_ctx.issue_subtype or diag_ctx.symptom or diag_ctx.issue_subcategory or "general issue"
+    )
 
     additional = []
     if diag_ctx.platform_os:
@@ -450,17 +467,21 @@ def _direct_resolution(
     formatted_steps = []
     for i, step in enumerate(raw_steps[:3], 1):
         if isinstance(step, dict):
-            formatted_steps.append({
-                "step_number": i,
-                "instruction": step.get("instruction") or step.get("step") or str(step),
-                "details": step.get("details") or step.get("expected_outcome"),
-            })
+            formatted_steps.append(
+                {
+                    "step_number": i,
+                    "instruction": step.get("instruction") or step.get("step") or str(step),
+                    "details": step.get("details") or step.get("expected_outcome"),
+                }
+            )
         elif isinstance(step, str):
-            formatted_steps.append({
-                "step_number": i,
-                "instruction": step,
-                "details": None,
-            })
+            formatted_steps.append(
+                {
+                    "step_number": i,
+                    "instruction": step,
+                    "details": None,
+                }
+            )
 
     # Build concise response
     response = _format_concise_response(formatted_steps, best_article, confidence, diag_ctx)
@@ -477,7 +498,9 @@ def _direct_resolution(
 # NEVER surface the raw slug (e.g. "outlook-crash") to the user.
 _SUBTYPE_PHRASES: dict[str, str] = {
     # Outlook / email
-    "mailbox-full": "It looks like your mailbox is full, which can stop new mail from coming through.",
+    "mailbox-full": (
+        "It looks like your mailbox is full, which can stop new mail from coming through."
+    ),
     "not-receiving-emails": "It looks like new emails aren't coming through to you.",
     "sending-failure": "It sounds like your emails aren't going out.",
     "outlook-slow": "It sounds like Outlook is running slowly or freezing on you.",
@@ -548,7 +571,9 @@ def _format_concise_response(
         parts.append("I've laid out the exact steps for you just below.")
 
     if confidence >= 0.8:
-        parts.append("Give those a go and let me know if that sorts it — I'm here if you need more help.")
+        parts.append(
+            "Give those a go and let me know if that sorts it — I'm here if you need more help."
+        )
     else:
         parts.append(
             "Give those a try and tell me how it goes. If it doesn't help, "
@@ -581,15 +606,12 @@ def _format_web_results_for_user(results: list) -> str:
     for i, result in enumerate(results, 1):
         badge = trust_badge.get(result.trust_level.value, "External")
         formatted_results.append(
-            f"**{i}. {result.title}** [{badge}]\n"
-            f"{result.snippet}\n"
-            f"[Read more]({result.url})"
+            f"**{i}. {result.title}** [{badge}]\n{result.snippet}\n[Read more]({result.url})"
         )
 
     return (
         "I couldn't find this in our internal knowledge base, but I found some external resources "
-        "that might help:\n\n"
-        + "\n\n".join(formatted_results) + "\n\n"
+        "that might help:\n\n" + "\n\n".join(formatted_results) + "\n\n"
         "You're welcome to try one of these solutions. Let me know if it helps, "
         "or I can escalate this to our IT team if you'd prefer."
     )
@@ -601,9 +623,21 @@ def _asks_for_simpler_explanation(message: str) -> bool:
     Keywords: simpler, explain, understand, confusing, easier, break down, etc.
     """
     keywords = {
-        "simpler", "simple", "easier", "explain", "understand", "confusing",
-        "confused", "don't understand", "not clear", "unclear", "break down",
-        "step by step", "more detail", "more clearly", "plain english",
+        "simpler",
+        "simple",
+        "easier",
+        "explain",
+        "understand",
+        "confusing",
+        "confused",
+        "don't understand",
+        "not clear",
+        "unclear",
+        "break down",
+        "step by step",
+        "more detail",
+        "more clearly",
+        "plain english",
     }
     msg_lower = message.lower()
     return any(kw in msg_lower for kw in keywords)
@@ -627,16 +661,22 @@ async def _handle_simplification_request(
             "resolution_confidence": 0.0,
             "diagnostic_context": diag_ctx.to_dict(),
             "conversation_phase": diag_ctx.phase.value,
-            "messages": [AIMessage(content=(
-                "I understand this is getting complicated. Let me have our IT team "
-                "take a closer look so they can walk you through this step by step. "
-                "Is that okay?"
-            ))],
-            "audit_trail": [{
-                "event": "resolution.escalation_offered_for_simplification",
-                "reason": "No KB articles to simplify further",
-                "attempts": diag_ctx.resolution_attempts,
-            }],
+            "messages": [
+                AIMessage(
+                    content=(
+                        "I understand this is getting complicated. Let me have our IT team "
+                        "take a closer look so they can walk you through this step by step. "
+                        "Is that okay?"
+                    )
+                )
+            ],
+            "audit_trail": [
+                {
+                    "event": "resolution.escalation_offered_for_simplification",
+                    "reason": "No KB articles to simplify further",
+                    "attempts": diag_ctx.resolution_attempts,
+                }
+            ],
         }
 
     # Get the best article (most relevant)
@@ -658,20 +698,25 @@ async def _handle_simplification_request(
             "resolution_confidence": 0.0,
             "diagnostic_context": diag_ctx.to_dict(),
             "conversation_phase": diag_ctx.phase.value,
-            "messages": [AIMessage(content=(
-                "I understand these steps are getting complicated. "
-                "Let me connect you with our IT team so they can help you directly. "
-                "Is that okay?"
-            ))],
-            "audit_trail": [{
-                "event": "resolution.escalation_offered",
-                "reason": "Steps too complex to simplify further",
-                "attempts": diag_ctx.resolution_attempts,
-            }],
+            "messages": [
+                AIMessage(
+                    content=(
+                        "I understand these steps are getting complicated. "
+                        "Let me connect you with our IT team so they can help you directly. "
+                        "Is that okay?"
+                    )
+                )
+            ],
+            "audit_trail": [
+                {
+                    "event": "resolution.escalation_offered",
+                    "reason": "Steps too complex to simplify further",
+                    "attempts": diag_ctx.resolution_attempts,
+                }
+            ],
         }
 
     # Render ultra-simple response
-    confidence_bd = _score_confidence(state, diag_ctx, trace)
     resolution = await _render_simple_resolution(simple_batch, best_article, diag_ctx)
 
     # Log simplification attempt
@@ -694,12 +739,14 @@ async def _handle_simplification_request(
         "diagnostic_context": diag_ctx.to_dict(),
         "conversation_phase": diag_ctx.phase.value,
         "messages": [AIMessage(content=resolution["response"])],
-        "audit_trail": [{
-            "event": "resolution.simplified",
-            "confidence": 0.6,
-            "steps_count": 1,
-            "attempt": diag_ctx.resolution_attempts,
-        }],
+        "audit_trail": [
+            {
+                "event": "resolution.simplified",
+                "confidence": 0.6,
+                "steps_count": 1,
+                "attempt": diag_ctx.resolution_attempts,
+            }
+        ],
     }
 
 
@@ -709,9 +756,6 @@ async def _render_simple_resolution(
     diag_ctx: DiagnosticContext,
 ) -> dict:
     """Render ultra-simple resolution with plain English, minimal jargon."""
-    from app.services.llm_service import LLMService
-
-    llm = get_llm_service()
 
     # Take only the first (most important) step
     step = batch[0] if batch else {}
@@ -723,7 +767,10 @@ async def _render_simple_resolution(
             "steps": [],
             "confidence": 0.0,
             "method": "error",
-            "response": "I'm sorry, I'm having trouble simplifying these steps. Let me connect you with our IT team.",
+            "response": (
+                "I'm sorry, I'm having trouble simplifying these steps. "
+                "Let me connect you with our IT team."
+            ),
         }
 
     # Build ultra-simple response with step-by-step language
@@ -736,9 +783,7 @@ async def _render_simple_resolution(
         f"If it doesn't, I can get our IT team involved."
     )
 
-    steps = [
-        {"step_number": 1, "instruction": instruction, "details": details}
-    ]
+    steps = [{"step_number": 1, "instruction": instruction, "details": details}]
 
     return {
         "steps": steps,
@@ -746,4 +791,3 @@ async def _render_simple_resolution(
         "method": "simplified",
         "response": simple_response,
     }
-

@@ -96,18 +96,32 @@ class AuditQueryService:
     async def facets(self) -> AuditFacets:
         """Distinct values for the filter dropdowns."""
         actions = (
-            await self.db.execute(select(AuditEvent.action).distinct().order_by(AuditEvent.action))
-        ).scalars().all()
+            (
+                await self.db.execute(
+                    select(AuditEvent.action).distinct().order_by(AuditEvent.action)
+                )
+            )
+            .scalars()
+            .all()
+        )
         resources = (
-            await self.db.execute(
-                select(AuditEvent.resource_type).distinct().order_by(AuditEvent.resource_type)
+            (
+                await self.db.execute(
+                    select(AuditEvent.resource_type).distinct().order_by(AuditEvent.resource_type)
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         severities = (
-            await self.db.execute(
-                select(AuditEvent.severity).distinct().order_by(AuditEvent.severity)
+            (
+                await self.db.execute(
+                    select(AuditEvent.severity).distinct().order_by(AuditEvent.severity)
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         return AuditFacets(
             actions=[a for a in actions if a],
             resource_types=[r for r in resources if r],

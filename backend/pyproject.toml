@@ -38,7 +38,10 @@ dev-dependencies = [
     "pytest-asyncio>=0.23",
     "pytest-cov>=5.0",
     "httpx>=0.27",
-    "ruff>=0.4",
+    # Pinned to a minor range: an unbounded ruff caused silent lint-gate drift
+    # (new rules flagged pre-existing intentional patterns and the whole gate
+    # went red unnoticed). Bump deliberately, not implicitly.
+    "ruff>=0.15,<0.16",
     "mypy>=1.10",
     "factory-boy>=3.3",
 ]
@@ -50,6 +53,35 @@ src = ["app"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "A", "SIM", "TCH"]
+# Principled, documented exceptions to framework-idiomatic / deliberate patterns:
+ignore = [
+    # `class X(str, Enum)` is intentional throughout. Migrating to `StrEnum`
+    # changes `str(member)`/f-string semantics (returns the value, not
+    # `X.MEMBER`), which downstream formatting relies on. Do NOT auto-migrate.
+    "UP042",
+    # Domain exception names (SessionNotFound, ArticleNotFound, ...) are a
+    # deliberate, consistent convention; the "Error" suffix would churn every
+    # call site for no behavioural gain.
+    "N818",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# SQLAlchemy resolves `Mapped[...]` annotations at RUNTIME during mapper
+# config, so type-only imports (uuid, datetime) must stay importable at
+# runtime — moving them into a TYPE_CHECKING block breaks the ORM.
+"app/models/**" = ["TC001", "TC002", "TC003"]
+# Pydantic likewise evaluates field annotations at runtime to build models,
+# so schema modules must keep annotation imports (uuid, datetime, UUID) at
+# module scope — the TYPE_CHECKING move breaks `model_rebuild()`.
+"app/schemas/**" = ["TC001", "TC002", "TC003"]
+# FastAPI's dependency-injection idiom is a function call in an argument
+# default (`= Depends(...)`, `= Query(...)`); that is correct, not a B008 bug.
+"app/api/**" = ["B008"]
+# Settings uses ALL-CAPS computed properties (DATABASE_URL, REDIS_URL) as public
+# config surface referenced everywhere; renaming them is not desirable.
+"app/core/config.py" = ["N802"]
+# Test helpers use short/upper-case locals (matrix/vector fixtures, `l`) freely.
+"tests/**" = ["N806", "E741"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["app"]

@@ -57,9 +57,7 @@ def advance_steps(
     subtype = (ctx.issue_subtype or "").replace("_", "-").lower()
 
     def _matches_subtype(art: dict) -> bool:
-        sc = (
-            art.get("subcategory") or art.get("subtype") or art.get("issue_type") or ""
-        )
+        sc = art.get("subcategory") or art.get("subtype") or art.get("issue_type") or ""
         return bool(subtype) and sc.replace("_", "-").lower() == subtype
 
     matched = [a for a in inp.knowledge_results if _matches_subtype(a)]
@@ -74,15 +72,15 @@ def advance_steps(
             if not key or key in seen:
                 continue
             seen.add(key)
-            ordered.append({
-                "instruction": instruction,
-                "details": details,
-                "source": art.get("title", ""),
-            })
+            ordered.append(
+                {
+                    "instruction": instruction,
+                    "details": details,
+                    "source": art.get("title", ""),
+                }
+            )
 
-    remaining = [
-        s for s in ordered if not ctx.is_step_exhausted_or_seen(s["instruction"])
-    ]
+    remaining = [s for s in ordered if not ctx.is_step_exhausted_or_seen(s["instruction"])]
     return ordered, remaining
 
 

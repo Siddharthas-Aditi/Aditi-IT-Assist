@@ -269,9 +269,7 @@ class KnowledgeRepository:
         rows = (await self.db.execute(q)).all()
         return {article_id: 1.0 - float(distance) for article_id, distance in rows}
 
-    async def list_chunks_missing_embeddings(
-        self, *, limit: int = 500
-    ) -> list[KnowledgeChunk]:
+    async def list_chunks_missing_embeddings(self, *, limit: int = 500) -> list[KnowledgeChunk]:
         """Chunks of published articles that have no embedding yet (backfill)."""
         q = (
             select(KnowledgeChunk)

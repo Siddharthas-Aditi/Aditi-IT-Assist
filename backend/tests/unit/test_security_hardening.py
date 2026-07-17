@@ -188,6 +188,28 @@ class TestAccessRefreshSeparation:
         await fake_denylist.revoke(payload["jti"], payload["exp"])
         assert (await provider.validate_session(token)).success is False
 
+    @pytest.mark.asyncio
+    async def test_saml_provider_rejects_refresh_token(self, fake_denylist):
+        """SAML session validation must enforce the SAME rules as local:
+        no refresh-as-access, and honour the revocation denylist."""
+        from app.services.auth.providers.saml import SAMLAuthProvider
+
+        provider = SAMLAuthProvider()
+        refresh = create_refresh_token({"sub": str(uuid.uuid4())})
+        assert (await provider.validate_session(refresh)).success is False
+
+    @pytest.mark.asyncio
+    async def test_saml_provider_rejects_revoked_token(self, fake_denylist):
+        from app.services.auth.providers.saml import SAMLAuthProvider
+
+        provider = SAMLAuthProvider()
+        token = create_access_token({"sub": str(uuid.uuid4())})
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+
+        assert (await provider.validate_session(token)).success is True
+        await fake_denylist.revoke(payload["jti"], payload["exp"])
+        assert (await provider.validate_session(token)).success is False
+
 
 class TestLogoutRevocation:
     @pytest.mark.asyncio
@@ -316,6 +338,9 @@ class TestProductionValidation:
             ({"POSTGRES_PASSWORD": "aditi_dev_password"}, "POSTGRES_PASSWORD"),
             ({"REDIS_PASSWORD": ""}, "REDIS_PASSWORD"),
             ({"CORS_ORIGINS": ["http://localhost:5173"]}, "CORS_ORIGINS"),
+            ({"CORS_ORIGINS": ["*"]}, "CORS_ORIGINS"),
+            ({"CORS_ORIGINS": ["http://prod.example.com"]}, "https"),
+            ({"AUTH_PROVIDER": "saml", "LOCAL_AUTH_ENABLED": True}, "LOCAL_AUTH_ENABLED"),
             ({"FEATURE_MCP_TOOLS": True, "MCP_USE_MOCK": True}, "MCP_USE_MOCK"),
             ({"REMOTE_SUPPORT_USE_MOCK": False}, "REMOTE_SUPPORT_USE_MOCK"),
         ],
@@ -323,3 +348,74 @@ class TestProductionValidation:
     def test_each_violation_is_reported(self, override, fragment):
         violations = self._prod_settings(**override).validate_production()
         assert any(fragment in v for v in violations), violations
+
+    def test_https_origin_and_disabled_local_auth_pass_under_sso(self):
+        s = self._prod_settings(AUTH_PROVIDER="saml", LOCAL_AUTH_ENABLED=False)
+        assert s.validate_production() == []
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Rate-limit client identity (spoof resistance)
+# ─────────────────────────────────────────────────────────────────────
+
+
+class _FakeClient:
+    def __init__(self, host: str) -> None:
+        self.host = host
+
+
+class _FakeRequest:
+    """Minimal stand-in for a Starlette Request for client_identity()."""
+
+    def __init__(self, xff: str | None, peer: str = "10.0.0.9") -> None:
+        self.headers = {} if xff is None else {"x-forwarded-for": xff}
+        self.client = _FakeClient(peer)
+
+
+class TestClientIdentity:
+    def test_uses_rightmost_trusted_hop_not_spoofable_left(self, monkeypatch):
+        # nginx appends the real client on the RIGHT; a spoofed value sits left
+        # and must be ignored with the default single trusted hop.
+        from app.core import rate_limit
+
+        monkeypatch.setattr(rate_limit.settings, "RATE_LIMIT_TRUSTED_PROXY_HOPS", 1)
+        req = _FakeRequest(xff="1.2.3.4, 9.9.9.9")  # 9.9.9.9 = real client
+        assert rate_limit.client_identity(req) == "9.9.9.9"
+
+    def test_attacker_cannot_rotate_bucket_via_left_xff(self, monkeypatch):
+        from app.core import rate_limit
+
+        monkeypatch.setattr(rate_limit.settings, "RATE_LIMIT_TRUSTED_PROXY_HOPS", 1)
+        a = rate_limit.client_identity(_FakeRequest(xff="rot-1, 9.9.9.9"))
+        b = rate_limit.client_identity(_FakeRequest(xff="rot-2, 9.9.9.9"))
+        assert a == b == "9.9.9.9"  # spoofed left value doesn't change the key
+
+    def test_two_trusted_hops_selects_correct_entry(self, monkeypatch):
+        from app.core import rate_limit
+
+        monkeypatch.setattr(rate_limit.settings, "RATE_LIMIT_TRUSTED_PROXY_HOPS", 2)
+        # chain: client, cdn, nginx-appended-peer -> real client is [-2]
+        req = _FakeRequest(xff="spoof, 5.5.5.5, 6.6.6.6")
+        assert rate_limit.client_identity(req) == "5.5.5.5"
+
+    def test_zero_hops_ignores_xff_and_uses_peer(self, monkeypatch):
+        from app.core import rate_limit
+
+        monkeypatch.setattr(rate_limit.settings, "RATE_LIMIT_TRUSTED_PROXY_HOPS", 0)
+        req = _FakeRequest(xff="1.2.3.4", peer="10.0.0.9")
+        assert rate_limit.client_identity(req) == "10.0.0.9"
+
+    def test_missing_xff_falls_back_to_peer(self, monkeypatch):
+        from app.core import rate_limit
+
+        monkeypatch.setattr(rate_limit.settings, "RATE_LIMIT_TRUSTED_PROXY_HOPS", 1)
+        req = _FakeRequest(xff=None, peer="10.0.0.9")
+        assert rate_limit.client_identity(req) == "10.0.0.9"
+
+    def test_short_chain_falls_back_to_peer(self, monkeypatch):
+        # header present but shorter than the expected proxy chain -> untrusted.
+        from app.core import rate_limit
+
+        monkeypatch.setattr(rate_limit.settings, "RATE_LIMIT_TRUSTED_PROXY_HOPS", 2)
+        req = _FakeRequest(xff="1.2.3.4", peer="10.0.0.9")
+        assert rate_limit.client_identity(req) == "10.0.0.9"

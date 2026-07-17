@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import logging
 import traceback
-import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -37,17 +36,21 @@ from app.services.ingestion.field_extractor import extract_fields
 from app.services.ingestion.llm_extractor import enrich_with_llm
 from app.services.ingestion.normalizer import normalize_document
 from app.services.ingestion.profiles.registry import detect_profile
-from app.services.ingestion.schema import ExtractionCandidate, SCHEMA_VERSION
 from app.services.ingestion.segmenter import segment_document
 from app.services.ingestion.validator import validate_candidate
 
 if TYPE_CHECKING:
+    import uuid
+
     from sqlalchemy.ext.asyncio import AsyncSession
+
+    from app.services.ingestion.schema import ExtractionCandidate
 
 logger = logging.getLogger(__name__)
 
 
 # ── Public entry point ────────────────────────────────────────────────────────
+
 
 async def run_pipeline(
     job_id: uuid.UUID,
@@ -76,7 +79,8 @@ async def run_pipeline(
     try:
         # ── Stage 1: locate file ──────────────────────────────────────────
         file_path = _resolve_file_path(job)
-        timing["s1_locate"] = _elapsed(t); t = _now()
+        timing["s1_locate"] = _elapsed(t)
+        t = _now()
 
         # ── Stage 2: extract raw text ─────────────────────────────────────
         await repo.update_job(job_id, {"parse_status": "extracting"})
@@ -84,7 +88,8 @@ async def run_pipeline(
 
         extraction = extract_text(file_path)
         raw_text = extraction.raw_text
-        timing["s2_extract"] = _elapsed(t); t = _now()
+        timing["s2_extract"] = _elapsed(t)
+        t = _now()
 
         # ── Stage 3: persist raw text reference ───────────────────────────
         raw_text_path = _save_raw_text(job_id, raw_text)
@@ -97,7 +102,8 @@ async def run_pipeline(
             },
         )
         await db.commit()
-        timing["s3_persist_text"] = _elapsed(t); t = _now()
+        timing["s3_persist_text"] = _elapsed(t)
+        t = _now()
 
         # ── Stage 4: normalize ─────────────────────────────────────────────
         await repo.update_job(job_id, {"parse_status": "parsing"})
@@ -105,7 +111,8 @@ async def run_pipeline(
 
         source_format = job.source_type or "txt"  # noqa: F841 — kept for future use
         norm_doc = normalize_document(raw_text)
-        timing["s4_normalize"] = _elapsed(t); t = _now()
+        timing["s4_normalize"] = _elapsed(t)
+        t = _now()
 
         # ── Stage 5: detect profile ────────────────────────────────────────
         profile = detect_profile(raw_text)
@@ -113,14 +120,17 @@ async def run_pipeline(
 
         # ── Stage 6: segment ───────────────────────────────────────────────
         segments = segment_document(norm_doc, profile)
-        timing["s6_segment"] = _elapsed(t); t = _now()
+        timing["s6_segment"] = _elapsed(t)
+        t = _now()
 
         if not segments:
             await repo.update_job(
                 job_id,
                 {
                     "parse_status": "failed",
-                    "error_details": "Segmenter produced 0 segments — document may be empty or unreadable.",
+                    "error_details": (
+                        "Segmenter produced 0 segments — document may be empty or unreadable."
+                    ),
                 },
             )
             await db.commit()
@@ -132,7 +142,8 @@ async def run_pipeline(
             extract_fields(seg, profile, candidate_index=i, parser_version=parser_version)
             for i, seg in enumerate(segments)
         ]
-        timing["s7_field_extract"] = _elapsed(t); t = _now()
+        timing["s7_field_extract"] = _elapsed(t)
+        t = _now()
 
         # ── Stage 8: optional LLM enrichment ─────────────────────────────
         if llm_service is not None:
@@ -140,7 +151,8 @@ async def run_pipeline(
             for c in candidates:
                 enriched.append(await enrich_with_llm(c, profile, llm_service))
             candidates = enriched
-        timing["s8_llm_enrich"] = _elapsed(t); t = _now()
+        timing["s8_llm_enrich"] = _elapsed(t)
+        t = _now()
 
         # ── Stage 9: score, validate, dedup, persist ──────────────────────
         orm_candidates: list[IngestionCandidate] = []
@@ -195,10 +207,17 @@ async def run_pipeline(
                 "field_confidences": {
                     fname: candidate.field_confidence(fname)
                     for fname in [
-                        "title", "category", "subcategory", "short_summary",
-                        "product_or_system", "platform", "symptoms",
-                        "troubleshooting_steps", "resolution_steps",
-                        "escalation_criteria", "tags",
+                        "title",
+                        "category",
+                        "subcategory",
+                        "short_summary",
+                        "product_or_system",
+                        "platform",
+                        "symptoms",
+                        "troubleshooting_steps",
+                        "resolution_steps",
+                        "escalation_criteria",
+                        "tags",
                     ]
                 },
                 "extraction_metadata": candidate.build_metadata(),
@@ -214,9 +233,12 @@ async def run_pipeline(
                 extracted_product_or_system=_str_val(candidate.field_value("product_or_system")),
                 extracted_platform=_str_val(candidate.field_value("platform")),
                 extracted_symptoms=candidate.field_value("symptoms") or None,
-                extracted_troubleshooting_steps=candidate.field_value("troubleshooting_steps") or None,
+                extracted_troubleshooting_steps=candidate.field_value("troubleshooting_steps")
+                or None,
                 extracted_resolution_steps=candidate.field_value("resolution_steps") or None,
-                extracted_escalation_criteria=_str_val(candidate.field_value("escalation_criteria")),
+                extracted_escalation_criteria=_str_val(
+                    candidate.field_value("escalation_criteria")
+                ),
                 extracted_tags=candidate.field_value("tags") or None,
                 extracted_keywords=candidate.field_value("keywords") or None,
                 extracted_confidence=candidate.extraction_confidence,
@@ -244,7 +266,10 @@ async def run_pipeline(
         await db.commit()
         logger.info(
             "Ingestion pipeline completed: job=%s profile=%s segments=%d total=%.2fs",
-            job_id, profile.name, len(orm_candidates), timing["total"],
+            job_id,
+            profile.name,
+            len(orm_candidates),
+            timing["total"],
         )
         return final_job  # type: ignore[return-value]
 
@@ -272,15 +297,14 @@ async def run_pipeline(
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+
 def _resolve_file_path(job: IngestionJob) -> Path:
     upload_dir = Path(settings.UPLOAD_DIR) / str(job.id)
     path = upload_dir / job.source_filename
     if not path.exists():
         path = Path(settings.UPLOAD_DIR) / job.source_filename
     if not path.exists():
-        raise FileNotFoundError(
-            f"Uploaded file not found for job {job.id}: {job.source_filename}"
-        )
+        raise FileNotFoundError(f"Uploaded file not found for job {job.id}: {job.source_filename}")
     return path
 
 
@@ -317,9 +341,11 @@ def _str_val(v: object) -> str | None:
 
 def _now() -> float:
     import time
+
     return time.monotonic()
 
 
 def _elapsed(start: float) -> float:
     import time
+
     return time.monotonic() - start

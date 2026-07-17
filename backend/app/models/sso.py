@@ -32,7 +32,9 @@ class IdentityProviderConfig(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     # ── Identity ──
     idp_id: Mapped[str] = mapped_column(
-        String(100), unique=True, index=True,
+        String(100),
+        unique=True,
+        index=True,
         comment="Short identifier (e.g., 'entra-prod', 'okta-dev')",
     )
     display_name: Mapped[str] = mapped_column(String(255))
@@ -49,48 +51,58 @@ class IdentityProviderConfig(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     # ── SAML IdP Endpoints ──
     entity_id: Mapped[str] = mapped_column(
-        String(500), comment="IdP Entity ID / Issuer URL",
+        String(500),
+        comment="IdP Entity ID / Issuer URL",
     )
     sso_url: Mapped[str] = mapped_column(
-        String(500), comment="IdP Single Sign-On URL (HTTP-Redirect binding)",
+        String(500),
+        comment="IdP Single Sign-On URL (HTTP-Redirect binding)",
     )
     sso_post_url: Mapped[str | None] = mapped_column(
-        String(500), nullable=True,
+        String(500),
+        nullable=True,
         comment="IdP SSO URL for HTTP-POST binding",
     )
     slo_url: Mapped[str | None] = mapped_column(
-        String(500), nullable=True,
+        String(500),
+        nullable=True,
         comment="IdP Single Logout URL",
     )
     metadata_url: Mapped[str | None] = mapped_column(
-        String(500), nullable=True,
+        String(500),
+        nullable=True,
         comment="IdP Federation Metadata URL (for auto-refresh)",
     )
 
     # ── Certificates ──
     # Stored as PEM text; in production consider encrypting at rest
     x509_cert: Mapped[str] = mapped_column(
-        Text, default="",
+        Text,
+        default="",
         comment="Primary IdP signing certificate (PEM)",
     )
     x509_cert_secondary: Mapped[str | None] = mapped_column(
-        Text, nullable=True,
+        Text,
+        nullable=True,
         comment="Secondary cert for rotation (PEM)",
     )
     cert_expires_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True,
+        DateTime(timezone=True),
+        nullable=True,
         comment="Expiry of primary certificate",
     )
 
     # ── SP Configuration (per-IdP if multi-tenant) ──
     sp_entity_id: Mapped[str] = mapped_column(
-        String(500), default="aditi-it-assist",
+        String(500),
+        default="aditi-it-assist",
         comment="SP Entity ID presented to this IdP",
     )
 
     # ── Claim/Attribute Mapping ──
     attribute_mapping: Mapped[dict | None] = mapped_column(
-        JSONB, nullable=True,
+        JSONB,
+        nullable=True,
         comment="Maps IdP attributes to internal fields: {email, name, groups, ...}",
     )
 
@@ -105,24 +117,30 @@ class IdentityProviderConfig(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     # ── Behavior ──
     jit_provisioning_enabled: Mapped[bool] = mapped_column(
-        Boolean, default=True,
+        Boolean,
+        default=True,
         comment="Auto-create users on first SAML login",
     )
     group_sync_enabled: Mapped[bool] = mapped_column(
-        Boolean, default=True,
+        Boolean,
+        default=True,
         comment="Sync group memberships from IdP claims",
     )
     default_role: Mapped[str] = mapped_column(
-        String(50), default="employee",
+        String(50),
+        default="employee",
         comment="Role assigned when no group mapping matches",
     )
 
     # ── Metadata ──
     metadata_last_refreshed: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True,
+        DateTime(timezone=True),
+        nullable=True,
     )
     configured_by: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True,
+        UUID(as_uuid=True),
+        ForeignKey("users.id"),
+        nullable=True,
     )
 
     # ── Relationships ──
@@ -160,11 +178,13 @@ class IdPGroupRoleMapping(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         comment="Internal role name (e.g., 'it_agent', 'it_admin')",
     )
     match_type: Mapped[str] = mapped_column(
-        String(20), default="exact",
+        String(20),
+        default="exact",
         comment="How to match: 'exact', 'prefix', 'regex'",
     )
     priority: Mapped[int] = mapped_column(
-        Integer, default=0,
+        Integer,
+        default=0,
         comment="Higher priority wins on conflicts",
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -190,22 +210,29 @@ class SPCertificate(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "sp_certificates"
 
     label: Mapped[str] = mapped_column(
-        String(100), comment="Friendly label (e.g., 'signing-2025')",
+        String(100),
+        comment="Friendly label (e.g., 'signing-2025')",
     )
     certificate: Mapped[str] = mapped_column(
-        Text, comment="PEM-encoded X.509 certificate",
+        Text,
+        comment="PEM-encoded X.509 certificate",
     )
     private_key_encrypted: Mapped[str] = mapped_column(
-        Text, comment="PEM private key (encrypted at rest)",
+        Text,
+        comment="PEM private key (encrypted at rest)",
     )
     purpose: Mapped[str] = mapped_column(
-        String(20), default="signing",
+        String(20),
+        default="signing",
         comment="'signing' or 'encryption'",
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     expires_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True,
+        DateTime(timezone=True),
+        nullable=True,
     )
     created_by: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True,
+        UUID(as_uuid=True),
+        ForeignKey("users.id"),
+        nullable=True,
     )

@@ -160,9 +160,7 @@ class SAMLAuthProvider(AuthProvider):
         group_mappings: list[GroupRoleMapping] | None = None,
     ) -> None:
         self._sp_config = sp_config or SAMLSPConfig()
-        self._idp_configs: dict[str, SAMLIdPConfig] = {
-            c.idp_id: c for c in (idp_configs or [])
-        }
+        self._idp_configs: dict[str, SAMLIdPConfig] = {c.idp_id: c for c in (idp_configs or [])}
         self._group_mappings = group_mappings or self._default_group_mappings()
 
     @property
@@ -242,6 +240,23 @@ class SAMLAuthProvider(AuthProvider):
         payload = verify_token(token)
         if not payload:
             return AuthResult(success=False, error="Invalid or expired session")
+
+        # Parity with LocalAuthProvider: a refresh token must never authenticate
+        # an API call, and revoked tokens (logout / refresh rotation) must be
+        # rejected. Without these, SAML mode silently ignored the denylist and
+        # let long-lived refresh tokens act as access tokens.
+        if payload.get("type") == "refresh":
+            return AuthResult(success=False, error="Refresh token cannot be used for access")
+
+        from app.core.token_store import get_token_denylist
+
+        try:
+            revoked = await get_token_denylist().is_revoked(payload.get("jti"))
+        except RuntimeError:
+            return AuthResult(success=False, error="Token revocation check unavailable")
+        if revoked:
+            return AuthResult(success=False, error="Token has been revoked")
+
         return AuthResult(
             success=True,
             provider="saml",
@@ -346,7 +361,10 @@ class SAMLAuthProvider(AuthProvider):
         )
 
     async def initiate_logout(
-        self, *, user_id: str, session_index: str | None = None,
+        self,
+        *,
+        user_id: str,
+        session_index: str | None = None,
         name_id: str | None = None,
     ) -> SSOLogoutResult:
         """Initiate SAML Single Logout (SLO).
@@ -393,6 +411,9 @@ class SAMLAuthProvider(AuthProvider):
         SAML-compliant IdP.
         """
         sp = self._sp_config
+        default_name_id_format = SAMLIdPConfig(
+            idp_id="", entity_id="", display_name="", sso_url=""
+        ).name_id_format
 
         # Minimal metadata template — production uses python3-saml generation
         return f"""<?xml version="1.0"?>
@@ -404,7 +425,7 @@ class SAMLAuthProvider(AuthProvider):
       WantAssertionsSigned="true"
       protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol">
 
-    <md:NameIDFormat>{SAMLIdPConfig(idp_id='', entity_id='', display_name='', sso_url='').name_id_format}</md:NameIDFormat>
+    <md:NameIDFormat>{default_name_id_format}</md:NameIDFormat>
 
     <md:AssertionConsumerService
         Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST"
@@ -514,9 +535,7 @@ class SAMLAuthProvider(AuthProvider):
             is_new_user=True,
         )
 
-    async def sync_user_attributes(
-        self, user: Any, claims: SAMLClaimsResult, db: Any
-    ) -> None:
+    async def sync_user_attributes(self, user: Any, claims: SAMLClaimsResult, db: Any) -> None:
         """Sync user attributes from SAML claims on each login.
 
         Updates department, job title, group memberships etc.
@@ -573,6 +592,7 @@ class SAMLAuthProvider(AuthProvider):
             return group.startswith(mapping.idp_group)
         elif mapping.match_type == "regex":
             import re
+
             return bool(re.match(mapping.idp_group, group))
         return False
 

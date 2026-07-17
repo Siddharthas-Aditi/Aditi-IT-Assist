@@ -154,16 +154,20 @@ class TestMailboxFullResolution:
 class TestTriageClarifyThenClassify:
     @pytest.mark.asyncio
     async def test_vague_outlook_asks_clarification(self):
-        patches = _no_llm([
-            "app.workflows.nodes.triage.get_llm_service",
-            "app.services.agents.diagnostic_engine.get_llm_service",
-        ])
+        patches = _no_llm(
+            [
+                "app.workflows.nodes.triage.get_llm_service",
+                "app.services.agents.diagnostic_engine.get_llm_service",
+            ]
+        )
         try:
-            result = await triage_node({
-                "messages": [HumanMessage(content="I have an issue with outlook")],
-                "session_id": "t1",
-                "diagnostic_context": None,
-            })
+            result = await triage_node(
+                {
+                    "messages": [HumanMessage(content="I have an issue with outlook")],
+                    "session_id": "t1",
+                    "diagnostic_context": None,
+                }
+            )
         finally:
             for p in patches:
                 p.stop()
@@ -174,10 +178,12 @@ class TestTriageClarifyThenClassify:
 
     @pytest.mark.asyncio
     async def test_inbox_full_classified_as_mailbox_subtype(self):
-        patches = _no_llm([
-            "app.workflows.nodes.triage.get_llm_service",
-            "app.services.agents.diagnostic_engine.get_llm_service",
-        ])
+        patches = _no_llm(
+            [
+                "app.workflows.nodes.triage.get_llm_service",
+                "app.services.agents.diagnostic_engine.get_llm_service",
+            ]
+        )
         try:
             # Turn 2 with prior Outlook context already established.
             prior = DiagnosticContext(
@@ -186,17 +192,19 @@ class TestTriageClarifyThenClassify:
                 entity_confidence=0.9,
                 affected_system="Microsoft Outlook",
             )
-            result = await triage_node({
-                "messages": [
-                    HumanMessage(content="I have an issue with outlook"),
-                    AIMessage(content="What's happening with Outlook?"),
-                    HumanMessage(content="my inbox is full"),
-                ],
-                "session_id": "t2",
-                "issue_category": "email/outlook",
-                "diagnostic_context": prior.to_dict(),
-                "conversation_phase": "clarifying",
-            })
+            result = await triage_node(
+                {
+                    "messages": [
+                        HumanMessage(content="I have an issue with outlook"),
+                        AIMessage(content="What's happening with Outlook?"),
+                        HumanMessage(content="my inbox is full"),
+                    ],
+                    "session_id": "t2",
+                    "issue_category": "email/outlook",
+                    "diagnostic_context": prior.to_dict(),
+                    "conversation_phase": "clarifying",
+                }
+            )
         finally:
             for p in patches:
                 p.stop()
@@ -211,27 +219,39 @@ class TestTriageClarifyThenClassify:
         # We check structural invariants: it must be a question and reference
         # the issue (mailbox/inbox/full/email).
         q = result["clarification_question"].lower()
-        is_question = (
-            "?" in q
-            or any(p in q for p in (
-                "is that right", "have i got that", "does that match",
-                "is that the gist", "have i understood", "got that right",
-                "sound right", "sound correct", "is that correct", "confirm",
-                "did i get that", "does that sound", "is that what",
-                "am i on the right track", "do i have that right",
-            ))
+        is_question = "?" in q or any(
+            p in q
+            for p in (
+                "is that right",
+                "have i got that",
+                "does that match",
+                "is that the gist",
+                "have i understood",
+                "got that right",
+                "sound right",
+                "sound correct",
+                "is that correct",
+                "confirm",
+                "did i get that",
+                "does that sound",
+                "is that what",
+                "am i on the right track",
+                "do i have that right",
+            )
         )
         assert is_question, f"Expected a confirmation question, got: {q!r}"
-        assert any(
-            word in q for word in ("mailbox", "full", "inbox", "email", "mail")
-        ), f"Expected issue context in confirmation, got: {q!r}"
+        assert any(word in q for word in ("mailbox", "full", "inbox", "email", "mail")), (
+            f"Expected issue context in confirmation, got: {q!r}"
+        )
 
     @pytest.mark.asyncio
     async def test_negative_feedback_marks_failure_and_does_not_reclarify(self):
-        patches = _no_llm([
-            "app.workflows.nodes.triage.get_llm_service",
-            "app.services.agents.diagnostic_engine.get_llm_service",
-        ])
+        patches = _no_llm(
+            [
+                "app.workflows.nodes.triage.get_llm_service",
+                "app.services.agents.diagnostic_engine.get_llm_service",
+            ]
+        )
         try:
             prior = DiagnosticContext(
                 issue_category="email/outlook",
@@ -242,13 +262,15 @@ class TestTriageClarifyThenClassify:
                 entity_confidence=0.9,
                 suggested_steps=["Empty the Deleted Items folder"],
             )
-            result = await triage_node({
-                "messages": [HumanMessage(content="that didn't work")],
-                "session_id": "t3",
-                "issue_category": "email/outlook",
-                "diagnostic_context": prior.to_dict(),
-                "conversation_phase": "confirming",
-            })
+            result = await triage_node(
+                {
+                    "messages": [HumanMessage(content="that didn't work")],
+                    "session_id": "t3",
+                    "issue_category": "email/outlook",
+                    "diagnostic_context": prior.to_dict(),
+                    "conversation_phase": "confirming",
+                }
+            )
         finally:
             for p in patches:
                 p.stop()

@@ -14,26 +14,30 @@ ADAPTIVE DESIGN:
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from app.services.ingestion.normalizer import LineType, NormalizedDocument, NormalizedLine
-from app.services.ingestion.profiles.base import ParserProfile
 from app.services.ingestion.schema import SemanticSignal
 
+if TYPE_CHECKING:
+    from app.services.ingestion.profiles.base import ParserProfile
 
 # ── Document segment ──────────────────────────────────────────────────────────
+
 
 @dataclass
 class DocumentSegment:
     """One extracted topic block from a document."""
+
     segment_index: int
-    heading: str | None                 # Best-guess heading for this topic
-    raw_text: str                       # Full segment text (original)
-    lines: list[NormalizedLine]         # Normalized lines
-    signals: SemanticSignal             # Detected semantic signals
-    boundary_confidence: float          # How confident is the leading boundary? 0-1
-    topic_score: float                  # Is this a complete IT topic? 0-1
-    section_map: dict[str, list[str]]   # label → list of text lines in that section
+    heading: str | None  # Best-guess heading for this topic
+    raw_text: str  # Full segment text (original)
+    lines: list[NormalizedLine]  # Normalized lines
+    signals: SemanticSignal  # Detected semantic signals
+    boundary_confidence: float  # How confident is the leading boundary? 0-1
+    topic_score: float  # Is this a complete IT topic? 0-1
+    section_map: dict[str, list[str]]  # label → list of text lines in that section
 
 
 # ── Semantic vocabulary signals ────────────────────────────────────────────────
@@ -41,32 +45,36 @@ class DocumentSegment:
 _PROBLEM_WORDS = re.compile(
     r"\b(?:not\s+working|fails?|failing|error|crash|broken|unable|cannot|can't|"
     r"won't|doesn't|missing|lost|stuck|freeze|froze|slow|disconnected|"
-    r"access\s+denied|permission\s+denied|issue|problem|symptom)\b", re.I
+    r"access\s+denied|permission\s+denied|issue|problem|symptom)\b",
+    re.I,
 )
 _RESOLUTION_WORDS = re.compile(
     r"\b(?:resolution|solution|fix|resolve|solved|corrective|workaround|"
     r"reinstall|restart|reset|reconfigure|re-add|uninstall|update|upgrade|"
-    r"restore|rollback|reprovision)\b", re.I
+    r"restore|rollback|reprovision)\b",
+    re.I,
 )
 _STEP_WORDS = re.compile(
     r"\b(?:click|open|go\s+to|navigate|select|type|enter|run|execute|"
-    r"check|verify|confirm|ensure|launch|close|disable|enable)\b", re.I
+    r"check|verify|confirm|ensure|launch|close|disable|enable)\b",
+    re.I,
 )
 _ESCALATION_WORDS = re.compile(
     r"\b(?:escalate|escalation|contact\s+it|contact\s+support|helpdesk|"
-    r"service\s+desk|if\s+the\s+issue\s+persists|if\s+unresolved|further\s+assistance)\b", re.I
+    r"service\s+desk|if\s+the\s+issue\s+persists|if\s+unresolved|further\s+assistance)\b",
+    re.I,
 )
 _PRODUCT_WORDS = re.compile(
     r"\b(?:outlook|zoom|teams|intune|sharepoint|onedrive|vpn|azure|office|"
-    r"windows|macos|chrome|edge|firefox|slack|excel|word|powerpoint)\b", re.I
+    r"windows|macos|chrome|edge|firefox|slack|excel|word|powerpoint)\b",
+    re.I,
 )
 
 
 # ── Public entry point ────────────────────────────────────────────────────────
 
-def segment_document(
-    doc: NormalizedDocument, profile: ParserProfile
-) -> list[DocumentSegment]:
+
+def segment_document(doc: NormalizedDocument, profile: ParserProfile) -> list[DocumentSegment]:
     """Split *doc* into topic segments using semantic + structural signals.
 
     Strategy:
@@ -96,6 +104,7 @@ def segment_document(
 
 # ── Boundary detection ────────────────────────────────────────────────────────
 
+
 def _split_into_groups(
     lines: list[NormalizedLine], profile: ParserProfile
 ) -> list[list[NormalizedLine]]:
@@ -116,9 +125,7 @@ def _split_into_groups(
     return groups
 
 
-def _boundary_evidence(
-    lines: list[NormalizedLine], idx: int, profile: ParserProfile
-) -> float:
+def _boundary_evidence(lines: list[NormalizedLine], idx: int, profile: ParserProfile) -> float:
     """Return 0–1 evidence that a new topic starts at lines[idx]."""
     line = lines[idx]
     evidence = 0.0
@@ -137,10 +144,13 @@ def _boundary_evidence(
     if line.line_type == LineType.HEADING_WEAK and idx > 0:
         # Only count as boundary if preceded by blank line
         prev_non_blank = next(
-            (lines[j] for j in range(idx - 1, -1, -1) if lines[j].line_type != LineType.BLANK),
-            None
+            (lines[j] for j in range(idx - 1, -1, -1) if lines[j].line_type != LineType.BLANK), None
         )
-        if prev_non_blank and prev_non_blank.line_type in (LineType.BULLET, LineType.NUMBERED, LineType.CONTINUATION):
+        if prev_non_blank and prev_non_blank.line_type in (
+            LineType.BULLET,
+            LineType.NUMBERED,
+            LineType.CONTINUATION,
+        ):
             evidence += 0.45
 
     # Weak signals: consecutive blank lines
@@ -170,7 +180,7 @@ def _merge_tiny_groups(
         return groups
     result: list[list[NormalizedLine]] = [groups[0]]
     for g in groups[1:]:
-        content = [l for l in g if l.line_type not in (LineType.BLANK, LineType.SEPARATOR)]
+        content = [ln for ln in g if ln.line_type not in (LineType.BLANK, LineType.SEPARATOR)]
         if len(content) < min_content_lines and result:
             result[-1].extend(g)
         else:
@@ -180,11 +190,12 @@ def _merge_tiny_groups(
 
 # ── Segment construction ──────────────────────────────────────────────────────
 
+
 def _build_segment(
     idx: int, lines: list[NormalizedLine], profile: ParserProfile
 ) -> DocumentSegment:
     """Build a DocumentSegment from a group of NormalizedLines."""
-    raw_text = "\n".join(l.raw for l in lines)
+    raw_text = "\n".join(ln.raw for ln in lines)
     heading = _extract_heading(lines)
     signals = _compute_signals(raw_text, lines, profile)
     section_map = _build_section_map(lines, profile)
@@ -213,15 +224,24 @@ def _extract_heading(lines: list[NormalizedLine]) -> str | None:
             return line.text.strip()
     # Last resort: first meaningful LABEL line — use the full "Label: content" form
     for line in lines[:8]:
-        if line.line_type == LineType.LABEL and line.label and line.text:
-            # Only use if the text (content after colon) is meaningful
-            if len(line.text) >= 5 and line.text.lower() != line.label.lower():
-                return line.text.strip()
+        # Only use if the text (content after colon) is meaningful
+        if (
+            line.line_type == LineType.LABEL
+            and line.label
+            and line.text
+            and len(line.text) >= 5
+            and line.text.lower() != line.label.lower()
+        ):
+            return line.text.strip()
     # First short CONTINUATION line
     for line in lines[:4]:
-        if line.line_type == LineType.CONTINUATION and 5 <= len(line.text) <= 100:
-            if re.match(r"^[A-Z]", line.text) and not line.text.endswith("."):
-                return line.text.strip()
+        if (
+            line.line_type == LineType.CONTINUATION
+            and 5 <= len(line.text) <= 100
+            and re.match(r"^[A-Z]", line.text)
+            and not line.text.endswith(".")
+        ):
+            return line.text.strip()
     return None
 
 
@@ -248,7 +268,9 @@ def _compute_signals(
         and profile.matches_label(line.raw, "troubleshooting_steps")
         for line in lines
     )
-    if has_ts_label or (signals & SemanticSignal.HAS_STEPS and signals & SemanticSignal.HAS_PROBLEM):
+    if has_ts_label or (
+        signals & SemanticSignal.HAS_STEPS and signals & SemanticSignal.HAS_PROBLEM
+    ):
         signals |= SemanticSignal.HAS_TROUBLESHOOTING
 
     if (signals & SemanticSignal.HAS_PROBLEM) and (signals & SemanticSignal.HAS_RESOLUTION):
@@ -257,9 +279,7 @@ def _compute_signals(
     return signals
 
 
-def _build_section_map(
-    lines: list[NormalizedLine], profile: ParserProfile
-) -> dict[str, list[str]]:
+def _build_section_map(lines: list[NormalizedLine], profile: ParserProfile) -> dict[str, list[str]]:
     """Map schema field names → list of text lines found within that section."""
     result: dict[str, list[str]] = {}
     current_section: str | None = None
@@ -276,7 +296,12 @@ def _build_section_map(
                     break
             else:
                 current_section = None
-        elif current_section and line.line_type not in (LineType.BLANK, LineType.SEPARATOR, LineType.HEADING, LineType.HEADING_WEAK):
+        elif current_section and line.line_type not in (
+            LineType.BLANK,
+            LineType.SEPARATOR,
+            LineType.HEADING,
+            LineType.HEADING_WEAK,
+        ):
             result.setdefault(current_section, []).append(line.text or line.raw.strip())
 
     return result

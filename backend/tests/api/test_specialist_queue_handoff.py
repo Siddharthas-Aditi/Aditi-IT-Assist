@@ -71,9 +71,7 @@ class TestHandoffView:
     async def test_agent_gets_summary_first_view(self, agent_client: AsyncClient):
         with patch("app.api.v1.specialist_queue.EscalationService") as cls:
             cls.return_value.get_handoff_view = AsyncMock(return_value=_handoff_view())
-            resp = await agent_client.get(
-                f"/api/v1/specialist-queue/{TID}/handoff-view"
-            )
+            resp = await agent_client.get(f"/api/v1/specialist-queue/{TID}/handoff-view")
         assert resp.status_code == 200
         body = resp.json()
         assert body["issue_summary"] == "Mailbox full"
@@ -85,9 +83,7 @@ class TestHandoffView:
     async def test_404_when_ticket_missing(self, agent_client: AsyncClient):
         with patch("app.api.v1.specialist_queue.EscalationService") as cls:
             cls.return_value.get_handoff_view = AsyncMock(return_value=None)
-            resp = await agent_client.get(
-                f"/api/v1/specialist-queue/{TID}/handoff-view"
-            )
+            resp = await agent_client.get(f"/api/v1/specialist-queue/{TID}/handoff-view")
         assert resp.status_code == 404
 
 

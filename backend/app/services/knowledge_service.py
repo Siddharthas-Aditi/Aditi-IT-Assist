@@ -76,7 +76,9 @@ class KnowledgeService:
             source="keyword",
         )
 
-    async def search(self, query: str, category: str | None = None, limit: int = 5) -> RetrievalResult:
+    async def search(
+        self, query: str, category: str | None = None, limit: int = 5
+    ) -> RetrievalResult:
         """Search knowledge base by query text.
 
         In development: keyword matching.

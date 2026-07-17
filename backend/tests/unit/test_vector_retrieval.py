@@ -57,10 +57,13 @@ class FakeEmbedder:
 
 
 def _articles():
-    a = FakeArticle(uuid.uuid4(), "VPN guide", "vpn will not connect network tunnel",
-                    tags=("vpn",))
-    b = FakeArticle(uuid.uuid4(), "Mailbox full", "outlook mailbox full quota storage",
-                    tags=("outlook", "mailbox"))
+    a = FakeArticle(uuid.uuid4(), "VPN guide", "vpn will not connect network tunnel", tags=("vpn",))
+    b = FakeArticle(
+        uuid.uuid4(),
+        "Mailbox full",
+        "outlook mailbox full quota storage",
+        tags=("outlook", "mailbox"),
+    )
     return a, b
 
 

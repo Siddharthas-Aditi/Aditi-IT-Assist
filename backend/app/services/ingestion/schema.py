@@ -18,7 +18,7 @@ method, and field-specific warnings. The review UI surfaces these directly.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum, Flag, auto
+from enum import Flag, StrEnum, auto
 
 SCHEMA_VERSION = "2.0.0"
 PARSER_VERSION = "2.0.0"
@@ -26,22 +26,26 @@ PARSER_VERSION = "2.0.0"
 
 # ── Extraction methods ────────────────────────────────────────────────────────
 
-class ExtractionMethod(str, Enum):
+
+class ExtractionMethod(StrEnum):
     """How a field value was obtained."""
-    DETERMINISTIC = "deterministic"   # rule / regex — highest trust
-    HEURISTIC = "heuristic"           # structural inference
-    LLM = "llm"                       # LLM-assisted
-    COMBINED = "combined"             # deterministic + LLM agreed
-    NOT_EXTRACTED = "not_extracted"   # absent or skipped
+
+    DETERMINISTIC = "deterministic"  # rule / regex — highest trust
+    HEURISTIC = "heuristic"  # structural inference
+    LLM = "llm"  # LLM-assisted
+    COMBINED = "combined"  # deterministic + LLM agreed
+    NOT_EXTRACTED = "not_extracted"  # absent or skipped
 
 
 # ── Confidence levels & thresholds ────────────────────────────────────────────
 
-class ConfidenceLevel(str, Enum):
-    HIGH = "high"        # ≥ 0.75 — save as candidate with minimal friction
-    MEDIUM = "medium"    # ≥ 0.50 — review recommended
-    LOW = "low"          # ≥ 0.30 — review required before save
+
+class ConfidenceLevel(StrEnum):
+    HIGH = "high"  # ≥ 0.75 — save as candidate with minimal friction
+    MEDIUM = "medium"  # ≥ 0.50 — review recommended
+    LOW = "low"  # ≥ 0.30 — review required before save
     VERY_LOW = "very_low"  # < 0.30 — keep as failed; allow retry
+
 
 HIGH_THRESHOLD = 0.75
 MEDIUM_THRESHOLD = 0.50
@@ -65,19 +69,22 @@ def review_required_for_score(score: float) -> bool:
 
 # ── Semantic signals (document-level) ─────────────────────────────────────────
 
+
 class SemanticSignal(Flag):
     """Signals detected within a document segment."""
+
     NONE = 0
-    HAS_PROBLEM = auto()        # contains a problem/symptom description
-    HAS_RESOLUTION = auto()     # contains resolution / fix steps
+    HAS_PROBLEM = auto()  # contains a problem/symptom description
+    HAS_RESOLUTION = auto()  # contains resolution / fix steps
     HAS_TROUBLESHOOTING = auto()  # contains troubleshooting / diagnosis steps
-    HAS_ESCALATION = auto()     # contains escalation criteria
-    HAS_PRODUCT = auto()        # product / system name detected
-    HAS_STEPS = auto()          # numbered or procedural steps detected
+    HAS_ESCALATION = auto()  # contains escalation criteria
+    HAS_PRODUCT = auto()  # product / system name detected
+    HAS_STEPS = auto()  # numbered or procedural steps detected
     IS_COMPLETE_TOPIC = auto()  # both problem + resolution present
 
 
 # ── Per-field extraction container ────────────────────────────────────────────
+
 
 @dataclass
 class FieldExtraction:
@@ -86,14 +93,15 @@ class FieldExtraction:
     Every field in ``ExtractionCandidate`` is wrapped in this so the review
     UI can show confidence per field, not just per candidate.
     """
-    value: object = None            # str | list | None
-    confidence: float = 0.0        # 0.0 – 1.0
-    source_excerpt: str | None = None   # text snippet the value was drawn from
+
+    value: object = None  # str | list | None
+    confidence: float = 0.0  # 0.0 – 1.0
+    source_excerpt: str | None = None  # text snippet the value was drawn from
     method: ExtractionMethod = ExtractionMethod.NOT_EXTRACTED
     warnings: list[str] = field(default_factory=list)
 
     @classmethod
-    def absent(cls) -> "FieldExtraction":
+    def absent(cls) -> FieldExtraction:
         return cls(value=None, confidence=0.0, method=ExtractionMethod.NOT_EXTRACTED)
 
     @classmethod
@@ -105,7 +113,7 @@ class FieldExtraction:
         method: ExtractionMethod = ExtractionMethod.HEURISTIC,
         excerpt: str | None = None,
         warnings: list[str] | None = None,
-    ) -> "FieldExtraction":
+    ) -> FieldExtraction:
         return cls(
             value=value,
             confidence=confidence,
@@ -120,6 +128,7 @@ class FieldExtraction:
 
 
 # ── Step container ────────────────────────────────────────────────────────────
+
 
 @dataclass
 class ExtractionStep:
@@ -138,6 +147,7 @@ class ExtractionStep:
 
 # ── The stable extraction candidate ───────────────────────────────────────────
 
+
 @dataclass
 class ExtractionCandidate:
     """Full in-memory extraction result for one document segment.
@@ -152,6 +162,7 @@ class ExtractionCandidate:
     - Per-field ``FieldExtraction`` instances with confidence + excerpt
     - Composite ``extraction_confidence`` and ``review_required``
     """
+
     schema_version: str = SCHEMA_VERSION
     parser_version: str = PARSER_VERSION
     parser_profile: str = "it_support_v1"
@@ -201,10 +212,17 @@ class ExtractionCandidate:
     def build_metadata(self) -> dict:
         """Build the extraction_metadata dict for JSONB storage."""
         tracked = [
-            "title", "short_summary", "category", "subcategory",
-            "product_or_system", "platform", "symptoms",
-            "troubleshooting_steps", "resolution_steps",
-            "escalation_criteria", "tags",
+            "title",
+            "short_summary",
+            "category",
+            "subcategory",
+            "product_or_system",
+            "platform",
+            "symptoms",
+            "troubleshooting_steps",
+            "resolution_steps",
+            "escalation_criteria",
+            "tags",
         ]
         return {
             fname: {

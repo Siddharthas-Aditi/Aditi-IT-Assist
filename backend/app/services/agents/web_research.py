@@ -64,10 +64,12 @@ _DEFAULT_ALLOWED_TIERS: tuple[DomainTrust, ...] = (
 )
 
 # Specialists explicitly OK with community sources (still excludes blogs).
-_COMMUNITY_OK_SPECIALISTS: frozenset[str] = frozenset({
-    "zoom_meetings",   # zoom community forums are well-moderated
-    "network_vpn",     # vendor forums are routinely the right answer
-})
+_COMMUNITY_OK_SPECIALISTS: frozenset[str] = frozenset(
+    {
+        "zoom_meetings",  # zoom community forums are well-moderated
+        "network_vpn",  # vendor forums are routinely the right answer
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -196,7 +198,9 @@ class ControlledWebResearchAgent:
             candidate_ids = tuple(ids)
 
         return WebResearchOutcome(
-            results=filtered, policy=policy, candidate_ids=candidate_ids,
+            results=filtered,
+            policy=policy,
+            candidate_ids=candidate_ids,
         )
 
 

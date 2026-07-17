@@ -84,7 +84,7 @@ class KnowledgeImprovementHint:
     A specialist must NEVER write to production KB — only hint at gaps.
     """
 
-    reason: str                        # short why (e.g. "subtype lacks article")
+    reason: str  # short why (e.g. "subtype lacks article")
     issue_subtype: str | None = None
     suggested_title: str | None = None
     notes: str = ""
@@ -95,9 +95,9 @@ class KnowledgeImprovementHint:
 class SpecialistOutput:
     """The specialist's reply to the supervisor."""
 
-    message: str                       # natural-language reply for the user
+    message: str  # natural-language reply for the user
     steps: tuple[ResolutionStep, ...] = field(default_factory=tuple)
-    confidence: float = 0.0            # specialist's own confidence in this turn
+    confidence: float = 0.0  # specialist's own confidence in this turn
     # If set, the specialist is telling the supervisor "I'm done — escalate".
     escalation_signal: str | None = None
     # Tried-step memory the workflow records into DiagnosticContext.

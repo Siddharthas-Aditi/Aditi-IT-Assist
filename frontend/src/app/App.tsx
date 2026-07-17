@@ -26,6 +26,7 @@ import { LiveChatPage } from '@/pages/operations/LiveChatPage';
 import { TicketWorkspacePage } from '@/pages/operations/TicketWorkspacePage';
 import { RemoteAssistPage } from '@/pages/operations/RemoteAssistPage';
 import { ApprovalsPage } from '@/pages/operations/ApprovalsPage';
+import { DeviceActionsPage } from '@/pages/operations/DeviceActionsPage';
 
 // Admin/Lead pages
 import { DashboardPage } from '@/pages/admin/DashboardPage';
@@ -85,6 +86,7 @@ export function App() {
         <Route path="tickets/:id" element={<TicketWorkspacePage />} />
         <Route path="remote-assist" element={<RemoteAssistPage />} />
         <Route path="approvals" element={<ApprovalsPage />} />
+        <Route path="device-actions" element={<DeviceActionsPage />} />
       </Route>
 
       {/* Admin/Lead dashboard */}

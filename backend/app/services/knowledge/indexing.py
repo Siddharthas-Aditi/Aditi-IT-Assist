@@ -72,6 +72,7 @@ class AzureOpenAIEmbeddingClient(EmbeddingClient):
         # clients created by LiteLLM inherit the setting.
         if not self.ssl_verify:
             import litellm as _litellm  # noqa: PLC0415
+
             _litellm.ssl_verify = False
 
     async def embed(self, texts: list[str]) -> list[list[float]] | None:
@@ -114,7 +115,6 @@ def get_embedding_client() -> EmbeddingClient:
     if settings.is_azure and settings.AZURE_OPENAI_API_KEY and settings.AZURE_OPENAI_ENDPOINT:
         return AzureOpenAIEmbeddingClient()
     return EmbeddingClient(settings.VECTOR_STORE_TYPE)
-
 
 
 class KnowledgeIndexingService:
@@ -178,7 +178,8 @@ class KnowledgeIndexingService:
         # unchanged sections skip the embedding call entirely.
         existing_chunks = {c.chunk_index: c for c in chunks if c.embedding_status == "indexed"}
         new_chunks_to_embed = [
-            c for c in chunks
+            c
+            for c in chunks
             if c.chunk_index not in existing_chunks
             or existing_chunks[c.chunk_index].content != c.content
         ]

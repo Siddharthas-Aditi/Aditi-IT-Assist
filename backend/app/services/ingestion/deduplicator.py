@@ -23,6 +23,7 @@ if TYPE_CHECKING:
 
 # ── Result type ───────────────────────────────────────────────────────────────
 
+
 @dataclass
 class DuplicateMatch:
     """An existing KB article that is potentially a duplicate."""
@@ -31,12 +32,13 @@ class DuplicateMatch:
     title: str
     category: str | None
     similarity_score: float  # 0.0 – 1.0
-    match_reason: str        # e.g. "title_similarity:0.85", "tag_overlap:3"
+    match_reason: str  # e.g. "title_similarity:0.85", "tag_overlap:3"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Public entry point
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 async def find_duplicates(
     *,
@@ -85,9 +87,7 @@ async def find_duplicates(
 
         # ── Method 1: title similarity ──────────────────────────────────────
         if normalised_title and row_title:
-            ratio = difflib.SequenceMatcher(
-                None, normalised_title, _normalise(row_title)
-            ).ratio()
+            ratio = difflib.SequenceMatcher(None, normalised_title, _normalise(row_title)).ratio()
             if ratio >= 0.70 and row_id not in matches:
                 matches[row_id] = DuplicateMatch(
                     article_id=row_id,
@@ -122,15 +122,14 @@ async def find_duplicates(
             and category
             and row_category
             and category == row_category
-        ):
-            if row_id not in matches:
-                matches[row_id] = DuplicateMatch(
-                    article_id=row_id,
-                    title=row_title,
-                    category=row_category,
-                    similarity_score=0.60,
-                    match_reason="product_category_match",
-                )
+        ) and row_id not in matches:
+            matches[row_id] = DuplicateMatch(
+                article_id=row_id,
+                title=row_title,
+                category=row_category,
+                similarity_score=0.60,
+                match_reason="product_category_match",
+            )
 
     # Sort by score desc, limit to 5
     sorted_matches = sorted(matches.values(), key=lambda m: m.similarity_score, reverse=True)
@@ -141,7 +140,9 @@ async def find_duplicates(
 # Helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def _normalise(text: str) -> str:
     """Lowercase, strip punctuation for fuzzy title comparison."""
     import re
+
     return re.sub(r"[^\w\s]", "", text.lower()).strip()

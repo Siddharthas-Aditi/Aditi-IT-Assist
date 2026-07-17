@@ -25,12 +25,12 @@ from dataclasses import asdict, dataclass
 class ConfidenceBreakdown:
     """The component signals behind a resolution-confidence score."""
 
-    system_match: float = 0.0       # entity/system recognition confidence
-    subtype_match: float = 0.0      # subtype classification confidence
+    system_match: float = 0.0  # entity/system recognition confidence
+    subtype_match: float = 0.0  # subtype classification confidence
     retrieval_relevance: float = 0.0  # top grounded article relevance
-    grounding: float = 0.0          # did a real on-subtype/on-domain article back this
-    playbook_fit: float = 0.0       # is the chosen subtype part of the playbook
-    loop_penalty: float = 0.0       # repetition / stuck-state penalty
+    grounding: float = 0.0  # did a real on-subtype/on-domain article back this
+    playbook_fit: float = 0.0  # is the chosen subtype part of the playbook
+    loop_penalty: float = 0.0  # repetition / stuck-state penalty
     unresolved_penalty: float = 0.0  # prior failed attempts penalty
     final: float = 0.0
 

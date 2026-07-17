@@ -21,26 +21,16 @@ depends_on = None
 
 def upgrade() -> None:
     # ── ENUM types ────────────────────────────────────────────────────────────
-    parse_status_enum = postgresql.ENUM(
-        "pending", "extracting", "parsing", "completed", "failed",
-        name="ingestion_parse_status",
-        create_type=False,
-    )
-    extraction_status_enum = postgresql.ENUM(
-        "pending", "completed", "failed",
-        name="ingestion_extraction_status",
-        create_type=False,
-    )
-    review_status_enum = postgresql.ENUM(
-        "pending", "approved", "rejected", "saved",
-        name="ingestion_candidate_review_status",
-        create_type=False,
-    )
-
     # Create ENUMs first
-    op.execute("CREATE TYPE ingestion_parse_status AS ENUM ('pending','extracting','parsing','completed','failed')")
+    op.execute(
+        "CREATE TYPE ingestion_parse_status AS ENUM "
+        "('pending','extracting','parsing','completed','failed')"
+    )
     op.execute("CREATE TYPE ingestion_extraction_status AS ENUM ('pending','completed','failed')")
-    op.execute("CREATE TYPE ingestion_candidate_review_status AS ENUM ('pending','approved','rejected','saved')")
+    op.execute(
+        "CREATE TYPE ingestion_candidate_review_status AS ENUM "
+        "('pending','approved','rejected','saved')"
+    )
 
     # ── ingestion_jobs ────────────────────────────────────────────────────────
     op.create_table(
@@ -105,8 +95,14 @@ def upgrade() -> None:
         sa.Column("extracted_product_or_system", sa.String(256), nullable=True),
         sa.Column("extracted_platform", sa.String(256), nullable=True),
         sa.Column("extracted_symptoms", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
-        sa.Column("extracted_troubleshooting_steps", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
-        sa.Column("extracted_resolution_steps", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column(
+            "extracted_troubleshooting_steps",
+            postgresql.JSONB(astext_type=sa.Text()),
+            nullable=True,
+        ),
+        sa.Column(
+            "extracted_resolution_steps", postgresql.JSONB(astext_type=sa.Text()), nullable=True
+        ),
         sa.Column("extracted_escalation_criteria", sa.Text(), nullable=True),
         sa.Column("extracted_tags", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
         sa.Column("extracted_keywords", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
@@ -126,7 +122,9 @@ def upgrade() -> None:
             nullable=True,
         ),
         sa.Column("raw_segment_text", sa.Text(), nullable=True),
-        sa.Column("normalized_payload_json", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column(
+            "normalized_payload_json", postgresql.JSONB(astext_type=sa.Text()), nullable=True
+        ),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),

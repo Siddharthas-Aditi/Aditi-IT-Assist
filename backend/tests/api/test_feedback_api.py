@@ -9,7 +9,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.schemas.feedback import (
-    ConversationFeedbackCreate,
     ConversationFeedbackResponse,
 )
 
@@ -28,9 +27,7 @@ class TestFeedbackEndpoints:
 
     @pytest.mark.asyncio
     async def test_get_own_feedback_unauthenticated_returns_401(self, client):
-        response = await client.get(
-            "/api/v1/feedback/conversation/some-session-id"
-        )
+        response = await client.get("/api/v1/feedback/conversation/some-session-id")
         assert response.status_code == 401
 
     @pytest.mark.asyncio
@@ -74,9 +71,7 @@ class TestFeedbackEndpoints:
 
         with patch(
             "app.api.v1.feedback.FeedbackService.submit_feedback",
-            new=AsyncMock(
-                return_value=ConversationFeedbackResponse.model_validate(mock_response)
-            ),
+            new=AsyncMock(return_value=ConversationFeedbackResponse.model_validate(mock_response)),
         ):
             response = await employee_client.post(
                 f"/api/v1/feedback/conversation/{session_id}",

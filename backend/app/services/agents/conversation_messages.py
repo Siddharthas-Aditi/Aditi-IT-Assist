@@ -13,9 +13,13 @@ Design:
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from app.core.logging import get_logger
-from app.services.agents.diagnostic_state import DiagnosticContext
-from app.services.llm_service import LLMService, get_llm_service
+from app.services.llm_service import get_llm_service
+
+if TYPE_CHECKING:
+    from app.services.agents.diagnostic_state import DiagnosticContext
 
 logger = get_logger(__name__)
 
@@ -66,7 +70,10 @@ async def generate_confirmation(diag_ctx: DiagnosticContext) -> str:
     prompt = _CONFIRM_PROMPT.format(system=system, problem=problem, detail=detail)
     try:
         content = await llm.complete(
-            prompt, system_prompt=_PERSONA, temperature=0.8, max_tokens=120,
+            prompt,
+            system_prompt=_PERSONA,
+            temperature=0.8,
+            max_tokens=120,
         )
         # Sanity check: must end with a question mark or question-like phrase
         if content and len(content) > 20:
@@ -79,11 +86,9 @@ async def generate_confirmation(diag_ctx: DiagnosticContext) -> str:
 
 def _fallback_confirmation(diag_ctx: DiagnosticContext) -> str:
     """Deterministic template fallback."""
-    system = diag_ctx.affected_system or "your IT"
     problem = diag_ctx.exact_problem_statement or diag_ctx.symptom or "the issue you described"
     return (
-        f"Got it — just to make sure I've understood: {problem}. "
-        f"Is that what you're experiencing?"
+        f"Got it — just to make sure I've understood: {problem}. Is that what you're experiencing?"
     )
 
 
@@ -106,7 +111,10 @@ async def generate_greeting() -> str:
 
     try:
         content = await llm.complete(
-            _GREETING_PROMPT, system_prompt=_PERSONA, temperature=0.9, max_tokens=80,
+            _GREETING_PROMPT,
+            system_prompt=_PERSONA,
+            temperature=0.9,
+            max_tokens=80,
         )
         if content and len(content) > 15:
             return content.strip()
@@ -150,7 +158,10 @@ async def generate_resolved(diag_ctx: DiagnosticContext) -> str:
     prompt = _RESOLVED_PROMPT.format(problem=problem, system=system)
     try:
         content = await llm.complete(
-            prompt, system_prompt=_PERSONA, temperature=0.85, max_tokens=80,
+            prompt,
+            system_prompt=_PERSONA,
+            temperature=0.85,
+            max_tokens=80,
         )
         if content and len(content) > 15:
             return content.strip()
@@ -184,7 +195,10 @@ async def generate_gratitude_close() -> str:
 
     try:
         content = await llm.complete(
-            _GRATITUDE_PROMPT, system_prompt=_PERSONA, temperature=0.9, max_tokens=60,
+            _GRATITUDE_PROMPT,
+            system_prompt=_PERSONA,
+            temperature=0.9,
+            max_tokens=60,
         )
         if content and len(content) > 10:
             return content.strip()
@@ -196,8 +210,7 @@ async def generate_gratitude_close() -> str:
 
 def _fallback_gratitude() -> str:
     return (
-        "You're welcome! Happy I could help. "
-        "Drop me a message any time if something else comes up."
+        "You're welcome! Happy I could help. Drop me a message any time if something else comes up."
     )
 
 
@@ -218,7 +231,10 @@ async def generate_reclarification() -> str:
 
     try:
         content = await llm.complete(
-            _RECLARIFY_PROMPT, system_prompt=_PERSONA, temperature=0.8, max_tokens=80,
+            _RECLARIFY_PROMPT,
+            system_prompt=_PERSONA,
+            temperature=0.8,
+            max_tokens=80,
         )
         if content and len(content) > 15:
             return content.strip()
@@ -252,7 +268,10 @@ async def generate_new_topic() -> str:
 
     try:
         content = await llm.complete(
-            _NEW_TOPIC_PROMPT, system_prompt=_PERSONA, temperature=0.85, max_tokens=60,
+            _NEW_TOPIC_PROMPT,
+            system_prompt=_PERSONA,
+            temperature=0.85,
+            max_tokens=60,
         )
         if content and len(content) > 10:
             return content.strip()

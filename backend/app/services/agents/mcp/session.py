@@ -41,8 +41,7 @@ class McpSession(Protocol):
         """Invoke a tool and return its structured result."""
         ...
 
-    async def close(self) -> None:
-        ...
+    async def close(self) -> None: ...
 
 
 # A provider resolves a profile to a connected session. Async so real

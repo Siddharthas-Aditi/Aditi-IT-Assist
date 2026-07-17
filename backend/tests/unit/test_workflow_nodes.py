@@ -6,22 +6,17 @@ Tests:
 - Workflow routing logic
 """
 
-import uuid
-from unittest.mock import AsyncMock, MagicMock, patch
-
-import pytest
-from langchain_core.messages import HumanMessage, AIMessage
-
-from app.workflows.nodes.escalation import escalation_node
-from app.workflows.nodes.ticketing import ticket_node
-from app.workflows.graph import (
-    route_after_triage,
-    route_after_retrieval,
-    route_after_resolution,
-    route_after_escalation,
-)
+from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.graph import END
 
+from app.workflows.graph import (
+    route_after_escalation,
+    route_after_resolution,
+    route_after_retrieval,
+    route_after_triage,
+)
+from app.workflows.nodes.escalation import escalation_node
+from app.workflows.nodes.ticketing import ticket_node
 
 # ─────────────────────────────────────────────────────────────────────
 # Orchestrator routing tests

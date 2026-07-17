@@ -40,8 +40,7 @@ async def ticket_node(state: WorkflowState) -> dict:
             "user_id": state.get("user_id"),
         },
         "problem_statement": (
-            diag.get("exact_problem_statement")
-            or handoff.get("issue_description", "")
+            diag.get("exact_problem_statement") or handoff.get("issue_description", "")
         ),
         "steps_attempted": steps_tried,
         "conversation_summary": handoff.get("issue_description", ""),
@@ -158,11 +157,13 @@ def _generate_ticket_description(state: WorkflowState, handoff: dict) -> str:
     else:
         lines.append("- AI troubleshooting was attempted but did not resolve the issue")
 
-    lines.extend([
-        "",
-        "## Escalation Reason",
-        state.get("escalation_reason", "Automated escalation due to low confidence"),
-    ])
+    lines.extend(
+        [
+            "",
+            "## Escalation Reason",
+            state.get("escalation_reason", "Automated escalation due to low confidence"),
+        ]
+    )
 
     return "\n".join(lines)
 

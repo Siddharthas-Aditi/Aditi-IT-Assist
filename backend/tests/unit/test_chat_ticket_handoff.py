@@ -15,6 +15,12 @@ from langchain_core.messages import AIMessage
 
 from app.services.agents import chat_service as cs_mod
 from app.services.agents.chat_service import ChatService
+from app.services.agents.session_store import (
+    ChatSession,
+    InMemorySessionStore,
+    get_session_store,
+    set_session_store,
+)
 
 DRAFT = {
     "title": "IT Support Request - access/sixth_sense (login-failure)",
@@ -48,8 +54,7 @@ def _requester():
 
 
 def _clear_state():
-    cs_mod._sessions.clear()
-    cs_mod._session_tickets.clear()
+    set_session_store(InMemorySessionStore())
 
 
 class TestTicketOnConfirm:
@@ -60,13 +65,15 @@ class TestTicketOnConfirm:
         svc = _mock_ticket_service()
         chat = ChatService(svc)
 
+        session = ChatSession(user_id=None, state={"session_id": "sess-1"})
         result = {
+            "session_id": "sess-1",
             "should_escalate": True,
             "escalation_confirmed": False,  # only offered, not confirmed
             "ticket_offered": True,
             "ticket_draft": DRAFT,
         }
-        ref = await chat._handle_ticketing("sess-1", result, _requester())
+        ref = await chat._handle_ticketing(session, result, _requester())
 
         assert ref is None
         svc.create_ticket.assert_not_called()
@@ -76,13 +83,15 @@ class TestTicketOnConfirm:
         svc = _mock_ticket_service()
         chat = ChatService(svc)
 
+        session = ChatSession(user_id=None, state={"session_id": "sess-1"})
         result = {
+            "session_id": "sess-1",
             "should_escalate": True,
             "escalation_confirmed": True,
             "ticket_offered": True,
             "ticket_draft": DRAFT,
         }
-        ref = await chat._handle_ticketing("sess-1", result, _requester())
+        ref = await chat._handle_ticketing(session, result, _requester())
 
         assert ref is not None
         assert ref.ticket_number == "INC-000042"
@@ -96,15 +105,17 @@ class TestTicketOnConfirm:
         _clear_state()
         svc = _mock_ticket_service()
         chat = ChatService(svc)
+        session = ChatSession(user_id=None, state={"session_id": "sess-1"})
         result = {
+            "session_id": "sess-1",
             "should_escalate": True,
             "escalation_confirmed": True,
             "ticket_offered": True,
             "ticket_draft": DRAFT,
         }
 
-        first = await chat._handle_ticketing("sess-1", result, _requester())
-        second = await chat._handle_ticketing("sess-1", result, _requester())
+        first = await chat._handle_ticketing(session, result, _requester())
+        second = await chat._handle_ticketing(session, result, _requester())
 
         assert first.ticket_number == second.ticket_number
         svc.create_ticket.assert_awaited_once()  # not created twice
@@ -112,13 +123,15 @@ class TestTicketOnConfirm:
     async def test_no_ticket_service_degrades_to_offer(self):
         _clear_state()
         chat = ChatService(ticket_service=None)
+        session = ChatSession(user_id=None, state={"session_id": "sess-1"})
         result = {
+            "session_id": "sess-1",
             "should_escalate": True,
             "escalation_confirmed": True,
             "ticket_offered": True,
             "ticket_draft": DRAFT,
         }
-        ref = await chat._handle_ticketing("sess-1", result, _requester())
+        ref = await chat._handle_ticketing(session, result, _requester())
         assert ref is None
 
 
@@ -129,7 +142,13 @@ class TestRequestLiveAgent:
         _clear_state()
         svc = _mock_ticket_service()
         chat = ChatService(svc)
-        cs_mod._sessions["sess-2"] = {"ticket_draft": DRAFT, "issue_category": "access/sixth_sense"}
+        await get_session_store().save(
+            "sess-2",
+            ChatSession(
+                user_id=None,
+                state={"ticket_draft": DRAFT, "issue_category": "access/sixth_sense"},
+            ),
+        )
 
         message, ref = await chat.request_live_agent("sess-2", _requester())
 
@@ -153,7 +172,9 @@ class TestRequestLiveAgent:
         _clear_state()
         svc = _mock_ticket_service()
         chat = ChatService(svc)
-        cs_mod._sessions["sess-2"] = {"ticket_draft": DRAFT}
+        await get_session_store().save(
+            "sess-2", ChatSession(user_id=None, state={"ticket_draft": DRAFT})
+        )
 
         await chat.request_live_agent("sess-2", _requester())
         message, _ = await chat.request_live_agent("sess-2", _requester())

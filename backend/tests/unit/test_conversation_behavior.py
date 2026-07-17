@@ -37,11 +37,13 @@ class TestGreeting:
     @pytest.mark.asyncio
     async def test_greeting_is_welcomed_not_triaged(self):
         with _no_llm():
-            result = await triage_node({
-                "messages": [HumanMessage(content="Hi")],
-                "session_id": "g1",
-                "diagnostic_context": None,
-            })
+            result = await triage_node(
+                {
+                    "messages": [HumanMessage(content="Hi")],
+                    "session_id": "g1",
+                    "diagnostic_context": None,
+                }
+            )
         assert result["needs_clarification"] is True
         assert result["issue_category"] is None
         assert result["conversation_phase"] == "intake"
@@ -52,11 +54,13 @@ class TestGreeting:
     async def test_greeting_variants(self):
         for greeting in ["hello", "hey there", "good morning"]:
             with _no_llm():
-                result = await triage_node({
-                    "messages": [HumanMessage(content=greeting)],
-                    "session_id": "g",
-                    "diagnostic_context": None,
-                })
+                result = await triage_node(
+                    {
+                        "messages": [HumanMessage(content=greeting)],
+                        "session_id": "g",
+                        "diagnostic_context": None,
+                    }
+                )
             assert result["issue_category"] is None, greeting
 
 
@@ -70,38 +74,50 @@ class TestConfirmUnderstanding:
             affected_system="Microsoft Outlook",
         )
         with _no_llm():
-            result = await triage_node({
-                "messages": [
-                    HumanMessage(content="outlook issue"),
-                    AIMessage(content="what's happening?"),
-                    HumanMessage(content="my inbox is full"),
-                ],
-                "session_id": "c1",
-                "issue_category": "email/outlook",
-                "diagnostic_context": prior.to_dict(),
-                "conversation_phase": "clarifying",
-            })
+            result = await triage_node(
+                {
+                    "messages": [
+                        HumanMessage(content="outlook issue"),
+                        AIMessage(content="what's happening?"),
+                        HumanMessage(content="my inbox is full"),
+                    ],
+                    "session_id": "c1",
+                    "issue_category": "email/outlook",
+                    "diagnostic_context": prior.to_dict(),
+                    "conversation_phase": "clarifying",
+                }
+            )
         assert result["needs_clarification"] is True
         assert result["diagnostic_context"]["awaiting_confirmation"] is True
         # The confirmation message is now LLM-generated for natural variety.
         # We only assert structural invariants: it must be a question (contains
         # a question-like phrase or ends with "?") and reference the issue.
         q = result["clarification_question"].lower()
-        is_question = (
-            "?" in q
-            or any(p in q for p in (
-                "is that right", "have i got that", "does that match",
-                "is that the gist", "have i understood", "got that right",
-                "sound right", "sound correct", "is that correct", "confirm",
-                "did i get that", "does that sound", "is that what",
-                "am i on the right track", "do i have that right",
-            ))
+        is_question = "?" in q or any(
+            p in q
+            for p in (
+                "is that right",
+                "have i got that",
+                "does that match",
+                "is that the gist",
+                "have i understood",
+                "got that right",
+                "sound right",
+                "sound correct",
+                "is that correct",
+                "confirm",
+                "did i get that",
+                "does that sound",
+                "is that what",
+                "am i on the right track",
+                "do i have that right",
+            )
         )
         assert is_question, f"Expected a confirmation question, got: {q!r}"
         # Must reference the issue in some way (mailbox/full/inbox/email)
-        assert any(
-            word in q for word in ("mailbox", "full", "inbox", "email", "mail")
-        ), f"Expected issue context in confirmation, got: {q!r}"
+        assert any(word in q for word in ("mailbox", "full", "inbox", "email", "mail")), (
+            f"Expected issue context in confirmation, got: {q!r}"
+        )
 
     @pytest.mark.asyncio
     async def test_affirmation_proceeds_to_solution(self):
@@ -115,13 +131,15 @@ class TestConfirmUnderstanding:
             awaiting_confirmation=True,
         )
         with _no_llm():
-            result = await triage_node({
-                "messages": [HumanMessage(content="yes that's right")],
-                "session_id": "c2",
-                "issue_category": "email/outlook",
-                "diagnostic_context": prior.to_dict(),
-                "conversation_phase": "clarifying",
-            })
+            result = await triage_node(
+                {
+                    "messages": [HumanMessage(content="yes that's right")],
+                    "session_id": "c2",
+                    "issue_category": "email/outlook",
+                    "diagnostic_context": prior.to_dict(),
+                    "conversation_phase": "clarifying",
+                }
+            )
         # Proceeds (no clarification) — routing will send this to retrieval.
         assert result["needs_clarification"] is False
         assert result["diagnostic_context"]["understanding_confirmed"] is True
@@ -138,13 +156,15 @@ class TestConfirmUnderstanding:
             awaiting_confirmation=True,
         )
         with _no_llm():
-            result = await triage_node({
-                "messages": [HumanMessage(content="no, that's not it")],
-                "session_id": "c3",
-                "issue_category": "email/outlook",
-                "diagnostic_context": prior.to_dict(),
-                "conversation_phase": "clarifying",
-            })
+            result = await triage_node(
+                {
+                    "messages": [HumanMessage(content="no, that's not it")],
+                    "session_id": "c3",
+                    "issue_category": "email/outlook",
+                    "diagnostic_context": prior.to_dict(),
+                    "conversation_phase": "clarifying",
+                }
+            )
         assert result["needs_clarification"] is True
         diag = result["diagnostic_context"]
         assert diag["awaiting_confirmation"] is False
@@ -169,12 +189,14 @@ class TestTopicShift:
             understanding_confirmed=True,
         )
         with _no_llm():
-            result = await triage_node({
-                "messages": [HumanMessage(content="I have an issue with outlook")],
-                "session_id": "ts1",
-                "issue_category": "access/sixth_sense",
-                "diagnostic_context": prior.to_dict(),
-            })
+            result = await triage_node(
+                {
+                    "messages": [HumanMessage(content="I have an issue with outlook")],
+                    "session_id": "ts1",
+                    "issue_category": "access/sixth_sense",
+                    "diagnostic_context": prior.to_dict(),
+                }
+            )
         diag = result["diagnostic_context"]
         # New system adopted, old login symptom/subtype cleared.
         assert diag["normalized_system"] == "outlook"

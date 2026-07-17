@@ -31,7 +31,8 @@ from enum import StrEnum
 from app.services.agents.tools.base import SideEffect
 
 # Bump on any change to the set of servers or their declared scope.
-MCP_PROFILE_VERSION = "1.0.0"
+# 1.1.0 — Phase 9: add the msgraph_intune_exec server (device-execution writes).
+MCP_PROFILE_VERSION = "1.1.0"
 
 
 class McpTransport(StrEnum):
@@ -45,19 +46,19 @@ class McpTransport(StrEnum):
 class TrustTier(StrEnum):
     """Provenance of an MCP server, for audit + review gating."""
 
-    OFFICIAL = "official"   # first-party vendor (e.g. Microsoft Graph)
-    VENDOR = "vendor"       # third-party product (e.g. ServiceNow)
-    INTERNAL = "internal"   # in-house wrapper
+    OFFICIAL = "official"  # first-party vendor (e.g. Microsoft Graph)
+    VENDOR = "vendor"  # third-party product (e.g. ServiceNow)
+    INTERNAL = "internal"  # in-house wrapper
 
 
 @dataclass(frozen=True, kw_only=True)
 class McpServerProfile:
     """Declarative description of one MCP server the client may connect to."""
 
-    server_id: str                       # stable id, referenced by tool bindings
+    server_id: str  # stable id, referenced by tool bindings
     display_name: str
     transport: McpTransport
-    endpoint: str                        # URL (http/sse) or command (stdio)
+    endpoint: str  # URL (http/sse) or command (stdio)
     trust_tier: TrustTier
     # Tool names (our registry names, not the server's) this server may expose.
     allowed_tools: tuple[str, ...] = field(default_factory=tuple)
@@ -80,9 +81,12 @@ _MSGRAPH = McpServerProfile(
     trust_tier=TrustTier.OFFICIAL,
     allowed_tools=(
         # Phase 7 reads
-        "entra_account_status", "intune_device_compliance", "mailbox_quota_status",
+        "entra_account_status",
+        "intune_device_compliance",
+        "mailbox_quota_status",
         # Phase 8 writes (human-approved; built only when write actions enabled)
-        "entra_unlock_account", "reset_mfa",
+        "entra_unlock_account",
+        "reset_mfa",
     ),
     # Ceiling WRITE (Phase 8): write tools are permitted but never destructive,
     # and only built when FEATURE_AGENT_WRITE_ACTIONS is on.
@@ -101,8 +105,31 @@ _SERVICENOW = McpServerProfile(
     auth_secret_ref="MCP_SERVICENOW_TOKEN",
 )
 
+# Phase 9 — device execution. A SEPARATE server from the read-only msgraph
+# profile so the high-blast-radius execution surface has its own enablement,
+# allow-list, and audit boundary. Tools here install approved apps, run approved
+# remediations, and take benign device actions on Intune-managed endpoints — all
+# catalog-bound and autonomy-policy-gated (see device_actions/). Built only when
+# FEATURE_DEVICE_EXECUTION is on.
+_MSGRAPH_INTUNE_EXEC = McpServerProfile(
+    server_id="msgraph_intune_exec",
+    display_name="Microsoft Graph — Intune device execution",
+    transport=McpTransport.STREAMABLE_HTTP,
+    endpoint="https://graph-mcp.internal.aditi/intune-exec",
+    trust_tier=TrustTier.OFFICIAL,
+    allowed_tools=(
+        "install_win32_app",
+        "run_remediation_script",
+        "device_action",
+    ),
+    # WRITE ceiling: writes are permitted but never destructive; every call is
+    # additionally catalog-bound + policy-gated in the tool layer.
+    side_effect_ceiling=SideEffect.WRITE,
+    auth_secret_ref="MCP_MSGRAPH_TOKEN",
+)
+
 MCP_SERVER_REGISTRY: dict[str, McpServerProfile] = {
-    p.server_id: p for p in (_MSGRAPH, _SERVICENOW)
+    p.server_id: p for p in (_MSGRAPH, _SERVICENOW, _MSGRAPH_INTUNE_EXEC)
 }
 
 

@@ -1,5 +1,6 @@
 """Authentication service — orchestrates auth providers and session management."""
 
+import contextlib
 import uuid
 
 import structlog
@@ -31,7 +32,9 @@ class AuthService:
         return self._providers.get(settings.AUTH_PROVIDER, self._providers["local"])
 
     async def login(
-        self, email: str, password: str,
+        self,
+        email: str,
+        password: str,
         ip_address: str | None = None,
         user_agent: str | None = None,
     ) -> dict:
@@ -76,8 +79,7 @@ class AuthService:
         return result.scalar_one_or_none()
 
     async def register_user(
-        self, email: str, password: str, full_name: str,
-        role_name: str = "employee", **kwargs
+        self, email: str, password: str, full_name: str, role_name: str = "employee", **kwargs
     ) -> User:
         """Register a new user with local credentials."""
         from app.core.security import hash_password
@@ -133,11 +135,14 @@ class AuthService:
         # 1. Code-defined permissions for every role the user holds
         code_perms: set[str] = set()
         for assignment in user.role_assignments:
-            role_name = assignment.role.name if hasattr(assignment.role, "name") else str(assignment.role_id)
-            try:
+            role_name = (
+                assignment.role.name
+                if hasattr(assignment.role, "name")
+                else str(assignment.role_id)
+            )
+            # unknown role name — skip gracefully
+            with contextlib.suppress(ValueError):
                 code_perms |= {str(p) for p in get_effective_permissions(UserRole(role_name))}
-            except ValueError:
-                pass  # unknown role name — skip gracefully
 
         # 2. DB-stored permissions (custom grants, future extensibility)
         from app.models.auth import Permission, RolePermission

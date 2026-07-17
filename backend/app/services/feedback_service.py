@@ -19,7 +19,6 @@ import structlog
 
 from app.models.feedback import (
     ConversationFeedback,
-    FeedbackSource,
     MessageFeedback,
     QualityBucket,
     SupportMode,
@@ -59,8 +58,10 @@ def _compute_quality_bucket(
 ) -> QualityBucket:
     """Derive coarse quality signal from survey answers."""
     has_positive = (helpful is True) or (resolved is True) or (rating is not None and rating >= 4)
-    has_negative = (helpful is False) or (resolved is False) or (
-        rating is not None and rating <= _NEGATIVE_RATING_THRESHOLD
+    has_negative = (
+        (helpful is False)
+        or (resolved is False)
+        or (rating is not None and rating <= _NEGATIVE_RATING_THRESHOLD)
     )
 
     if has_positive and not has_negative:
@@ -118,6 +119,7 @@ class FeedbackService:
         # Verify session exists (and optionally belongs to user — TODO when session
         # repository is complete; for now we load via raw DB)
         from sqlalchemy import select
+
         session_result = await self.db.execute(
             select(SupportSession).where(SupportSession.id == conv_id)
         )
@@ -143,9 +145,7 @@ class FeedbackService:
         article_ids: list[str] | None = metadata.get("knowledge_article_ids") or None
 
         # Compute derived fields
-        quality_bucket = _compute_quality_bucket(
-            payload.helpful, payload.resolved, payload.rating
-        )
+        quality_bucket = _compute_quality_bucket(payload.helpful, payload.resolved, payload.rating)
         review_flag, review_flag_reason = _compute_review_flag(
             payload.helpful, payload.resolved, payload.rating
         )
@@ -253,9 +253,7 @@ class FeedbackService:
         category: str | None = None,
     ) -> tuple[list[ConversationFeedbackResponse], int]:
         """Return paginated review-flagged feedback for admin queue."""
-        records = await self.repo.list_flagged(
-            limit=limit, offset=offset, category=category
-        )
+        records = await self.repo.list_flagged(limit=limit, offset=offset, category=category)
         total = await self.repo.count_flagged(category=category)
         return [ConversationFeedbackResponse.model_validate(r) for r in records], total
 

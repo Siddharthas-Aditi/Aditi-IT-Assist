@@ -45,7 +45,7 @@ class TestIdleDefaults:
 
         req = StartLiveChatRequest(ticket_id=uuid.uuid4())
         assert req.idle_warning_seconds == 420  # 7 min
-        assert req.idle_end_seconds == 540       # 7 + 2 min grace
+        assert req.idle_end_seconds == 540  # 7 + 2 min grace
 
     def test_warning_at_7min_not_before(self) -> None:
         svc = SpecialistChatService(db=MagicMock())

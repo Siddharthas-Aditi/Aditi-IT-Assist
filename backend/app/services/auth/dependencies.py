@@ -48,6 +48,7 @@ async def get_current_user(
         )
 
     from app.services.auth.service import AuthService
+
     auth_service = AuthService(db)
     user = await auth_service.validate_token(credentials.credentials)
 
@@ -56,10 +57,7 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={
                 "error_code": "session_expired",
-                "message": (
-                    "Your session has expired. Please sign in again to "
-                    "continue."
-                ),
+                "message": ("Your session has expired. Please sign in again to continue."),
             },
             headers={"WWW-Authenticate": "Bearer"},
         )
@@ -81,6 +79,7 @@ async def get_current_active_user(
 
 def require_roles(*allowed_roles: str):
     """Dependency factory: require user to have one of the specified roles."""
+
     async def role_checker(
         current_user: Annotated[User, Depends(get_current_active_user)],
     ) -> User:
@@ -91,16 +90,19 @@ def require_roles(*allowed_roles: str):
                 detail=f"Insufficient permissions. Required roles: {', '.join(allowed_roles)}",
             )
         return current_user
+
     return role_checker
 
 
 def require_permissions(*required_permissions: str):
     """Dependency factory: require user to have specific permissions."""
+
     async def permission_checker(
         current_user: Annotated[User, Depends(get_current_active_user)],
         db: Annotated[AsyncSession, Depends(get_db)],
     ) -> User:
         from app.services.auth.service import AuthService
+
         auth_service = AuthService(db)
         user_permissions = await auth_service.get_user_permissions(current_user)
 
@@ -111,6 +113,7 @@ def require_permissions(*required_permissions: str):
                 detail=f"Missing permissions: {', '.join(missing)}",
             )
         return current_user
+
     return permission_checker
 
 

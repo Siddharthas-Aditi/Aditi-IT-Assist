@@ -13,10 +13,13 @@ from langchain_core.messages import AIMessage, HumanMessage
 
 from app.models.escalation import EscalationContext, TranscriptSnapshot
 from app.models.ticket import Ticket
-from app.services.agents import chat_service as cs_mod
 from app.services.agents.chat_service import ChatService
+from app.services.agents.session_store import (
+    ChatSession,
+    InMemorySessionStore,
+    set_session_store,
+)
 from app.services.escalation_service import EscalationService, extract_transcript
-
 
 # ── Fake async session ────────────────────────────────────────────────────
 
@@ -67,8 +70,9 @@ def _ticket(**kw):
 
 
 def _requester():
-    return MagicMock(id=uuid.uuid4(), email="emp@aditi.com", full_name="Emp",
-                     primary_role="employee")
+    return MagicMock(
+        id=uuid.uuid4(), email="emp@aditi.com", full_name="Emp", primary_role="employee"
+    )
 
 
 # ── extract_transcript (pure) ──────────────────────────────────────────────
@@ -174,9 +178,7 @@ class TestCreateArtifacts:
         messages = [HumanMessage(content="first"), AIMessage(content="reply")]
         state = {"messages": messages, "diagnostic_context": {}}
 
-        await svc.create_escalation_artifacts(
-            ticket=ticket, chat_session_id="s", state=state
-        )
+        await svc.create_escalation_artifacts(ticket=ticket, chat_session_id="s", state=state)
         # The snapshot is in session.added (not via ORM relationship in unit test).
         snap = next(o for o in session.added if isinstance(o, TranscriptSnapshot))
         original_count = snap.message_count
@@ -198,17 +200,25 @@ class TestHandoffView:
             chat_session_id="s",
             message_count=2,
             messages=[
-                {"seq": 0, "role": "employee", "content": "help", "message_type": None,
-                 "timestamp": None},
-                {"seq": 1, "role": "assistant", "content": "try this", "message_type": None,
-                 "timestamp": None},
+                {
+                    "seq": 0,
+                    "role": "employee",
+                    "content": "help",
+                    "message_type": None,
+                    "timestamp": None,
+                },
+                {
+                    "seq": 1,
+                    "role": "assistant",
+                    "content": "try this",
+                    "message_type": None,
+                    "timestamp": None,
+                },
             ],
             context_version="1.0",
         )
         snap.id = uuid.uuid4()
-        snap.captured_at = __import__("datetime").datetime.now(
-            __import__("datetime").timezone.utc
-        )
+        snap.captured_at = __import__("datetime").datetime.now(__import__("datetime").timezone.utc)
         ctx = EscalationContext(
             ticket_id=ticket.id,
             transcript_snapshot_id=snap.id,
@@ -229,9 +239,7 @@ class TestHandoffView:
         ctx.ai_attempted_steps = [
             {"instruction": "Archive mail", "outcome": "failed", "source_kb_title": None}
         ]
-        ctx.kb_articles_referenced = [
-            {"article_id": "kb1", "title": "Quota", "relevance": 0.7}
-        ]
+        ctx.kb_articles_referenced = [{"article_id": "kb1", "title": "Quota", "relevance": 0.7}]
         ctx.kb_gap_tags = ["article_suggested_but_unresolved"]
         ctx.transcript_snapshot = snap
         return ctx
@@ -276,7 +284,9 @@ class TestResolutionComparison:
             specialist_resolution_summary="Increased mailbox quota in Exchange admin",
             specialist_resolution_steps=["Open EAC", "Raise quota", "Notify user"],
             final_resolution_category="email/outlook",
-            ai_vs_specialist_resolution_gap="AI suggested self-serve archive; fix needed admin action",
+            ai_vs_specialist_resolution_gap=(
+                "AI suggested self-serve archive; fix needed admin action"
+            ),
             kb_candidate_flag=True,
         )
         assert updated is ctx
@@ -302,8 +312,7 @@ class TestResolutionComparison:
 
 class TestChatServiceWiring:
     async def test_persist_and_queue_creates_artifacts_with_state(self):
-        cs_mod._sessions.clear()
-        cs_mod._session_tickets.clear()
+        set_session_store(InMemorySessionStore())
 
         ticket = MagicMock()
         ticket.id = uuid.uuid4()
@@ -319,19 +328,23 @@ class TestChatServiceWiring:
 
         chat = ChatService(svc)
         state = {
-            "ticket_draft": {"title": "T", "description": "D", "priority": "high",
-                             "category": "email/outlook", "problem_statement": "P"},
+            "ticket_draft": {
+                "title": "T",
+                "description": "D",
+                "priority": "high",
+                "category": "email/outlook",
+                "problem_statement": "P",
+            },
             "messages": [HumanMessage(content="hi")],
             "diagnostic_context": {},
         }
 
-        with patch(
-            "app.services.escalation_service.EscalationService"
-        ) as MockEsc:
+        with patch("app.services.escalation_service.EscalationService") as MockEsc:
             instance = MockEsc.return_value
             instance.create_escalation_artifacts = AsyncMock()
+            session = ChatSession(user_id=None, state={"session_id": "sess-x"})
             ref = await chat._persist_and_queue(
-                "sess-x", state["ticket_draft"], _requester(), state=state
+                "sess-x", session, state["ticket_draft"], _requester(), state=state
             )
 
         assert ref.ticket_number == "ITA-000099"

@@ -129,11 +129,29 @@ def classify_bucket(path: str) -> tuple[str, int]:
 
 
 def client_identity(request: Request) -> str:
-    """Client key: first X-Forwarded-For hop (set by our nginx), else peer IP."""
+    """Spoof-resistant client key.
+
+    ``X-Forwarded-For`` is a comma-separated chain where each proxy appends the
+    peer it saw. Our nginx uses ``$proxy_add_x_forwarded_for``, so the real
+    client is the ``RATE_LIMIT_TRUSTED_PROXY_HOPS``-th entry from the RIGHT;
+    everything a client spoofs lands to the LEFT of that and is ignored.
+
+    A previous version trusted the LEFTMOST entry, which is entirely
+    caller-controlled — an attacker could rotate it per request to get a fresh
+    bucket every time and defeat the brute-force guard. If the header is missing
+    or shorter than the configured proxy chain (i.e. it didn't come through the
+    expected proxies), we fall back to the socket peer rather than trust it.
+    """
+    peer = request.client.host if request.client else "unknown"
+    hops = settings.RATE_LIMIT_TRUSTED_PROXY_HOPS
+    if hops <= 0:
+        return peer
     fwd = request.headers.get("x-forwarded-for")
     if fwd:
-        return fwd.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
+        parts = [p.strip() for p in fwd.split(",") if p.strip()]
+        if len(parts) >= hops:
+            return parts[-hops]
+    return peer
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):

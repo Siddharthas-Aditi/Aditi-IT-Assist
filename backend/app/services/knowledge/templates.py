@@ -15,14 +15,14 @@ from typing import Any
 
 @dataclass(frozen=True)
 class ArticleTemplate:
-    key: str                     # URL-safe identifier
-    label: str                   # Display name
-    category: str                # KB category slug
+    key: str  # URL-safe identifier
+    label: str  # Display name
+    category: str  # KB category slug
     subcategory: str
     product_or_system: str
-    description: str             # Short human description shown in the picker
-    icon: str                    # Emoji for UI display
-    defaults: dict[str, Any] = field(default_factory=dict)   # Pre-filled article fields
+    description: str  # Short human description shown in the picker
+    icon: str  # Emoji for UI display
+    defaults: dict[str, Any] = field(default_factory=dict)  # Pre-filled article fields
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -71,7 +71,8 @@ ARTICLE_TEMPLATES: list[ArticleTemplate] = [
                     "instruction": "Check webmail first",
                     "details": (
                         "Open outlook.office.com in a browser. "
-                        "If emails appear there, the issue is with the Outlook client, not Exchange."
+                        "If emails appear there, the issue is with the Outlook client, "
+                        "not Exchange."
                     ),
                 },
                 {
@@ -128,8 +129,7 @@ ARTICLE_TEMPLATES: list[ArticleTemplate] = [
                     "step_number": 1,
                     "instruction": "Ask a colleague to send a test email",
                     "details": (
-                        "Confirm it arrives within 5 minutes. "
-                        "If not, escalate to Exchange admin."
+                        "Confirm it arrives within 5 minutes. If not, escalate to Exchange admin."
                     ),
                 },
             ],
@@ -192,7 +192,8 @@ ARTICLE_TEMPLATES: list[ArticleTemplate] = [
                     "instruction": "Run Outlook in safe mode",
                     "details": (
                         "Press Win+R, type outlook.exe /safe, press Enter. "
-                        "If sync works, a plugin is likely causing the issue — disable add-ins one by one."
+                        "If sync works, a plugin is likely causing the issue — "
+                        "disable add-ins one by one."
                     ),
                 },
                 {
@@ -200,7 +201,8 @@ ARTICLE_TEMPLATES: list[ArticleTemplate] = [
                     "instruction": "Recreate the OST file",
                     "details": (
                         "Close Outlook. Navigate to %LOCALAPPDATA%\\Microsoft\\Outlook. "
-                        "Rename the .ost file to .ost.bak. Reopen Outlook to let it rebuild from Exchange."
+                        "Rename the .ost file to .ost.bak. "
+                        "Reopen Outlook to let it rebuild from Exchange."
                     ),
                 },
             ],
@@ -358,21 +360,20 @@ ARTICLE_TEMPLATES: list[ArticleTemplate] = [
                 {
                     "step_number": 2,
                     "instruction": "Clear browser cache",
-                    "details": (
-                        "If using the web client, clear cookies and retry the SSO login."
-                    ),
+                    "details": ("If using the web client, clear cookies and retry the SSO login."),
                 },
             ],
             "validation_steps": [
                 {
                     "step_number": 1,
                     "instruction": "Join a test meeting",
-                    "details": "Confirm your name appears with the correct licence type (not Basic).",
+                    "details": (
+                        "Confirm your name appears with the correct licence type (not Basic)."
+                    ),
                 },
             ],
             "escalation_criteria": (
-                "Escalate if SSO consistently fails — may require licence "
-                "assignment by IT admin."
+                "Escalate if SSO consistently fails — may require licence assignment by IT admin."
             ),
             "escalation_target_team": "IT Admin — Zoom Licence Management",
             "review_interval_days": 180,
@@ -459,8 +460,7 @@ ARTICLE_TEMPLATES: list[ArticleTemplate] = [
                     "step_number": 1,
                     "instruction": "Re-open Company Portal after 30 minutes",
                     "details": (
-                        "Status should change to 'Compliant'. "
-                        "Retry accessing corporate resources."
+                        "Status should change to 'Compliant'. Retry accessing corporate resources."
                     ),
                 },
             ],
@@ -793,9 +793,7 @@ ARTICLE_TEMPLATES: list[ArticleTemplate] = [
                 {
                     "step_number": 3,
                     "instruction": "Run Windows Defender scan",
-                    "details": (
-                        "Windows Security > Virus & threat protection > Quick scan."
-                    ),
+                    "details": ("Windows Security > Virus & threat protection > Quick scan."),
                 },
             ],
             "resolution_steps": [

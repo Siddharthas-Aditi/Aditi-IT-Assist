@@ -13,9 +13,12 @@ Adding a new profile:
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 
-from app.services.ingestion.profiles.base import ParserProfile
 from app.services.ingestion.profiles.it_support import IT_SUPPORT_PROFILE
+
+if TYPE_CHECKING:
+    from app.services.ingestion.profiles.base import ParserProfile
 
 logger = logging.getLogger(__name__)
 

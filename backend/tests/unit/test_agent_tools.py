@@ -116,9 +116,7 @@ class TestTicketDraftTool:
 
     async def test_invalid_urgency_defaults_normal(self) -> None:
         tool = TicketDraftTool()
-        res = await tool.run(
-            TicketDraftArgs(subject="abc", summary="def", urgency="bogus"), _ctx()
-        )
+        res = await tool.run(TicketDraftArgs(subject="abc", summary="def", urgency="bogus"), _ctx())
         assert res.urgency == "normal"
 
 
@@ -313,13 +311,18 @@ class _ScriptedLLM:
 class TestRunLoop:
     async def test_tool_then_final_text(self) -> None:
         rt = build_default_runtime(audit_sink=lambda e: None)
-        llm = _ScriptedLLM([
-            LLMToolResponse(
-                tool_calls=(ToolInvocation("mailbox_quota_estimate",
-                                           {"used_gb": 49, "quota_gb": 50}, "c1"),),
-            ),
-            LLMToolResponse(text="Your mailbox is nearly full — let's clear space."),
-        ])
+        llm = _ScriptedLLM(
+            [
+                LLMToolResponse(
+                    tool_calls=(
+                        ToolInvocation(
+                            "mailbox_quota_estimate", {"used_gb": 49, "quota_gb": 50}, "c1"
+                        ),
+                    ),
+                ),
+                LLMToolResponse(text="Your mailbox is nearly full — let's clear space."),
+            ]
+        )
         res = await rt.run_loop(
             messages=[{"role": "user", "content": "quota?"}],
             allowed_tools=ALL_TOOLS,
@@ -352,10 +355,12 @@ class TestRunLoop:
     async def test_loop_stops_on_needs_approval(self) -> None:
         rt = AgentToolRuntime({"reset_mfa": _WriteProbe()}, audit_sink=lambda e: None)
         _WriteProbe.executed = False
-        llm = _ScriptedLLM([
-            LLMToolResponse(tool_calls=(ToolInvocation("reset_mfa", {"target": "x"}, "c1"),)),
-            LLMToolResponse(text="should not be reached"),
-        ])
+        llm = _ScriptedLLM(
+            [
+                LLMToolResponse(tool_calls=(ToolInvocation("reset_mfa", {"target": "x"}, "c1"),)),
+                LLMToolResponse(text="should not be reached"),
+            ]
+        )
         res = await rt.run_loop(
             messages=[{"role": "user", "content": "reset my mfa"}],
             allowed_tools=("reset_mfa",),

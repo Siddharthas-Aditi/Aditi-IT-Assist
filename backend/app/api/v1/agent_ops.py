@@ -65,18 +65,34 @@ async def _tool_context(user: User, db: AsyncSession) -> ToolContext:
 
 def _to_record(p: PendingApproval) -> ApprovalRecord:
     return ApprovalRecord(
-        id=p.id, tool_name=p.tool_name, args=p.raw_args, reason=p.reason, status=p.status.value,
-        side_effect=p.side_effect, mcp_server=p.mcp_server, args_hash=p.args_hash,
-        proposer_id=p.proposer_id, created_at=p.created_at, decided_at=p.decided_at,
-        decided_by=p.decided_by, result=p.result, error=p.error,
+        id=p.id,
+        tool_name=p.tool_name,
+        args=p.raw_args,
+        reason=p.reason,
+        status=p.status.value,
+        side_effect=p.side_effect,
+        mcp_server=p.mcp_server,
+        args_hash=p.args_hash,
+        proposer_id=p.proposer_id,
+        created_at=p.created_at,
+        decided_at=p.decided_at,
+        decided_by=p.decided_by,
+        result=p.result,
+        error=p.error,
     )
 
 
 def _task_record(t: AgentTask) -> AgentTaskRecord:
     return AgentTaskRecord(
-        id=t.id, task_type=t.task_type, status=t.status.value, attempts=t.attempts,
-        max_attempts=t.max_attempts, result=t.result, error=t.error,
-        created_at=t.created_at, updated_at=t.updated_at,
+        id=t.id,
+        task_type=t.task_type,
+        status=t.status.value,
+        attempts=t.attempts,
+        max_attempts=t.max_attempts,
+        result=t.result,
+        error=t.error,
+        created_at=t.created_at,
+        updated_at=t.updated_at,
     )
 
 
@@ -95,8 +111,11 @@ async def get_status(_user: ITStaff) -> AgentOpsStatus:
     }
     servers = [
         McpServerStatus(
-            server_id=p.server_id, display_name=p.display_name, trust_tier=p.trust_tier.value,
-            transport=p.transport.value, enabled=p.server_id in enabled_ids,
+            server_id=p.server_id,
+            display_name=p.display_name,
+            trust_tier=p.trust_tier.value,
+            transport=p.transport.value,
+            enabled=p.server_id in enabled_ids,
             tools=list(p.allowed_tools),
         )
         for p in mcp_profiles.list_profiles()
@@ -141,8 +160,10 @@ async def list_approvals(
 @router.post("/approvals", response_model=ApprovalRecord)
 async def propose_action(body: ProposeActionRequest, user: ITStaff) -> ApprovalRecord:
     record = await get_approval_queue().propose(
-        tool_name=body.tool_name, raw_args=body.args,
-        proposer_id=str(user.id), reason=body.reason,
+        tool_name=body.tool_name,
+        raw_args=body.args,
+        proposer_id=str(user.id),
+        reason=body.reason,
     )
     return _to_record(record)
 

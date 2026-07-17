@@ -54,76 +54,220 @@ logger = get_logger(__name__)
 # Phrases that indicate the previously suggested steps did NOT work.
 _NEGATIVE_FEEDBACK = (
     # Explicit failure
-    "didn't work", "did not work", "doesn't work", "does not work",
-    "not working", "not fixed", "not resolved", "not sorted",
-    "still not working", "still not", "still the same", "same issue",
-    "same problem", "no change", "nothing changed", "no difference",
-    "no effect", "no luck", "not helping", "didn't help", "did not help",
-    "that didn't help", "doesn't help", "no joy",
+    "didn't work",
+    "did not work",
+    "doesn't work",
+    "does not work",
+    "not working",
+    "not fixed",
+    "not resolved",
+    "not sorted",
+    "still not working",
+    "still not",
+    "still the same",
+    "same issue",
+    "same problem",
+    "no change",
+    "nothing changed",
+    "no difference",
+    "no effect",
+    "no luck",
+    "not helping",
+    "didn't help",
+    "did not help",
+    "that didn't help",
+    "doesn't help",
+    "no joy",
     # Persisting
-    "still happening", "still broken", "still there", "issue persists",
-    "problem persists", "still having", "still getting",
-    "no it didn't", "no it did not", "nope",
+    "still happening",
+    "still broken",
+    "still there",
+    "issue persists",
+    "problem persists",
+    "still having",
+    "still getting",
+    "no it didn't",
+    "no it did not",
+    "nope",
     # Already attempted
-    "tried that", "already tried", "tried that already", "done that already",
-    "already done that", "i tried", "already done",
+    "tried that",
+    "already tried",
+    "tried that already",
+    "done that already",
+    "already done that",
+    "i tried",
+    "already done",
     # Confusion / can't follow steps
-    "don't see that", "can't find that", "can't find it", "i don't see",
-    "where is that", "can't find the option", "don't have that option",
-    "can't see that tab", "there's no such option", "that option isn't there",
+    "don't see that",
+    "can't find that",
+    "can't find it",
+    "i don't see",
+    "where is that",
+    "can't find the option",
+    "don't have that option",
+    "can't see that tab",
+    "there's no such option",
+    "that option isn't there",
     # Worsened
-    "made it worse", "now it's worse", "now worse", "it crashed",
+    "made it worse",
+    "now it's worse",
+    "now worse",
+    "it crashed",
 )
 
 # Phrases that indicate the issue IS resolved / found / closed.
 _POSITIVE_FEEDBACK = (
     # Classic resolution
-    "it worked", "that worked", "works now", "working now", "working fine",
-    "it's fixed", "its fixed", "fixed it", "fixed now", "issue fixed",
-    "that fixed it", "now it works", "it's working", "its working",
+    "it worked",
+    "that worked",
+    "works now",
+    "working now",
+    "working fine",
+    "it's fixed",
+    "its fixed",
+    "fixed it",
+    "fixed now",
+    "issue fixed",
+    "that fixed it",
+    "now it works",
+    "it's working",
+    "its working",
     # Resolved/sorted
-    "resolved", "issue resolved", "problem resolved", "all resolved",
-    "sorted", "sorted now", "sorted it", "sorted out", "problem solved",
-    "all sorted", "that sorted it", "that sorted", "now sorted",
+    "resolved",
+    "issue resolved",
+    "problem resolved",
+    "all resolved",
+    "sorted",
+    "sorted now",
+    "sorted it",
+    "sorted out",
+    "problem solved",
+    "all sorted",
+    "that sorted it",
+    "that sorted",
+    "now sorted",
     # Good / OK
-    "all good", "looks good", "all fine", "fine now", "ok now",
-    "back to normal", "normal now", "back online", "it's back",
+    "all good",
+    "looks good",
+    "all fine",
+    "fine now",
+    "ok now",
+    "back to normal",
+    "normal now",
+    "back online",
+    "it's back",
     # Found / located the issue (e.g. "found emails in junk")
-    "found it", "found them", "found the emails", "found the issue",
-    "found the problem", "got it", "got them", "i can see them",
-    "can see them now", "they're there", "there they are", "there it is",
-    "emails are showing", "mails are showing", "showing now", "showing up now",
-    "in junk", "in spam", "mails in junk", "emails in junk",
-    "mails are in junk", "emails are in junk", "found in junk",
-    "mails are in spam", "emails are in spam", "they were in junk",
+    "found it",
+    "found them",
+    "found the emails",
+    "found the issue",
+    "found the problem",
+    "got it",
+    "got them",
+    "i can see them",
+    "can see them now",
+    "they're there",
+    "there they are",
+    "there it is",
+    "emails are showing",
+    "mails are showing",
+    "showing now",
+    "showing up now",
+    "in junk",
+    "in spam",
+    "mails in junk",
+    "emails in junk",
+    "mails are in junk",
+    "emails are in junk",
+    "found in junk",
+    "mails are in spam",
+    "emails are in spam",
+    "they were in junk",
     # Progress / figured out
-    "figured it out", "i see the issue", "i see what happened",
-    "that explains it", "oh i see", "ah i see", "makes sense now",
-    "i understand now", "that's why", "ah that's why",
+    "figured it out",
+    "i see the issue",
+    "i see what happened",
+    "that explains it",
+    "oh i see",
+    "ah i see",
+    "makes sense now",
+    "i understand now",
+    "that's why",
+    "ah that's why",
     # Confirmatory closure
-    "done", "all done", "completed", "finished",
-    "that did it", "yes it worked", "yep that worked", "yeah that worked",
-    "thanks that worked", "yes that resolved", "yes that fixed",
+    "done",
+    "all done",
+    "completed",
+    "finished",
+    "that did it",
+    "yes it worked",
+    "yep that worked",
+    "yeah that worked",
+    "thanks that worked",
+    "yes that resolved",
+    "yes that fixed",
     # "Able to" / success patterns — user confirms they can do the thing
-    "able to", "was able to", "i was able", "im able to", "i'm able to",
-    "managed to", "i managed to", "i can now", "can now",
-    "i can log in", "i can login", "i can sign in",
-    "i can access", "i can connect", "i can send", "i can receive",
-    "i can see", "i can open", "i can update", "i can change",
-    "logged in successfully", "signed in successfully", "connected successfully",
-    "updated successfully", "changed successfully", "reset successfully",
-    "password updated", "password changed", "password reset",
-    "it's working again", "its working again", "working again",
-    "up and running", "back up", "good to go", "all set",
+    "able to",
+    "was able to",
+    "i was able",
+    "im able to",
+    "i'm able to",
+    "managed to",
+    "i managed to",
+    "i can now",
+    "can now",
+    "i can log in",
+    "i can login",
+    "i can sign in",
+    "i can access",
+    "i can connect",
+    "i can send",
+    "i can receive",
+    "i can see",
+    "i can open",
+    "i can update",
+    "i can change",
+    "logged in successfully",
+    "signed in successfully",
+    "connected successfully",
+    "updated successfully",
+    "changed successfully",
+    "reset successfully",
+    "password updated",
+    "password changed",
+    "password reset",
+    "it's working again",
+    "its working again",
+    "working again",
+    "up and running",
+    "back up",
+    "good to go",
+    "all set",
 )
 
 # Pure gratitude / closure phrases — when steps have already been given, these
 # mean the user is done and satisfied, NOT a new problem to troubleshoot.
 _GRATITUDE_WORDS = {
-    "thank", "thanks", "thank you", "thankyou", "ty", "thx", "tq", "tysm",
-    "many thanks", "thanks a lot", "thank you so much", "thanks so much",
-    "cheers", "appreciated", "much appreciated", "great thanks", "great thank you",
-    "thanks a bunch", "thank you very much", "thanks very much",
+    "thank",
+    "thanks",
+    "thank you",
+    "thankyou",
+    "ty",
+    "thx",
+    "tq",
+    "tysm",
+    "many thanks",
+    "thanks a lot",
+    "thank you so much",
+    "thanks so much",
+    "cheers",
+    "appreciated",
+    "much appreciated",
+    "great thanks",
+    "great thank you",
+    "thanks a bunch",
+    "thank you very much",
+    "thanks very much",
 }
 
 
@@ -135,13 +279,40 @@ def _is_gratitude(text: str) -> bool:
     if t in _GRATITUDE_WORDS:
         return True
     words = [w for w in t.replace(",", " ").split() if w]
-    filler = {"a", "so", "very", "lot", "much", "you", "for", "the", "help",
-              "that", "this", "your", "assistance", "support"}
+    filler = {
+        "a",
+        "so",
+        "very",
+        "lot",
+        "much",
+        "you",
+        "for",
+        "the",
+        "help",
+        "that",
+        "this",
+        "your",
+        "assistance",
+        "support",
+    }
     return len(words) <= 6 and all(w in _GRATITUDE_WORDS or w in filler for w in words)
 
 
-_NEGATION_PREFIXES = {"not", "no", "nope", "didn't", "did not", "hasn't", "haven't",
-                      "doesn't", "isn't", "wasn't", "still not", "not yet", "never"}
+_NEGATION_PREFIXES = {
+    "not",
+    "no",
+    "nope",
+    "didn't",
+    "did not",
+    "hasn't",
+    "haven't",
+    "doesn't",
+    "isn't",
+    "wasn't",
+    "still not",
+    "not yet",
+    "never",
+}
 
 
 def _is_negative_feedback(text: str) -> bool:
@@ -170,25 +341,74 @@ def _is_positive_feedback(text: str) -> bool:
 
 # Greetings / small talk that should be met with a warm welcome, not triage.
 _GREETING_WORDS = {
-    "hi", "hii", "hiii", "hello", "helo", "hey", "hiya", "yo",
-    "hi there", "hello there", "hey there", "good morning", "good afternoon",
-    "good evening", "greetings", "howdy", "morning", "afternoon", "evening",
-    "namaste", "hola", "sup", "whatsup", "what's up",
+    "hi",
+    "hii",
+    "hiii",
+    "hello",
+    "helo",
+    "hey",
+    "hiya",
+    "yo",
+    "hi there",
+    "hello there",
+    "hey there",
+    "good morning",
+    "good afternoon",
+    "good evening",
+    "greetings",
+    "howdy",
+    "morning",
+    "afternoon",
+    "evening",
+    "namaste",
+    "hola",
+    "sup",
+    "whatsup",
+    "what's up",
 }
 
 # Short affirmations / denials used when confirming our understanding.
 _AFFIRM_WORDS = {
-    "yes", "yep", "yeah", "yup", "ya", "yas", "correct", "right", "exactly",
-    "perfect", "confirmed", "sure", "ok", "okay", "yise", "indeed", "absolutely",
+    "yes",
+    "yep",
+    "yeah",
+    "yup",
+    "ya",
+    "yas",
+    "correct",
+    "right",
+    "exactly",
+    "perfect",
+    "confirmed",
+    "sure",
+    "ok",
+    "okay",
+    "yise",
+    "indeed",
+    "absolutely",
 }
 _AFFIRM_PHRASES = (
-    "that's right", "thats right", "that is correct", "that's correct",
-    "thats correct", "you got it", "spot on", "yes please", "go ahead", "correct",
+    "that's right",
+    "thats right",
+    "that is correct",
+    "that's correct",
+    "thats correct",
+    "you got it",
+    "spot on",
+    "yes please",
+    "go ahead",
+    "correct",
 )
 _DENY_WORDS = {"no", "nope", "nah", "wrong", "incorrect"}
 _DENY_PHRASES = (
-    "not exactly", "not right", "that's not", "thats not", "not correct",
-    "not quite", "actually no", "that's wrong",
+    "not exactly",
+    "not right",
+    "that's not",
+    "thats not",
+    "not correct",
+    "not quite",
+    "actually no",
+    "that's wrong",
 )
 
 
@@ -217,6 +437,7 @@ def _is_denial(text: str) -> bool:
     if words & _DENY_WORDS:
         return True
     return any(p in t for p in _DENY_PHRASES)
+
 
 ISSUE_CATEGORIES = [
     "email/outlook",
@@ -299,18 +520,14 @@ async def triage_node(state: WorkflowState) -> dict:
     # the LLM, never the other way around.
     intent_context = dict(
         has_active_issue=bool(
-            diag_ctx.issue_category
-            or diag_ctx.normalized_system
-            or diag_ctx.suggested_steps
+            diag_ctx.issue_category or diag_ctx.normalized_system or diag_ctx.suggested_steps
         ),
         awaiting_confirmation=diag_ctx.awaiting_confirmation,
         steps_given=bool(diag_ctx.suggested_steps),
         issue_resolved=diag_ctx.issue_resolved,
     )
     try:
-        intent_result = await classify_intent_with_llm(
-            user_message, **intent_context
-        )
+        intent_result = await classify_intent_with_llm(user_message, **intent_context)
     except Exception as exc:  # noqa: BLE001 — defensive; the keyword layer never raises
         logger.warning("llm_intent_unexpected_error", error=str(exc))
         intent_result = classify_intent(user_message, **intent_context)
@@ -351,8 +568,7 @@ async def triage_node(state: WorkflowState) -> dict:
             return await _gather_problem_before_handoff(state, diag_ctx)
         diag_ctx.live_agent_requested = True
         diag_ctx.escalation_reason = (
-            diag_ctx.escalation_reason
-            or "User explicitly requested a live IT specialist."
+            diag_ctx.escalation_reason or "User explicitly requested a live IT specialist."
         )
         return _escalate_request_handoff(state, diag_ctx)
 
@@ -377,10 +593,7 @@ async def triage_node(state: WorkflowState) -> dict:
         return await _resolved_message(diag_ctx)
 
     # GRATITUDE after steps: user is satisfied and closing out.
-    if (
-        intent_result.intent is ConversationIntent.GRATITUDE
-        and bool(diag_ctx.suggested_steps)
-    ):
+    if intent_result.intent is ConversationIntent.GRATITUDE and bool(diag_ctx.suggested_steps):
         diag_ctx.issue_resolved = True
         diag_ctx.last_response_type = "resolved"
         return await _gratitude_close_message(diag_ctx)
@@ -401,9 +614,7 @@ async def triage_node(state: WorkflowState) -> dict:
     # A real analyst greets back and invites the problem — it does not jump to
     # "which system is affected?".
     in_active_issue = bool(
-        diag_ctx.issue_category
-        or diag_ctx.awaiting_confirmation
-        or diag_ctx.suggested_steps
+        diag_ctx.issue_category or diag_ctx.awaiting_confirmation or diag_ctx.suggested_steps
     )
     if not in_active_issue and _is_greeting(user_message):
         return await _greeting_message(diag_ctx)
@@ -548,12 +759,14 @@ async def triage_node(state: WorkflowState) -> dict:
     # Map the symptom onto a concrete subtype (e.g. "mailbox-full") so retrieval
     # and resolution target the right playbook instead of generic first-N steps.
     subtype_text = " ".join(
-        p for p in (
+        p
+        for p in (
             user_message,
             diag_ctx.exact_problem_statement or "",
             diag_ctx.symptom or "",
             diag_ctx.issue_subcategory or "",
-        ) if p
+        )
+        if p
     )
     subtype_match = classify_subtype(subtype_text, diag_ctx.issue_category)
     if subtype_match and subtype_match.confidence >= diag_ctx.subtype_confidence:
@@ -586,10 +799,11 @@ async def triage_node(state: WorkflowState) -> dict:
         diag_ctx.clarification_count += 1
         diag_ctx.phase = DiagnosticPhase.CLARIFYING
 
-        quick_replies = [
-            {"label": opt.label, "value": opt.value}
-            for opt in decision.options
-        ] if decision.options else None
+        quick_replies = (
+            [{"label": opt.label, "value": opt.value} for opt in decision.options]
+            if decision.options
+            else None
+        )
 
         audit_entry = {
             "event": "triage.clarification_requested",
@@ -620,10 +834,7 @@ async def triage_node(state: WorkflowState) -> dict:
     # We have enough context. Like a real analyst, restate what we think the
     # problem is and wait for the user to confirm before giving a solution.
     # Skipped once confirmed, and skipped while advancing after a failed step.
-    if (
-        not diag_ctx.understanding_confirmed
-        and not diag_ctx.last_resolution_failed
-    ):
+    if not diag_ctx.understanding_confirmed and not diag_ctx.last_resolution_failed:
         diag_ctx.awaiting_confirmation = True
         diag_ctx.last_response_type = "confirm"
         diag_ctx.phase = DiagnosticPhase.CLARIFYING
@@ -645,11 +856,13 @@ async def triage_node(state: WorkflowState) -> dict:
             "diagnostic_context": diag_ctx.to_dict(),
             "conversation_phase": diag_ctx.phase.value,
             "messages": [AIMessage(content=question)],
-            "audit_trail": [{
-                "event": "triage.confirm_understanding",
-                "category": diag_ctx.issue_category,
-                "subtype": diag_ctx.issue_subtype,
-            }],
+            "audit_trail": [
+                {
+                    "event": "triage.confirm_understanding",
+                    "category": diag_ctx.issue_category,
+                    "subtype": diag_ctx.issue_subtype,
+                }
+            ],
         }
 
     diag_ctx.phase = DiagnosticPhase.DIAGNOSING
@@ -907,17 +1120,17 @@ async def _new_topic_message(diag_ctx: DiagnosticContext, matched: str) -> dict:
         "diagnostic_context": diag_ctx.to_dict(),
         "conversation_phase": diag_ctx.phase.value,
         "messages": [AIMessage(content=opener)],
-        "audit_trail": [{
-            "event": "triage.new_topic_reset",
-            "matched": matched,
-            "topic_shifts": diag_ctx.topic_shifts,
-        }],
+        "audit_trail": [
+            {
+                "event": "triage.new_topic_reset",
+                "matched": matched,
+                "topic_shifts": diag_ctx.topic_shifts,
+            }
+        ],
     }
 
 
-async def _gather_problem_before_handoff(
-    state: WorkflowState, diag_ctx: DiagnosticContext
-) -> dict:
+async def _gather_problem_before_handoff(state: WorkflowState, diag_ctx: DiagnosticContext) -> dict:
     """No-direct-connect gate: ask for a short problem description first.
 
     Fired when the user asks for a human (ESCALATE_REQUEST) before we have a
@@ -944,9 +1157,11 @@ async def _gather_problem_before_handoff(
         "should_escalate": False,
         "escalation_confirmed": False,
         "messages": [AIMessage(content=content)],
-        "audit_trail": [{
-            "event": "triage.handoff_gated_need_problem_statement",
-        }],
+        "audit_trail": [
+            {
+                "event": "triage.handoff_gated_need_problem_statement",
+            }
+        ],
     }
 
 
@@ -978,10 +1193,12 @@ def _escalate_request_handoff(state: WorkflowState, diag_ctx: DiagnosticContext)
         # enforces ticket-on-confirm only; this is the safe path.
         "escalation_confirmed": True,
         "should_escalate": True,
-        "audit_trail": [{
-            "event": "triage.escalate_request",
-            "reason": diag_ctx.escalation_reason,
-        }],
+        "audit_trail": [
+            {
+                "event": "triage.escalate_request",
+                "reason": diag_ctx.escalation_reason,
+            }
+        ],
     }
 
 
@@ -1108,12 +1325,43 @@ def _entity_based_classification(message: str, diag_ctx: DiagnosticContext) -> d
 
 
 _SYMPTOM_WORDS = [
-    "sync", "syncing", "slow", "crash", "crashing", "audio", "video",
-    "camera", "hear", "sound", "connect", "login", "locked", "complian",
-    "enroll", "install", "send", "receive", "open", "load", "update",
-    "calendar", "password", "reset", "access", "denied", "missing",
-    "black screen", "freeze", "hang", "drop", "disconnect", "not starting",
-    "not working properly", "error", "failed", "timeout",
+    "sync",
+    "syncing",
+    "slow",
+    "crash",
+    "crashing",
+    "audio",
+    "video",
+    "camera",
+    "hear",
+    "sound",
+    "connect",
+    "login",
+    "locked",
+    "complian",
+    "enroll",
+    "install",
+    "send",
+    "receive",
+    "open",
+    "load",
+    "update",
+    "calendar",
+    "password",
+    "reset",
+    "access",
+    "denied",
+    "missing",
+    "black screen",
+    "freeze",
+    "hang",
+    "drop",
+    "disconnect",
+    "not starting",
+    "not working properly",
+    "error",
+    "failed",
+    "timeout",
 ]
 
 

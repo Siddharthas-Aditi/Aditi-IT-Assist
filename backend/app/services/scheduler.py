@@ -58,10 +58,14 @@ async def _sweep_idle_once() -> int:
     async with async_session_factory() as db:
         try:
             service = SpecialistChatService(db)
-            ended = await service.sweep_idle()
-            if ended:
+            ended, warned = await service.sweep_idle()
+            # Commit when ANY mutation occurred — warning transitions (status
+            # flip + system message + audit) must persist too, not just ends.
+            # Previously we committed only on `ended`, silently rolling back
+            # warnings for abandoned sessions.
+            if ended or warned:
                 await db.commit()
-                logger.info("idle_sweeper_ended_sessions", count=ended)
+                logger.info("idle_sweeper_pass", ended=ended, warned=warned)
             return ended
         except Exception:  # noqa: BLE001 — never let a bad pass kill the loop
             await db.rollback()
@@ -83,7 +87,7 @@ async def _sweep_remote_sessions_once() -> dict[str, int]:
     async with async_session_factory() as db:
         try:
             counts = await RemoteSupportService(db).sweep_sessions()
-            if counts["expired"] or counts["max_duration_terminated"]:
+            if any(counts.values()):
                 await db.commit()
             return counts
         except Exception:  # noqa: BLE001 — never let a bad pass kill the loop

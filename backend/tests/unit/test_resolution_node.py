@@ -5,11 +5,11 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from langchain_core.messages import HumanMessage
 
+from app.services.agents.diagnostic_state import DiagnosticContext
 from app.workflows.nodes.resolution import (
     _direct_resolution,
     resolution_node,
 )
-from app.services.agents.diagnostic_state import DiagnosticContext
 
 
 class TestResolutionNode:
@@ -161,4 +161,3 @@ class TestDirectResolution:
         state = {"knowledge_confidence": 0.8}
         result = _direct_resolution(knowledge, state, self._make_diag_ctx())
         assert len(result["steps"]) == 3
-

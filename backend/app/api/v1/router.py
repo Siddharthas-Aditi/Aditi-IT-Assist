@@ -7,6 +7,7 @@ from app.api.v1.agent_ops import router as agent_ops_router
 from app.api.v1.analytics import router as analytics_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.chat import router as chat_router
+from app.api.v1.device_execution import router as device_execution_router
 from app.api.v1.feedback import router as feedback_router
 from app.api.v1.health import router as health_router
 from app.api.v1.ingestion import router as ingestion_router
@@ -40,7 +41,9 @@ api_router.include_router(feedback_router, prefix="/feedback", tags=["feedback"]
 # Live IT-specialist features — queue (claim/release/resolve), 'My Assigned',
 # and the human-to-human chat itself. See docs/architecture/live-specialist-chat.md
 api_router.include_router(
-    specialist_queue_router, prefix="/specialist-queue", tags=["specialist-queue"],
+    specialist_queue_router,
+    prefix="/specialist-queue",
+    tags=["specialist-queue"],
 )
 api_router.include_router(
     specialist_queue_extras_router,
@@ -48,8 +51,15 @@ api_router.include_router(
     tags=["specialist-queue"],
 )
 api_router.include_router(
-    specialist_chat_router, prefix="/specialist-chat", tags=["specialist-chat"],
+    specialist_chat_router,
+    prefix="/specialist-chat",
+    tags=["specialist-chat"],
 )
 # Agentic platform operability — status (MCP/RAG/flags), write-action approval
 # queue, background-task monitor. See docs/architecture/agent-write-actions-and-tasks.md
 api_router.include_router(agent_ops_router, prefix="/agent-ops", tags=["agent-ops"])
+# Autonomous device execution — catalog, request-an-action (auto/approve/deny),
+# and device-action approvals. See docs/architecture/device-execution.md
+api_router.include_router(
+    device_execution_router, prefix="/device-execution", tags=["device-execution"]
+)

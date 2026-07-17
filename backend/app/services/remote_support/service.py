@@ -10,13 +10,11 @@ It enforces:
 
 from __future__ import annotations
 
-import uuid
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.models.auth import User
@@ -30,6 +28,11 @@ from app.services.remote_support.providers.base import (
     RemoteSupportProvider,
     SessionCapability,
 )
+
+if TYPE_CHECKING:
+    import uuid
+
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = structlog.get_logger()
 
@@ -221,6 +224,11 @@ class RemoteSupportService:
         # Check consent window hasn't expired
         if session.consent_deadline and datetime.now(UTC) > session.consent_deadline:
             await self._expire_session(session)
+            # Persist the expiry now: the route commits AFTER we return, but we
+            # raise below, so without this commit the audited expiry transition
+            # would be rolled back and the session would linger consent_pending
+            # until the background sweeper eventually caught it.
+            await self.db.commit()
             raise PolicyViolation("Consent window has expired")
 
         target_status = "consent_granted" if granted else "consent_denied"
@@ -244,7 +252,9 @@ class RemoteSupportService:
             session=session,
             event_type=event_type,
             actor_id=employee.id,
-            description=f"Employee {'granted' if granted else 'denied'} {session.session_type} consent",
+            description=(
+                f"Employee {'granted' if granted else 'denied'} {session.session_type} consent"
+            ),
             metadata={"denial_reason": denial_reason} if denial_reason else None,
             ip_address=ip_address,
         )
@@ -611,7 +621,7 @@ class RemoteSupportService:
         Returns counts for observability; every transition is audited.
         """
         now = datetime.now(UTC)
-        counts = {"expired": 0, "max_duration_terminated": 0}
+        counts = {"expired": 0, "max_duration_terminated": 0, "stale_abandoned": 0}
 
         expired_stmt = select(RemoteSupportSession).where(
             RemoteSupportSession.status == "consent_pending",
@@ -621,6 +631,27 @@ class RemoteSupportService:
         for session in (await self.db.execute(expired_stmt)).scalars().all():
             await self._expire_session(session)
             counts["expired"] += 1
+
+        # consent_granted / connecting sessions that never reached `active`
+        # (started_at is still NULL) are missed by the max-duration rule below,
+        # so they'd linger "live" forever holding a provider slot. Expire any
+        # that have sat un-launched past the consent/connect timeout window.
+        stale_cutoff = now - timedelta(minutes=settings.REMOTE_SESSION_TIMEOUT_MINUTES)
+        stale_stmt = select(RemoteSupportSession).where(
+            RemoteSupportSession.status.in_(("consent_granted", "connecting")),
+            RemoteSupportSession.started_at.is_(None),
+            RemoteSupportSession.created_at < stale_cutoff,
+        )
+        for session in (await self.db.execute(stale_stmt)).scalars().all():
+            session.status = "expired"
+            session.termination_reason = "stale_no_launch"
+            session.ended_at = now
+            await self._record_event(
+                session=session,
+                event_type="session_ended",
+                description="Session auto-expired: consented/connecting but never launched",
+            )
+            counts["stale_abandoned"] += 1
 
         live_stmt = select(RemoteSupportSession).where(
             RemoteSupportSession.status.in_(("connecting", "active", "paused")),
@@ -646,7 +677,7 @@ class RemoteSupportService:
                 )
                 counts["max_duration_terminated"] += 1
 
-        if counts["expired"] or counts["max_duration_terminated"]:
+        if any(counts.values()):
             logger.info("remote_session_sweep", **counts)
         return counts
 

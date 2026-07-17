@@ -30,7 +30,10 @@ class TestOutlookSubtypes:
     def test_mailbox_full_is_not_misclassified_as_access(self):
         m = classify_subtype("my inbox is full", "email/outlook")
         assert m.subtype not in {
-            "account-locked", "password-expired", "sign-in-problem", "mfa-not-working",
+            "account-locked",
+            "password-expired",
+            "sign-in-problem",
+            "mfa-not-working",
         }
 
     @pytest.mark.parametrize(

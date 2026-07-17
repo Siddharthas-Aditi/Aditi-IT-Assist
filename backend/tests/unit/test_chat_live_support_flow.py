@@ -22,33 +22,34 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.services.agents import chat_service as cs_mod
 from app.services.agents.chat_service import (
     WAIT_TIMEOUT_SECONDS,
     ChatService,
-    _sessions,
-    _session_tickets,
-    _waiting_since,
 )
 from app.services.agents.diagnostic_state import DiagnosticContext
 from app.services.agents.escalation_policy import (
     GATHER_PROBLEM_PROMPT,
     handoff_context_sufficient,
 )
+from app.services.agents.session_store import (
+    ChatSession,
+    InMemorySessionStore,
+    get_session_store,
+    set_session_store,
+)
 from app.services.specialist_chat_service import (
-    IdleEvaluation,
     SpecialistChatService,
     clear_typing,
     set_typing,
     typing_roles,
 )
 
-
 # ── Helpers ────────────────────────────────────────────────────────────
+
 
 def _ticket_service(ticket_number: str = "INC-000042") -> MagicMock:
     t = MagicMock()
@@ -69,9 +70,7 @@ def _requester(name: str = "Test Employee") -> MagicMock:
 
 
 def _clear_all() -> None:
-    _sessions.clear()
-    _session_tickets.clear()
-    _waiting_since.clear()
+    set_session_store(InMemorySessionStore())
 
 
 # ── 1. No Direct Connect at Chat Start ────────────────────────────────
@@ -204,6 +203,7 @@ class TestUnresolvedCreatesTicket:
             "problem_statement": "Outlook emails not syncing since morning",
         }
         result = {
+            "session_id": "sess-escalate",
             "should_escalate": True,
             "escalation_confirmed": True,
             "ticket_offered": True,
@@ -211,7 +211,8 @@ class TestUnresolvedCreatesTicket:
             "messages": [],
         }
 
-        ref = await chat._handle_ticketing("sess-escalate", result, _requester())
+        session = ChatSession(user_id=None, state={"session_id": "sess-escalate"})
+        ref = await chat._handle_ticketing(session, result, _requester())
 
         assert ref is not None
         assert ref.ticket_number == "INC-000042"
@@ -224,10 +225,16 @@ class TestUnresolvedCreatesTicket:
         _clear_all()
         svc = _ticket_service()
         chat = ChatService(svc)
-        _sessions["sess-live"] = {
-            "ticket_draft": {"title": "VPN Issue", "category": "network/connectivity"},
-            "diagnostic_context": {"escalation_offered_in_session": True},
-        }
+        await get_session_store().save(
+            "sess-live",
+            ChatSession(
+                user_id=None,
+                state={
+                    "ticket_draft": {"title": "VPN Issue", "category": "network/connectivity"},
+                    "diagnostic_context": {"escalation_offered_in_session": True},
+                },
+            ),
+        )
 
         message, ref = await chat.request_live_agent("sess-live", _requester())
 
@@ -248,10 +255,16 @@ class TestWaitingMessage:
         _clear_all()
         svc = _ticket_service()
         chat = ChatService(svc)
-        _sessions["sess-wait"] = {
-            "ticket_draft": {"title": "Issue", "category": "other"},
-            "diagnostic_context": {"escalation_offered_in_session": True},
-        }
+        await get_session_store().save(
+            "sess-wait",
+            ChatSession(
+                user_id=None,
+                state={
+                    "ticket_draft": {"title": "Issue", "category": "other"},
+                    "diagnostic_context": {"escalation_offered_in_session": True},
+                },
+            ),
+        )
 
         message, ref = await chat.request_live_agent("sess-wait", _requester())
 
@@ -436,7 +449,7 @@ class TestIdleTimerReset:
         svc.audit = MagicMock()
         svc.audit.log = AsyncMock()
 
-        msg = await svc.send_message(session.id, sender=sender, content="I'm still here!")
+        await svc.send_message(session.id, sender=sender, content="I'm still here!")
 
         # Status should be reset to active
         assert session.status == "active"
@@ -496,19 +509,22 @@ class TestSpecialistUnavailableFallback:
 
         # Simulate a session that has been waiting for more than WAIT_TIMEOUT_SECONDS
         session_id = "sess-long-wait"
-        _session_tickets[session_id] = {
-            "ticket_id": str(uuid.uuid4()),
-            "ticket_number": "INC-TIMEOUT",
-            "status": "triaged",
-            "priority": "high",
-            "live_agent_requested": True,
-        }
-        # Set waiting start time to beyond timeout
-        _waiting_since[session_id] = datetime.now(UTC) - timedelta(
-            seconds=WAIT_TIMEOUT_SECONDS + 60
+        await get_session_store().save(
+            session_id,
+            ChatSession(
+                user_id=None,
+                state={},
+                ticket={
+                    "ticket_id": str(uuid.uuid4()),
+                    "ticket_number": "INC-TIMEOUT",
+                    "status": "triaged",
+                    "priority": "high",
+                    "live_agent_requested": True,
+                },
+                # Set waiting start time to beyond timeout
+                waiting_since=datetime.now(UTC) - timedelta(seconds=WAIT_TIMEOUT_SECONDS + 60),
+            ),
         )
-
-        from app.schemas.chat import WaitingStatusResponse
 
         status = await chat.get_waiting_status(session_id, _requester())
 
@@ -525,14 +541,21 @@ class TestSpecialistUnavailableFallback:
         chat = ChatService(svc)
 
         session_id = "sess-short-wait"
-        _session_tickets[session_id] = {
-            "ticket_id": str(uuid.uuid4()),
-            "ticket_number": "INC-QUICK",
-            "status": "triaged",
-            "priority": "high",
-            "live_agent_requested": True,
-        }
-        _waiting_since[session_id] = datetime.now(UTC) - timedelta(seconds=60)
+        await get_session_store().save(
+            session_id,
+            ChatSession(
+                user_id=None,
+                state={},
+                ticket={
+                    "ticket_id": str(uuid.uuid4()),
+                    "ticket_number": "INC-QUICK",
+                    "status": "triaged",
+                    "priority": "high",
+                    "live_agent_requested": True,
+                },
+                waiting_since=datetime.now(UTC) - timedelta(seconds=60),
+            ),
+        )
 
         status = await chat.get_waiting_status(session_id, _requester())
 
@@ -554,20 +577,28 @@ class TestCancelWaiting:
         chat = ChatService(svc)
 
         session_id = "sess-cancel"
-        _session_tickets[session_id] = {
-            "ticket_id": str(uuid.uuid4()),
-            "ticket_number": "INC-CANCEL",
-            "status": "triaged",
-            "priority": "high",
-            "live_agent_requested": True,
-        }
-        _waiting_since[session_id] = datetime.now(UTC)
+        await get_session_store().save(
+            session_id,
+            ChatSession(
+                user_id=None,
+                state={},
+                ticket={
+                    "ticket_id": str(uuid.uuid4()),
+                    "ticket_number": "INC-CANCEL",
+                    "status": "triaged",
+                    "priority": "high",
+                    "live_agent_requested": True,
+                },
+                waiting_since=datetime.now(UTC),
+            ),
+        )
 
         message = await chat.cancel_waiting(session_id, _requester())
 
         assert "cancelled" in message.lower() or "cancel" in message.lower()
         assert "INC-CANCEL" in message
-        assert session_id not in _waiting_since
+        sess = await get_session_store().load(session_id)
+        assert sess is None or sess.waiting_since is None
 
     @pytest.mark.asyncio
     async def test_cancel_without_waiting_returns_info(self) -> None:
@@ -591,7 +622,10 @@ class TestRequestLiveAgentGating:
         _clear_all()
         svc = _ticket_service()
         chat = ChatService(svc)
-        _sessions["sess-contextless"] = {"diagnostic_context": {}}
+        await get_session_store().save(
+            "sess-contextless",
+            ChatSession(user_id=None, state={"diagnostic_context": {}}),
+        )
 
         message, ref = await chat.request_live_agent("sess-contextless", _requester())
 
@@ -604,9 +638,13 @@ class TestRequestLiveAgentGating:
         _clear_all()
         svc = _ticket_service()
         chat = ChatService(svc)
-        _sessions["sess-tried"] = {
-            "diagnostic_context": {"suggested_steps": ["Restart Outlook"]},
-        }
+        await get_session_store().save(
+            "sess-tried",
+            ChatSession(
+                user_id=None,
+                state={"diagnostic_context": {"suggested_steps": ["Restart Outlook"]}},
+            ),
+        )
 
         message, ref = await chat.request_live_agent("sess-tried", _requester())
 
@@ -618,10 +656,16 @@ class TestRequestLiveAgentGating:
         _clear_all()
         svc = _ticket_service()
         chat = ChatService(svc)
-        _sessions["sess-repeat"] = {
-            "ticket_draft": {"title": "Issue", "category": "other"},
-            "diagnostic_context": {"escalation_offered_in_session": True},
-        }
+        await get_session_store().save(
+            "sess-repeat",
+            ChatSession(
+                user_id=None,
+                state={
+                    "ticket_draft": {"title": "Issue", "category": "other"},
+                    "diagnostic_context": {"escalation_offered_in_session": True},
+                },
+            ),
+        )
 
         await chat.request_live_agent("sess-repeat", _requester())
         message, ref = await chat.request_live_agent("sess-repeat", _requester())
@@ -641,14 +685,21 @@ class TestWaitingSinceTracking:
         _clear_all()
         svc = _ticket_service()
         chat = ChatService(svc)
-        _sessions["sess-track"] = {
-            "ticket_draft": {"title": "Issue"},
-            "diagnostic_context": {"escalation_offered_in_session": True},
-        }
+        await get_session_store().save(
+            "sess-track",
+            ChatSession(
+                user_id=None,
+                state={
+                    "ticket_draft": {"title": "Issue"},
+                    "diagnostic_context": {"escalation_offered_in_session": True},
+                },
+            ),
+        )
 
         before = datetime.now(UTC)
         await chat.request_live_agent("sess-track", _requester())
         after = datetime.now(UTC)
 
-        assert "sess-track" in _waiting_since
-        assert before <= _waiting_since["sess-track"] <= after
+        sess = await get_session_store().load("sess-track")
+        assert sess is not None and sess.waiting_since is not None
+        assert before <= sess.waiting_since <= after

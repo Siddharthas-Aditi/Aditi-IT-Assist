@@ -31,7 +31,7 @@ def _mock_result(tool: str, args: dict[str, Any]) -> dict[str, Any]:
             return {
                 "user_principal_name": upn,
                 "account_enabled": True,
-                "locked": True,                       # interesting case for demos
+                "locked": True,  # interesting case for demos
                 "mfa_registered": True,
                 "last_sign_in": "2026-06-21T22:14:00Z",
             }
@@ -42,6 +42,8 @@ def _mock_result(tool: str, args: dict[str, Any]) -> dict[str, Any]:
                 "os": "Windows 11",
                 "last_check_in": "2026-06-22T06:02:00Z",
                 "noncompliant_reasons": ["Disk not encrypted", "OS below minimum build"],
+                # Primary user, used by device-execution consent resolution (Phase 9).
+                "primary_user": upn,
             }
         case "get_mailbox_usage":
             return {"mailbox": upn, "used_gb": 49.2, "quota_gb": 50.0, "percent_used": 98.4}
@@ -60,6 +62,15 @@ def _mock_result(tool: str, args: dict[str, Any]) -> dict[str, Any]:
             return {"user_principal_name": upn, "mfa_reset": True}
         case "create_incident":
             return {"number": f"INC{uuid.uuid4().int % 9000000 + 1000000}", "created": True}
+        # ── device-execution tools (Phase 9) ──
+        case "install_win32_app" | "run_remediation_script" | "device_action":
+            return {
+                "correlation_id": f"intune-{uuid.uuid4().hex[:16]}",
+                "device_id": args.get("device_id"),
+                "intune_ref": args.get("intune_ref"),
+                "accepted": True,
+                "state": "dispatched",
+            }
         case _:
             return {"mock": True, "tool": tool}
 

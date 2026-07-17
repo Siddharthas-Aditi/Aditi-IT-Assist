@@ -155,7 +155,9 @@ async def stale_articles(actor: InternalReader, db: DBDep) -> list[ArticleSummar
 
 
 @router.get("/duplicates", response_model=list[DuplicateHintSchema])
-async def duplicate_hints(actor: InternalReader, db: DBDep, title: str) -> list[DuplicateHintSchema]:
+async def duplicate_hints(
+    actor: InternalReader, db: DBDep, title: str
+) -> list[DuplicateHintSchema]:
     """Lightweight duplicate-title hints for the editor."""
     service = KnowledgeManagementService(db)
     rows = await service.find_duplicate_hints(title)
@@ -467,8 +469,12 @@ async def article_warnings(
         raw = await service.get_author_warnings(_parse_uuid(article_id))
     except KnowledgeManagementError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return [AuthorWarningSchema(severity=w.severity, field=w.field, message=w.message,
-                                guidance=w.guidance) for w in raw]
+    return [
+        AuthorWarningSchema(
+            severity=w.severity, field=w.field, message=w.message, guidance=w.guidance
+        )
+        for w in raw
+    ]
 
 
 @router.get("/articles/{article_id}/stale-analysis", response_model=StaleAnalysisSchema)
@@ -505,8 +511,9 @@ async def list_article_templates(actor: Author, db: DBDep) -> list[ArticleTempla
     ]
 
 
-@router.post("/articles/from-template/{template_key}", response_model=ArticleDetail,
-             status_code=201)
+@router.post(
+    "/articles/from-template/{template_key}", response_model=ArticleDetail, status_code=201
+)
 async def create_article_from_template(
     template_key: str,
     actor: Author,

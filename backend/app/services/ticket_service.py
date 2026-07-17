@@ -1,7 +1,7 @@
 """Ticket service — enterprise helpdesk ticket lifecycle management."""
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import structlog
 from sqlalchemy import func, select
@@ -41,7 +41,7 @@ class TicketService:
         ticket_number = await self._generate_ticket_number()
 
         # Calculate SLA targets
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         response_hours = SLA_RESPONSE_HOURS.get(priority, 8)
         resolution_hours = SLA_RESOLUTION_HOURS.get(priority, 48)
 
@@ -65,7 +65,9 @@ class TicketService:
 
         # Record creation event
         await self._add_event(
-            ticket.id, None, "ticket_created",
+            ticket.id,
+            None,
+            "ticket_created",
             f"Ticket {ticket_number} created by {requester.full_name}",
         )
 
@@ -91,14 +93,18 @@ class TicketService:
             ticket.priority = "high"
 
         await self._add_event(
-            ticket_id, actor.id, "live_agent_requested",
+            ticket_id,
+            actor.id,
+            "live_agent_requested",
             f"Live agent requested by {actor.full_name} from chat handoff",
         )
         await self.add_comment(
-            ticket_id, actor,
+            ticket_id,
+            actor,
             "Employee requested a live IT specialist from the support chat. "
             "Conversation context and attempted steps are captured in this ticket.",
-            is_internal=True, comment_type="system",
+            is_internal=True,
+            comment_type="system",
         )
 
         logger.info(
@@ -109,7 +115,10 @@ class TicketService:
         return ticket
 
     async def update_status(
-        self, ticket_id: uuid.UUID, new_status: str, actor: User,
+        self,
+        ticket_id: uuid.UUID,
+        new_status: str,
+        actor: User,
         comment: str | None = None,
     ) -> Ticket:
         """Update ticket status with event logging."""
@@ -121,16 +130,19 @@ class TicketService:
         ticket.status = new_status
 
         # Timestamp tracking
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         if new_status == "resolved":
             ticket.resolved_at = now
         elif new_status == "closed":
             ticket.closed_at = now
 
         await self._add_event(
-            ticket_id, actor.id, "status_changed",
+            ticket_id,
+            actor.id,
+            "status_changed",
             f"Status changed from {old_status} to {new_status}",
-            old_value=old_status, new_value=new_status,
+            old_value=old_status,
+            new_value=new_status,
         )
 
         if comment:
@@ -139,7 +151,10 @@ class TicketService:
         return ticket
 
     async def assign_ticket(
-        self, ticket_id: uuid.UUID, agent_id: uuid.UUID, actor: User,
+        self,
+        ticket_id: uuid.UUID,
+        agent_id: uuid.UUID,
+        actor: User,
     ) -> Ticket:
         """Assign or reassign a ticket to an IT agent."""
         ticket = await self._get_ticket(ticket_id)
@@ -154,19 +169,26 @@ class TicketService:
 
         # Record first response time
         if not ticket.first_response_at:
-            ticket.first_response_at = datetime.now(timezone.utc)
+            ticket.first_response_at = datetime.now(UTC)
 
         await self._add_event(
-            ticket_id, actor.id, "ticket_assigned",
+            ticket_id,
+            actor.id,
+            "ticket_assigned",
             f"Ticket assigned to agent {agent_id}",
-            old_value=old_assigned, new_value=str(agent_id),
+            old_value=old_assigned,
+            new_value=str(agent_id),
         )
 
         return ticket
 
     async def add_comment(
-        self, ticket_id: uuid.UUID, author: User, content: str,
-        is_internal: bool = False, comment_type: str = "note",
+        self,
+        ticket_id: uuid.UUID,
+        author: User,
+        content: str,
+        is_internal: bool = False,
+        comment_type: str = "note",
     ) -> TicketComment:
         """Add a comment to a ticket."""
         comment = TicketComment(
@@ -179,7 +201,8 @@ class TicketService:
         self.db.add(comment)
 
         await self._add_event(
-            ticket_id, author.id,
+            ticket_id,
+            author.id,
             "internal_note_added" if is_internal else "comment_added",
             f"{'Internal note' if is_internal else 'Comment'} added by {author.full_name}",
         )
@@ -187,7 +210,9 @@ class TicketService:
         return comment
 
     async def get_ticket_for_employee(
-        self, ticket_id: uuid.UUID, employee: User,
+        self,
+        ticket_id: uuid.UUID,
+        employee: User,
     ) -> dict | None:
         """Get ticket visible to the requesting employee (own tickets only)."""
         ticket = await self._get_ticket(ticket_id)
@@ -244,8 +269,11 @@ class TicketService:
         return {"ticket": ticket, "comments": comments, "events": events}
 
     async def list_tickets_for_employee(
-        self, employee: User, status: str | None = None,
-        limit: int = 20, offset: int = 0,
+        self,
+        employee: User,
+        status: str | None = None,
+        limit: int = 20,
+        offset: int = 0,
     ) -> list[Ticket]:
         """List tickets belonging to an employee."""
         stmt = select(Ticket).where(Ticket.requester_id == employee.id)
@@ -256,9 +284,13 @@ class TicketService:
         return list(result.scalars().all())
 
     async def list_tickets_for_agent(
-        self, agent: User, assigned_only: bool = False,
-        status: str | None = None, priority: str | None = None,
-        limit: int = 50, offset: int = 0,
+        self,
+        agent: User,
+        assigned_only: bool = False,
+        status: str | None = None,
+        priority: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
     ) -> list[Ticket]:
         """List tickets visible to an IT agent."""
         stmt = select(Ticket)
@@ -301,9 +333,13 @@ class TicketService:
         return result.scalar_one_or_none()
 
     async def _add_event(
-        self, ticket_id: uuid.UUID, actor_id: uuid.UUID | None,
-        event_type: str, description: str,
-        old_value: str | None = None, new_value: str | None = None,
+        self,
+        ticket_id: uuid.UUID,
+        actor_id: uuid.UUID | None,
+        event_type: str,
+        description: str,
+        old_value: str | None = None,
+        new_value: str | None = None,
     ) -> None:
         """Add a timeline event to a ticket."""
         event = TicketEvent(

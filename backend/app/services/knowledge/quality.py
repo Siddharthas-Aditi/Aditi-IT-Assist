@@ -20,7 +20,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
-
 # ─────────────────────────────────────────────────────────────────────
 # Completeness
 # ─────────────────────────────────────────────────────────────────────
@@ -30,20 +29,20 @@ from datetime import UTC, datetime
 class DimensionScore:
     name: str
     label: str
-    score: float          # 0.0 – 1.0
-    earned: list[str] = field(default_factory=list)   # what contributed
+    score: float  # 0.0 – 1.0
+    earned: list[str] = field(default_factory=list)  # what contributed
     missing: list[str] = field(default_factory=list)  # what would improve it
 
 
 @dataclass
 class CompletenessReport:
-    score: float                    # overall 0 – 100
-    grade: str                      # A / B / C / D / F
+    score: float  # overall 0 – 100
+    grade: str  # A / B / C / D / F
     dimensions: list[DimensionScore]
-    ready_for_review: bool          # enough to submit
-    ready_for_publish: bool         # all hard blockers cleared
-    blocking_issues: list[str]      # hard blockers
-    suggestions: list[str]          # non-blocking improvements
+    ready_for_review: bool  # enough to submit
+    ready_for_publish: bool  # all hard blockers cleared
+    blocking_issues: list[str]  # hard blockers
+    suggestions: list[str]  # non-blocking improvements
 
 
 _GRADE_THRESHOLDS = [(90, "A"), (75, "B"), (55, "C"), (35, "D")]
@@ -215,16 +214,18 @@ def compute_completeness(article: dict) -> CompletenessReport:
         gov_missing.append("Escalation target team not set")
 
     # ── Composite ────────────────────────────────────────────────────
-    WEIGHTS = {"identity": 0.25, "categorisation": 0.20, "content": 0.35, "governance": 0.20}
+    weights = {"identity": 0.25, "categorisation": 0.20, "content": 0.35, "governance": 0.20}
     composite = (
-        id_score * WEIGHTS["identity"]
-        + cat_score * WEIGHTS["categorisation"]
-        + cnt_score * WEIGHTS["content"]
-        + gov_score * WEIGHTS["governance"]
+        id_score * weights["identity"]
+        + cat_score * weights["categorisation"]
+        + cnt_score * weights["content"]
+        + gov_score * weights["governance"]
     ) * 100
 
     dimensions = [
-        DimensionScore("identity", "Identity & Discovery", round(id_score, 3), id_earned, id_missing),
+        DimensionScore(
+            "identity", "Identity & Discovery", round(id_score, 3), id_earned, id_missing
+        ),
         DimensionScore(
             "categorisation", "Categorisation", round(cat_score, 3), cat_earned, cat_missing
         ),
@@ -283,9 +284,9 @@ def compute_completeness(article: dict) -> CompletenessReport:
 @dataclass
 class StaleAnalysis:
     is_stale: bool
-    staleness_score: float          # 0.0 (fresh) – 1.0 (very stale)
+    staleness_score: float  # 0.0 (fresh) – 1.0 (very stale)
     days_since_update: int | None
-    days_overdue: int | None        # None if not overdue
+    days_overdue: int | None  # None if not overdue
     reasons: list[str]
     recommendations: list[str]
 
@@ -352,9 +353,7 @@ def detect_staleness(article: dict) -> StaleAnalysis:
         if rate < 0.3:
             reasons.append(f"Low resolution rate ({rate:.0%}) — may be outdated or unclear")
             staleness_score += 0.25
-            recommendations.append(
-                "Review steps against current UI/process; add known workarounds"
-            )
+            recommendations.append("Review steps against current UI/process; add known workarounds")
 
     # Negative feedback accumulation
     neg_feedback = article.get("negative_feedback_count") or 0
@@ -383,8 +382,8 @@ def detect_staleness(article: dict) -> StaleAnalysis:
 
 @dataclass
 class AuthorWarning:
-    severity: str           # "error" | "warning" | "info"
-    field: str | None       # form field this relates to
+    severity: str  # "error" | "warning" | "info"
+    field: str | None  # form field this relates to
     message: str
     guidance: str | None = None
 
@@ -443,9 +442,7 @@ def get_author_warnings(article: dict) -> list[AuthorWarning]:
             )
         )
 
-    if not (
-        _list_has(res_steps) or _list_has(ts_steps) or (article.get("content") or "").strip()
-    ):
+    if not (_list_has(res_steps) or _list_has(ts_steps) or (article.get("content") or "").strip()):
         warnings.append(
             AuthorWarning(
                 severity="error",
@@ -484,9 +481,7 @@ def get_author_warnings(article: dict) -> list[AuthorWarning]:
                 severity="warning",
                 field="validation_steps",
                 message="No validation steps provided.",
-                guidance=(
-                    "Tell users how to confirm the fix worked (e.g., 'Send a test email')."
-                ),
+                guidance=("Tell users how to confirm the fix worked (e.g., 'Send a test email')."),
             )
         )
 

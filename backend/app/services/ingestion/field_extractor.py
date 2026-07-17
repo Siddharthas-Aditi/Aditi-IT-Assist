@@ -22,18 +22,19 @@ Strategy tiers (each field picks the highest-confidence successful result):
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from app.services.ingestion.normalizer import LineType, NormalizedLine
-from app.services.ingestion.profiles.base import ParserProfile
 from app.services.ingestion.schema import (
     ExtractionCandidate,
     ExtractionMethod,
     ExtractionStep,
     FieldExtraction,
 )
-from app.services.ingestion.segmenter import DocumentSegment
 
+if TYPE_CHECKING:
+    from app.services.ingestion.profiles.base import ParserProfile
+    from app.services.ingestion.segmenter import DocumentSegment
 
 # ── Category detection lookup table ──────────────────────────────────────────
 # Ordered by specificity — first match wins.
@@ -42,34 +43,86 @@ _CATEGORY_RULES: list[tuple[re.Pattern, tuple[str, str | None]]] = [
     (re.compile(r"\bemail\b", re.I), ("email/outlook", "general")),
     (re.compile(r"\bms\s*teams\b|\bmicrosoft\s+teams\b", re.I), ("video-conferencing/teams", None)),
     (re.compile(r"\bzoom\b", re.I), ("video-conferencing/zoom", None)),
-    (re.compile(r"\bintune\b|\bmdm\b|\bdevice\s+enrollment\b|\bdevice\s+management\b", re.I), ("device-management/intune", None)),
+    (
+        re.compile(r"\bintune\b|\bmdm\b|\bdevice\s+enrollment\b|\bdevice\s+management\b", re.I),
+        ("device-management/intune", None),
+    ),
     (re.compile(r"\bcamera\b|\bwebcam\b", re.I), ("hardware/camera", None)),
     (re.compile(r"\bvpn\b|\bvirtual\s+private\s+network\b", re.I), ("network/connectivity", "vpn")),
-    (re.compile(r"\bwifi\b|\bwi-fi\b|\bwireless\s+network\b", re.I), ("network/connectivity", "wifi")),
-    (re.compile(r"\bdns\b|\bip\s+address\b|\bnetwork\s+connectivity\b", re.I), ("network/connectivity", "general")),
-    (re.compile(r"\bmfa\b|\bmulti.factor\b|\bauthenticator\b", re.I), ("access/permissions", "mfa")),
-    (re.compile(r"\baccess\s+denied\b|\bpermission\s+denied\b|\brunas\b", re.I), ("access/permissions", "general")),
-    (re.compile(r"\bpassword\b|\bpassphrase\b|\bcredential\b", re.I), ("access/permissions", "password")),
-    (re.compile(r"\bmonitor\b|\bdisplay\b|\bscreen\s+resolution\b|\bdual\s+monitor\b", re.I), ("hardware/other", "display")),
+    (
+        re.compile(r"\bwifi\b|\bwi-fi\b|\bwireless\s+network\b", re.I),
+        ("network/connectivity", "wifi"),
+    ),
+    (
+        re.compile(r"\bdns\b|\bip\s+address\b|\bnetwork\s+connectivity\b", re.I),
+        ("network/connectivity", "general"),
+    ),
+    (
+        re.compile(r"\bmfa\b|\bmulti.factor\b|\bauthenticator\b", re.I),
+        ("access/permissions", "mfa"),
+    ),
+    (
+        re.compile(r"\baccess\s+denied\b|\bpermission\s+denied\b|\brunas\b", re.I),
+        ("access/permissions", "general"),
+    ),
+    (
+        re.compile(r"\bpassword\b|\bpassphrase\b|\bcredential\b", re.I),
+        ("access/permissions", "password"),
+    ),
+    (
+        re.compile(r"\bmonitor\b|\bdisplay\b|\bscreen\s+resolution\b|\bdual\s+monitor\b", re.I),
+        ("hardware/other", "display"),
+    ),
     (re.compile(r"\bprinter\b|\bprint\b|\bscanner\b", re.I), ("hardware/other", "printer")),
-    (re.compile(r"\bslow\b|\bperformance\b|\blagging\b|\bfreez", re.I), ("hardware/other", "performance")),
-    (re.compile(r"\binstall\b|\bsetup\b|\bdeployment\b|\bprovisioning\b", re.I), ("software/other", "install")),
-    (re.compile(r"\bcrash\b|\bnot\s+respond\b|\bblue\s+screen\b|\bbsod\b", re.I), ("software/other", "crash")),
+    (
+        re.compile(r"\bslow\b|\bperformance\b|\blagging\b|\bfreez", re.I),
+        ("hardware/other", "performance"),
+    ),
+    (
+        re.compile(r"\binstall\b|\bsetup\b|\bdeployment\b|\bprovisioning\b", re.I),
+        ("software/other", "install"),
+    ),
+    (
+        re.compile(r"\bcrash\b|\bnot\s+respond\b|\bblue\s+screen\b|\bbsod\b", re.I),
+        ("software/other", "crash"),
+    ),
     (re.compile(r"\blicense\b|\bactivation\b", re.I), ("software/other", "license")),
-    (re.compile(r"\bsharepoint\b|\bonedrive\b|\bm365\b|\boffice\s+365\b", re.I), ("software/other", "general")),
+    (
+        re.compile(r"\bsharepoint\b|\bonedrive\b|\bm365\b|\boffice\s+365\b", re.I),
+        ("software/other", "general"),
+    ),
 ]
 
 # Known products — ordered longest-first for greedy matching
 _KNOWN_PRODUCTS = [
-    "Microsoft 365", "Office 365", "Azure Active Directory", "Azure AD",
-    "Entra ID", "Microsoft Entra", "Windows 11", "Windows 10", "Windows",
-    "OneDrive", "SharePoint", "Microsoft Teams", "Outlook", "Office",
-    "Zoom", "Intune", "Edge", "Chrome", "Firefox", "Safari", "Slack",
-    "ServiceNow", "macOS", "iOS", "Android", "Linux",
+    "Microsoft 365",
+    "Office 365",
+    "Azure Active Directory",
+    "Azure AD",
+    "Entra ID",
+    "Microsoft Entra",
+    "Windows 11",
+    "Windows 10",
+    "Windows",
+    "OneDrive",
+    "SharePoint",
+    "Microsoft Teams",
+    "Outlook",
+    "Office",
+    "Zoom",
+    "Intune",
+    "Edge",
+    "Chrome",
+    "Firefox",
+    "Safari",
+    "Slack",
+    "ServiceNow",
+    "macOS",
+    "iOS",
+    "Android",
+    "Linux",
 ]
-_PRODUCT_RE = re.compile(
-    r"\b(" + "|".join(re.escape(p) for p in _KNOWN_PRODUCTS) + r")\b", re.I
-)
+_PRODUCT_RE = re.compile(r"\b(" + "|".join(re.escape(p) for p in _KNOWN_PRODUCTS) + r")\b", re.I)
 
 _PLATFORM_RE = re.compile(
     r"\b(Windows\s+1[01]|Windows\s+Server\s+\d{4}|Windows|macOS|iOS|Android|Linux|Ubuntu|RedHat)\b",
@@ -101,6 +154,7 @@ _SYMPTOM_OPENER_RE = re.compile(
 
 
 # ── Public API ─────────────────────────────────────────────────────────────────
+
 
 def extract_fields(
     segment: DocumentSegment,
@@ -139,42 +193,51 @@ def extract_fields(
 
 # ── Title ─────────────────────────────────────────────────────────────────────
 
+
 def _title(segment: DocumentSegment, profile: ParserProfile) -> FieldExtraction:
     # Strategy 1: explicit heading detected by segmenter (high confidence)
     if segment.heading:
         cleaned = _clean_title(segment.heading)
         if len(cleaned) >= 5:
-            return FieldExtraction.make(cleaned, 0.90,
-                method=ExtractionMethod.DETERMINISTIC, excerpt=segment.heading)
+            return FieldExtraction.make(
+                cleaned, 0.90, method=ExtractionMethod.DETERMINISTIC, excerpt=segment.heading
+            )
 
     # Strategy 2: first LABEL line whose label is a title synonym
     _title_synonyms = {"title", "topic", "issue", "article", "name", "subject"}
     for line in segment.lines[:8]:
-        if (line.line_type == LineType.LABEL
-                and line.label
-                and line.label.lower() in _title_synonyms
-                and line.text
-                and len(line.text) >= 5):
-            return FieldExtraction.make(line.text.strip(), 0.85,
-                method=ExtractionMethod.DETERMINISTIC, excerpt=line.raw)
+        if (
+            line.line_type == LineType.LABEL
+            and line.label
+            and line.label.lower() in _title_synonyms
+            and line.text
+            and len(line.text) >= 5
+        ):
+            return FieldExtraction.make(
+                line.text.strip(), 0.85, method=ExtractionMethod.DETERMINISTIC, excerpt=line.raw
+            )
 
     # Strategy 3: first short CONTINUATION line that looks like a title
     for line in segment.lines[:5]:
         txt = line.text.strip()
-        if (line.line_type == LineType.CONTINUATION
-                and 5 <= len(txt) <= 120
-                and re.match(r"^[A-Z]", txt)
-                and not txt.endswith(".")):
-            return FieldExtraction.make(txt, 0.55,
-                method=ExtractionMethod.HEURISTIC, excerpt=line.raw)
+        if (
+            line.line_type == LineType.CONTINUATION
+            and 5 <= len(txt) <= 120
+            and re.match(r"^[A-Z]", txt)
+            and not txt.endswith(".")
+        ):
+            return FieldExtraction.make(
+                txt, 0.55, method=ExtractionMethod.HEURISTIC, excerpt=line.raw
+            )
 
     # Strategy 4: first HEADING_WEAK
     for line in segment.lines[:8]:
         if line.line_type == LineType.HEADING_WEAK and line.text:
             cleaned = _clean_title(line.text)
             if len(cleaned) >= 5:
-                return FieldExtraction.make(cleaned, 0.50,
-                    method=ExtractionMethod.HEURISTIC, excerpt=line.raw)
+                return FieldExtraction.make(
+                    cleaned, 0.50, method=ExtractionMethod.HEURISTIC, excerpt=line.raw
+                )
 
     return FieldExtraction.absent()
 
@@ -188,52 +251,68 @@ def _clean_title(raw: str) -> str:
 
 # ── Category & subcategory ────────────────────────────────────────────────────
 
+
 def _category(segment: DocumentSegment) -> tuple[FieldExtraction, FieldExtraction]:
     text = segment.raw_text
     for pattern, (cat, sub) in _CATEGORY_RULES:
         m = pattern.search(text)
         if m:
-            cat_fe = FieldExtraction.make(cat, 0.80,
-                method=ExtractionMethod.DETERMINISTIC, excerpt=m.group(0))
-            sub_fe = (FieldExtraction.make(sub, 0.70, method=ExtractionMethod.DETERMINISTIC)
-                      if sub else FieldExtraction.absent())
+            cat_fe = FieldExtraction.make(
+                cat, 0.80, method=ExtractionMethod.DETERMINISTIC, excerpt=m.group(0)
+            )
+            sub_fe = (
+                FieldExtraction.make(sub, 0.70, method=ExtractionMethod.DETERMINISTIC)
+                if sub
+                else FieldExtraction.absent()
+            )
             return cat_fe, sub_fe
     return FieldExtraction.absent(), FieldExtraction.absent()
 
 
 # ── Product ───────────────────────────────────────────────────────────────────
 
+
 def _product(segment: DocumentSegment) -> FieldExtraction:
     # Strategy 1: labeled section (e.g. "Affected System: Outlook")
     for line in segment.lines[:10]:
-        if (line.line_type == LineType.LABEL
-                and line.label
-                and any(kw in line.label.lower() for kw in ("product", "system", "application", "app", "software", "affected"))):
+        if (
+            line.line_type == LineType.LABEL
+            and line.label
+            and any(
+                kw in line.label.lower()
+                for kw in ("product", "system", "application", "app", "software", "affected")
+            )
+        ):
             m = _PRODUCT_RE.search(line.text) if line.text else None
             if m:
-                return FieldExtraction.make(m.group(1), 0.90,
-                    method=ExtractionMethod.DETERMINISTIC, excerpt=line.raw)
+                return FieldExtraction.make(
+                    m.group(1), 0.90, method=ExtractionMethod.DETERMINISTIC, excerpt=line.raw
+                )
 
     # Strategy 2: product name regex scan
     m = _PRODUCT_RE.search(segment.raw_text)
     if m:
-        return FieldExtraction.make(m.group(1), 0.75,
-            method=ExtractionMethod.DETERMINISTIC, excerpt=m.group(0))
+        return FieldExtraction.make(
+            m.group(1), 0.75, method=ExtractionMethod.DETERMINISTIC, excerpt=m.group(0)
+        )
 
     return FieldExtraction.absent()
 
 
 # ── Platform ──────────────────────────────────────────────────────────────────
 
+
 def _platform(segment: DocumentSegment) -> FieldExtraction:
     m = _PLATFORM_RE.search(segment.raw_text)
     if m:
-        return FieldExtraction.make(m.group(1), 0.72,
-            method=ExtractionMethod.DETERMINISTIC, excerpt=m.group(0))
+        return FieldExtraction.make(
+            m.group(1), 0.72, method=ExtractionMethod.DETERMINISTIC, excerpt=m.group(0)
+        )
     return FieldExtraction.absent()
 
 
 # ── Generic list field (symptoms, probable_causes) ────────────────────────────
+
 
 def _list_field(
     segment: DocumentSegment,
@@ -243,11 +322,11 @@ def _list_field(
     # Strategy 1: labeled section from section_map
     section_lines = segment.section_map.get(field_name, [])
     if section_lines:
-        items = [l.strip() for l in section_lines if l.strip()][:10]
+        items = [line.strip() for line in section_lines if line.strip()][:10]
         if items:
-            return FieldExtraction.make(items, 0.88,
-                method=ExtractionMethod.DETERMINISTIC,
-                excerpt=section_lines[0])
+            return FieldExtraction.make(
+                items, 0.88, method=ExtractionMethod.DETERMINISTIC, excerpt=section_lines[0]
+            )
 
     # Strategy 2: field-specific semantic scan
     if field_name == "symptoms":
@@ -272,8 +351,9 @@ def _symptoms_semantic_scan(segment: DocumentSegment) -> FieldExtraction:
             if len(items) >= 8:
                 break
     if items:
-        return FieldExtraction.make(items, 0.58,
-            method=ExtractionMethod.HEURISTIC, excerpt=items[0])
+        return FieldExtraction.make(
+            items, 0.58, method=ExtractionMethod.HEURISTIC, excerpt=items[0]
+        )
     return FieldExtraction.absent()
 
 
@@ -290,12 +370,14 @@ def _causes_semantic_scan(segment: DocumentSegment) -> FieldExtraction:
             if len(items) >= 5:
                 break
     if items:
-        return FieldExtraction.make(items, 0.55,
-            method=ExtractionMethod.HEURISTIC, excerpt=items[0])
+        return FieldExtraction.make(
+            items, 0.55, method=ExtractionMethod.HEURISTIC, excerpt=items[0]
+        )
     return FieldExtraction.absent()
 
 
 # ── Step-based list fields (resolution, troubleshooting, validation) ──────────
+
 
 def _steps_field(
     segment: DocumentSegment,
@@ -308,30 +390,35 @@ def _steps_field(
         steps = _lines_to_steps(section_lines)
         if steps:
             return FieldExtraction.make(
-                [s.to_dict() for s in steps], 0.90,
+                [s.to_dict() for s in steps],
+                0.90,
                 method=ExtractionMethod.DETERMINISTIC,
                 excerpt=section_lines[0],
             )
 
     # Strategy 2: longest numbered run in segment (heuristic — most likely to be steps)
     run = _longest_numbered_run(segment.lines)
-    if run and len(run) >= 2:
-        if field_name in ("resolution_steps", "troubleshooting_steps"):
-            steps = [ExtractionStep(step_number=i + 1, instruction=l.text.strip())
-                     for i, l in enumerate(run) if l.text.strip()]
-            return FieldExtraction.make(
-                [s.to_dict() for s in steps], 0.62,
-                method=ExtractionMethod.HEURISTIC,
-                excerpt=run[0].text,
-            )
+    if run and len(run) >= 2 and field_name in ("resolution_steps", "troubleshooting_steps"):
+        steps = [
+            ExtractionStep(step_number=i + 1, instruction=line.text.strip())
+            for i, line in enumerate(run)
+            if line.text.strip()
+        ]
+        return FieldExtraction.make(
+            [s.to_dict() for s in steps],
+            0.62,
+            method=ExtractionMethod.HEURISTIC,
+            excerpt=run[0].text,
+        )
 
     # Strategy 3: bullet list adjacent to a matching label line
     labeled_bullets = _bullets_after_label(segment.lines, profile, field_name)
     if labeled_bullets:
-        steps = _lines_to_steps([l.text for l in labeled_bullets])
+        steps = _lines_to_steps([line.text for line in labeled_bullets])
         if steps:
             return FieldExtraction.make(
-                [s.to_dict() for s in steps], 0.72,
+                [s.to_dict() for s in steps],
+                0.72,
                 method=ExtractionMethod.HEURISTIC,
             )
 
@@ -340,29 +427,32 @@ def _steps_field(
 
 # ── Escalation criteria ───────────────────────────────────────────────────────
 
+
 def _escalation(segment: DocumentSegment, profile: ParserProfile) -> FieldExtraction:
     # Strategy 1: labeled section
-    section_lines = (
-        segment.section_map.get("escalation_criteria", [])
-        or segment.section_map.get("escalation", [])
+    section_lines = segment.section_map.get("escalation_criteria", []) or segment.section_map.get(
+        "escalation", []
     )
     if section_lines:
-        text = " ".join(l.strip() for l in section_lines if l.strip())[:600]
-        return FieldExtraction.make(text, 0.88,
-            method=ExtractionMethod.DETERMINISTIC, excerpt=section_lines[0])
+        text = " ".join(line.strip() for line in section_lines if line.strip())[:600]
+        return FieldExtraction.make(
+            text, 0.88, method=ExtractionMethod.DETERMINISTIC, excerpt=section_lines[0]
+        )
 
     # Strategy 2: scan lines for escalation vocabulary
     for i, line in enumerate(segment.lines):
         if _ESCALATION_RE.search(line.text):
-            chunk_lines = segment.lines[i:i + 4]
-            chunk = " ".join(l.text for l in chunk_lines if l.text)[:600]
-            return FieldExtraction.make(chunk, 0.62,
-                method=ExtractionMethod.HEURISTIC, excerpt=line.text)
+            chunk_lines = segment.lines[i : i + 4]
+            chunk = " ".join(cl.text for cl in chunk_lines if cl.text)[:600]
+            return FieldExtraction.make(
+                chunk, 0.62, method=ExtractionMethod.HEURISTIC, excerpt=line.text
+            )
 
     return FieldExtraction.absent()
 
 
 # ── Tags and keywords ─────────────────────────────────────────────────────────
+
 
 def _tags_and_keywords(
     segment: DocumentSegment,
@@ -401,6 +491,7 @@ def _tags_and_keywords(
 
 # ── Short summary ─────────────────────────────────────────────────────────────
 
+
 def _summary(segment: DocumentSegment, title_fe: FieldExtraction) -> FieldExtraction:
     # Strategy 1: first CONTINUATION lines after heading (up to 600 chars)
     parts: list[str] = []
@@ -416,7 +507,8 @@ def _summary(segment: DocumentSegment, title_fe: FieldExtraction) -> FieldExtrac
     # Strategy 2: derive from title
     if title_fe.is_present:
         return FieldExtraction.make(
-            f"Troubleshooting guide: {title_fe.value}", 0.35,
+            f"Troubleshooting guide: {title_fe.value}",
+            0.35,
             method=ExtractionMethod.HEURISTIC,
         )
 
@@ -424,6 +516,7 @@ def _summary(segment: DocumentSegment, title_fe: FieldExtraction) -> FieldExtrac
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
+
 
 def _lines_to_steps(text_lines: list[str]) -> list[ExtractionStep]:
     """Convert text lines into numbered ExtractionStep objects."""
@@ -433,7 +526,9 @@ def _lines_to_steps(text_lines: list[str]) -> list[ExtractionStep]:
         if not line:
             continue
         # Strip leading number/bullet markers
-        cleaned = re.sub(r"^(?:\d+[\.\):\-]?\s+|[•\-\*◦▸]\s+|step\s+\d+[:\.\)]\s+)", "", line, flags=re.I)
+        cleaned = re.sub(
+            r"^(?:\d+[\.\):\-]?\s+|[•\-\*◦▸]\s+|step\s+\d+[:\.\)]\s+)", "", line, flags=re.I
+        )
         if cleaned:
             steps.append(ExtractionStep(step_number=len(steps) + 1, instruction=cleaned))
     return steps[:25]

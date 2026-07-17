@@ -14,9 +14,9 @@ These DTOs are the typed contract between the persisted escalation artifacts
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime  # noqa: TC003 - pydantic evaluates these annotations at runtime
 from typing import Literal
-from uuid import UUID
+from uuid import UUID  # noqa: TC003 - pydantic evaluates these annotations at runtime
 
 from pydantic import BaseModel, Field
 

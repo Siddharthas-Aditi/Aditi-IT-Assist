@@ -1,8 +1,6 @@
 """Unit tests for the ingestion validator (pure logic — no DB)."""
 
-import pytest
-
-from app.services.ingestion.validator import ValidationResult, validate_candidate
+from app.services.ingestion.validator import validate_candidate
 
 
 def _make(
@@ -21,8 +19,12 @@ def _make(
         "summary": summary,
         "category": category,
         "symptoms": ["User cannot sync email"] if symptoms is None else symptoms,
-        "troubleshooting_steps": [{"step_number": 1, "instruction": "Check network", "details": ""}] if troubleshooting is None else troubleshooting,
-        "resolution_steps": [{"step_number": 1, "instruction": "Restart Outlook", "details": ""}] if resolution is None else resolution,
+        "troubleshooting_steps": [{"step_number": 1, "instruction": "Check network", "details": ""}]
+        if troubleshooting is None
+        else troubleshooting,
+        "resolution_steps": [{"step_number": 1, "instruction": "Restart Outlook", "details": ""}]
+        if resolution is None
+        else resolution,
         "escalation_criteria": escalation,
         "tags": tags if tags is not None else ["email", "outlook"],
         "confidence": confidence,

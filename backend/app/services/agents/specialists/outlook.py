@@ -65,21 +65,17 @@ _BATCH_SIZE = 3
 # we never leak slugs to the user. Falls back to a generic line if missing.
 _OPENERS = {
     "mailbox-full": (
-        "It looks like your mailbox is full — that'll stop new mail "
-        "until we free up some space."
+        "It looks like your mailbox is full — that'll stop new mail until we free up some space."
     ),
     "not-receiving-emails": (
-        "Got it — new emails aren't coming through. "
-        "Let's narrow down where they're getting caught."
+        "Got it — new emails aren't coming through. Let's narrow down where they're getting caught."
     ),
     "sending-failure": (
-        "Sounds like outbound mail isn't going out. "
-        "Let's check the usual culprits."
+        "Sounds like outbound mail isn't going out. Let's check the usual culprits."
     ),
     "outlook-slow": "If Outlook is dragging, a couple of quick checks usually sort it.",
     "outlook-crash": (
-        "If Outlook isn't opening or keeps crashing, "
-        "there are a few reliable fixes to try."
+        "If Outlook isn't opening or keeps crashing, there are a few reliable fixes to try."
     ),
     "offline-mode": "Looks like Outlook is stuck in offline mode — easy to flip back.",
 }
@@ -116,10 +112,9 @@ class OutlookSpecialist:
     def can_handle(self, inp: SpecialistInput) -> bool:
         """Defense in depth — the supervisor already filtered by category."""
         ctx = inp.diag_ctx
-        return (
-            (ctx.issue_category or "") in self.spec.categories
-            or (ctx.normalized_system or "") in self.spec.systems
-        )
+        return (ctx.issue_category or "") in self.spec.categories or (
+            ctx.normalized_system or ""
+        ) in self.spec.systems
 
     def _tools_enabled(self, inp: SpecialistInput) -> bool:
         """All conditions that must hold for the tool-use path to run."""
@@ -144,9 +139,7 @@ class OutlookSpecialist:
 
             # Include MCP-backed tools (e.g. real mailbox_quota_status) when the
             # MCP feature is enabled; the runtime governs them identically.
-            self._tool_runtime = build_default_runtime(
-                include_mcp=settings.FEATURE_MCP_TOOLS
-            )
+            self._tool_runtime = build_default_runtime(include_mcp=settings.FEATURE_MCP_TOOLS)
         return self._tool_runtime
 
     async def handle(self, inp: SpecialistInput) -> SpecialistOutput:
@@ -305,7 +298,7 @@ def _advance_steps(inp: SpecialistInput) -> tuple[list[dict], list[dict]]:
     subtype = (ctx.issue_subtype or "").replace("_", "-").lower()
 
     def _matches_subtype(art: dict) -> bool:
-        sc = (art.get("subcategory") or art.get("subtype") or art.get("issue_type") or "")
+        sc = art.get("subcategory") or art.get("subtype") or art.get("issue_type") or ""
         return bool(subtype) and sc.replace("_", "-").lower() == subtype
 
     matched = [a for a in inp.knowledge_results if _matches_subtype(a)]
@@ -320,11 +313,13 @@ def _advance_steps(inp: SpecialistInput) -> tuple[list[dict], list[dict]]:
             if not key or key in seen:
                 continue
             seen.add(key)
-            ordered.append({
-                "instruction": instruction,
-                "details": details,
-                "source": art.get("title", ""),
-            })
+            ordered.append(
+                {
+                    "instruction": instruction,
+                    "details": details,
+                    "source": art.get("title", ""),
+                }
+            )
 
     remaining = [s for s in ordered if not ctx.is_step_exhausted_or_seen(s["instruction"])]
     return ordered, remaining

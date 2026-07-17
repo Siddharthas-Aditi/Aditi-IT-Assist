@@ -12,20 +12,19 @@ Tests cover:
 """
 
 import uuid
-from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from datetime import UTC, datetime
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from app.models.feedback import ConversationFeedback, QualityBucket, SupportMode
 from app.schemas.feedback import ConversationFeedbackCreate
 from app.services.feedback_service import (
+    _SESSION_TYPE_MAP,
     FeedbackService,
     _compute_quality_bucket,
     _compute_review_flag,
-    _SESSION_TYPE_MAP,
 )
-
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -49,8 +48,8 @@ def make_session(
     session.assigned_agent_id = assigned_agent_id
     session.issue_category = issue_category
     session.issue_subcategory = issue_subcategory
-    session.resolved_at = resolved_at or datetime.now(timezone.utc)
-    session.created_at = created_at or datetime.now(timezone.utc)
+    session.resolved_at = resolved_at or datetime.now(UTC)
+    session.created_at = created_at or datetime.now(UTC)
     session.metadata_json = metadata_json or {}
     return session
 
@@ -157,7 +156,6 @@ class TestFeedbackServiceSubmit:
         service = make_service(support_session=session)
 
         # Patch the DB query for SupportSession
-        from sqlalchemy import select as sa_select
         mock_result = MagicMock()
         mock_result.scalar_one_or_none = MagicMock(return_value=session)
         service.db.execute = AsyncMock(return_value=mock_result)
@@ -165,8 +163,8 @@ class TestFeedbackServiceSubmit:
         async def capture_and_fill(fb):
             # Simulate what SQLAlchemy does on INSERT
             fb.id = uuid.uuid4()
-            fb.created_at = datetime.now(timezone.utc)
-            fb.updated_at = datetime.now(timezone.utc)
+            fb.created_at = datetime.now(UTC)
+            fb.updated_at = datetime.now(UTC)
             return fb
 
         service.repo.create = AsyncMock(side_effect=capture_and_fill)
@@ -243,9 +241,9 @@ class TestFeedbackServiceSubmit:
         existing.channel = "web_chat"
         existing.feedback_source = "inline_chat"
         existing.agent_user_id = None
-        existing.submitted_at = datetime.now(timezone.utc)
-        existing.created_at = datetime.now(timezone.utc)
-        existing.updated_at = datetime.now(timezone.utc)
+        existing.submitted_at = datetime.now(UTC)
+        existing.created_at = datetime.now(UTC)
+        existing.updated_at = datetime.now(UTC)
 
         service = make_service(existing_feedback=existing, support_session=session)
         mock_result = MagicMock()
@@ -273,8 +271,8 @@ class TestFeedbackServiceSubmit:
 
         async def capture_create(fb):
             fb.id = uuid.uuid4()
-            fb.created_at = datetime.now(timezone.utc)
-            fb.updated_at = datetime.now(timezone.utc)
+            fb.created_at = datetime.now(UTC)
+            fb.updated_at = datetime.now(UTC)
             created_records.append(fb)
             return fb
 
@@ -303,8 +301,8 @@ class TestFeedbackServiceSubmit:
 
         async def capture_create(fb):
             fb.id = uuid.uuid4()
-            fb.created_at = datetime.now(timezone.utc)
-            fb.updated_at = datetime.now(timezone.utc)
+            fb.created_at = datetime.now(UTC)
+            fb.updated_at = datetime.now(UTC)
             created_records.append(fb)
             return fb
 
@@ -333,8 +331,8 @@ class TestFeedbackServiceSubmit:
 
         async def capture_create(fb):
             fb.id = uuid.uuid4()
-            fb.created_at = datetime.now(timezone.utc)
-            fb.updated_at = datetime.now(timezone.utc)
+            fb.created_at = datetime.now(UTC)
+            fb.updated_at = datetime.now(UTC)
             created_records.append(fb)
             return fb
 
@@ -364,8 +362,8 @@ class TestFeedbackServiceSubmit:
 
         async def capture_create(fb):
             fb.id = uuid.uuid4()
-            fb.created_at = datetime.now(timezone.utc)
-            fb.updated_at = datetime.now(timezone.utc)
+            fb.created_at = datetime.now(UTC)
+            fb.updated_at = datetime.now(UTC)
             created_records.append(fb)
             return fb
 

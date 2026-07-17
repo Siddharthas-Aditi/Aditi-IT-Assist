@@ -162,14 +162,17 @@ class AgentToolRuntime:
 
         # 1. Allow-list — the agent may only call tools it declared.
         if name not in allowed_tools:
-            return _emit(ToolOutcomeStatus.REJECTED_NOT_ALLOWED,
-                         error=f"tool {name!r} not in agent allow-list")
+            return _emit(
+                ToolOutcomeStatus.REJECTED_NOT_ALLOWED,
+                error=f"tool {name!r} not in agent allow-list",
+            )
 
         # 2. Existence — the tool must be registered.
         tool = self._tools.get(name)
         if tool is None:
-            return _emit(ToolOutcomeStatus.REJECTED_UNKNOWN,
-                         error=f"tool {name!r} not found in registry")
+            return _emit(
+                ToolOutcomeStatus.REJECTED_UNKNOWN, error=f"tool {name!r} not found in registry"
+            )
 
         spec = tool.spec
 
@@ -178,33 +181,39 @@ class AgentToolRuntime:
         try:
             args = spec.args_model.model_validate(invocation.raw_args)
         except ValidationError as exc:
-            return _emit(ToolOutcomeStatus.INVALID_ARGS,
-                         error=f"argument validation failed: {exc.error_count()} error(s)")
+            return _emit(
+                ToolOutcomeStatus.INVALID_ARGS,
+                error=f"argument validation failed: {exc.error_count()} error(s)",
+            )
 
         # 4. RBAC — caller must hold every required permission.
         missing = [p for p in spec.required_permissions if p not in context.permissions]
         if missing:
-            return _emit(ToolOutcomeStatus.REJECTED_FORBIDDEN,
-                         error=f"missing permission(s): {', '.join(missing)}",
-                         side_effect=spec.side_effect.value)
+            return _emit(
+                ToolOutcomeStatus.REJECTED_FORBIDDEN,
+                error=f"missing permission(s): {', '.join(missing)}",
+                side_effect=spec.side_effect.value,
+            )
 
         # 5. Approval gate — human-gated tools require an explicit approval token.
         #    AUTO_ALLOWLISTED executes; HUMAN without approval is held, never run.
         if spec.approval is Approval.HUMAN and name not in context.approvals:
-            return _emit(ToolOutcomeStatus.NEEDS_APPROVAL,
-                         side_effect=spec.side_effect.value,
-                         approval=spec.approval.value)
+            return _emit(
+                ToolOutcomeStatus.NEEDS_APPROVAL,
+                side_effect=spec.side_effect.value,
+                approval=spec.approval.value,
+            )
 
         # 6. Execute.
         try:
             result = await tool.run(args, context)
         except Exception as exc:  # noqa: BLE001 — surface as typed outcome, never crash the turn
             logger.warning("agent_tool_error", tool=name, error=str(exc))
-            return _emit(ToolOutcomeStatus.ERROR, error=str(exc),
-                         side_effect=spec.side_effect.value)
+            return _emit(
+                ToolOutcomeStatus.ERROR, error=str(exc), side_effect=spec.side_effect.value
+            )
 
-        return _emit(ToolOutcomeStatus.EXECUTED, result=result,
-                     side_effect=spec.side_effect.value)
+        return _emit(ToolOutcomeStatus.EXECUTED, result=result, side_effect=spec.side_effect.value)
 
     # ── Human approval flow (Phase 8) ────────────────────────────────────
 
@@ -289,14 +298,16 @@ class AgentToolRuntime:
 
             # Record the assistant's tool-call turn so the conversation stays
             # coherent for the follow-up completion.
-            convo.append({
-                "role": "assistant",
-                "content": response.text or "",
-                "tool_calls": [
-                    {"id": c.call_id, "name": c.tool_name, "arguments": c.raw_args}
-                    for c in response.tool_calls
-                ],
-            })
+            convo.append(
+                {
+                    "role": "assistant",
+                    "content": response.text or "",
+                    "tool_calls": [
+                        {"id": c.call_id, "name": c.tool_name, "arguments": c.raw_args}
+                        for c in response.tool_calls
+                    ],
+                }
+            )
 
             hit_approval = False
             for call in response.tool_calls:
@@ -306,12 +317,14 @@ class AgentToolRuntime:
                     result.pending_approvals.append(outcome)
                     result.proposed_actions.append(self._propose(call, outcome))
                     hit_approval = True
-                convo.append({
-                    "role": "tool",
-                    "tool_call_id": call.call_id,
-                    "name": call.tool_name,
-                    "content": _outcome_to_tool_message(outcome),
-                })
+                convo.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": call.call_id,
+                        "name": call.tool_name,
+                        "content": _outcome_to_tool_message(outcome),
+                    }
+                )
 
             if hit_approval:
                 # Do not keep looping past a gated action — surface it for

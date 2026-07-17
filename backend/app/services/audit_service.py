@@ -70,6 +70,5 @@ class AuditService:
             return None
         sensitive_keys = {"password", "hashed_password", "secret", "token", "api_key"}
         return {
-            k: "***REDACTED***" if k.lower() in sensitive_keys else v
-            for k, v in payload.items()
+            k: "***REDACTED***" if k.lower() in sensitive_keys else v for k, v in payload.items()
         }

@@ -17,11 +17,13 @@ WORKDIR /app
 ARG NODE_TLS_REJECT_UNAUTHORIZED=1
 ENV NODE_TLS_REJECT_UNAUTHORIZED=${NODE_TLS_REJECT_UNAUTHORIZED}
 
-COPY package.json package-lock.json* ./
+COPY package.json package-lock.json ./
 
-# Install deps — uses npm install for platform-specific optional deps
+# Reproducible install from the committed lockfile (matches CI). `npm ci` fails
+# loudly if the lock is missing or out of sync with package.json, instead of
+# silently resolving different versions the way `npm install` can.
 RUN npm config set strict-ssl false \
-    && npm install --no-audit \
+    && npm ci --no-audit \
     && npm config set strict-ssl true
 
 # ── Development stage ───────────────────────────

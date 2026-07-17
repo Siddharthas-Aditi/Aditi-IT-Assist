@@ -2,7 +2,7 @@
 
 import { create } from 'zustand';
 import type { ChatMessage } from '../types';
-import { chatApi } from '../lib/api';
+import { chatApi, ApiError } from '../lib/api';
 
 interface ChatState {
   messages: ChatMessage[];
@@ -83,10 +83,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
         };
       });
     } catch (err) {
+      // Surface the real, typed error to the user rather than a blanket
+      // "connection" message: a 429 (rate limited), 422 (validation), or 503
+      // is not a connectivity problem and the accurate text helps them react.
+      const content =
+        err instanceof ApiError
+          ? `${err.message} Please try again in a moment.`
+          : 'I encountered an issue connecting to the server. Please try again.';
       const errorMessage: ChatMessage = {
         id: `error-${Date.now()}`,
         role: 'assistant',
-        content: 'I encountered an issue connecting to the server. Please try again.',
+        content,
         timestamp: new Date(),
       };
 

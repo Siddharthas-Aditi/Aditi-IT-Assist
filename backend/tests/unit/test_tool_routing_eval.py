@@ -143,5 +143,5 @@ class TestLLMSelectionAccuracy:
         # With small N, LLM non-determinism can drop 1 case; use 75% floor.
         assert correct / len(CASES) >= 0.75, (
             f"LLM tool selection accuracy {correct}/{len(CASES)} "
-            f"({100*correct/len(CASES):.0f}%) below 75% floor"
+            f"({100 * correct / len(CASES):.0f}%) below 75% floor"
         )

@@ -1,5 +1,6 @@
 """Workflow state definition for the LangGraph agent system."""
 
+import operator
 from typing import Annotated, Any, Literal, TypedDict
 
 from langchain_core.messages import BaseMessage
@@ -100,7 +101,11 @@ class WorkflowState(TypedDict):
     turn_count: int
     needs_clarification: bool
     clarification_question: str | None
-    audit_trail: list[dict]
+    # Reducer: each node returns its own [entry] list; without `operator.add`
+    # the channel is OVERWRITTEN so only the last node's audit survived. The
+    # chat service resets this to [] at the start of each turn, so it captures
+    # exactly one turn's node trail (no unbounded cross-turn growth).
+    audit_trail: Annotated[list[dict], operator.add]
 
     # ── Diagnostic Context (multi-turn conversation state) ───────
     diagnostic_context: dict[str, Any] | None  # Serialized DiagnosticContext

@@ -3,38 +3,41 @@
 import logging
 import re
 from dataclasses import dataclass
-from enum import Enum
-from typing import Optional
+from enum import StrEnum
 
 from app.services.llm_service import LLMService
 
 logger = logging.getLogger(__name__)
 
 
-class Urgency(str, Enum):
+class Urgency(StrEnum):
     """User's time sensitivity."""
-    LOW = "low"            # "When you get a chance..."
-    MEDIUM = "medium"      # "I need this soon"
-    HIGH = "high"          # "ASAP", "Critical", "Important"
+
+    LOW = "low"  # "When you get a chance..."
+    MEDIUM = "medium"  # "I need this soon"
+    HIGH = "high"  # "ASAP", "Critical", "Important"
     CRITICAL = "critical"  # "System DOWN", "Can't work", "URGENT!!!"
 
 
-class Frustration(str, Enum):
+class Frustration(StrEnum):
     """User's emotional state."""
-    CALM = "calm"          # Matter-of-fact tone
-    MILD = "mild"          # Some frustration ("This is annoying")
-    HIGH = "high"          # Very frustrated ("I can't BELIEVE this!", ALL CAPS)
+
+    CALM = "calm"  # Matter-of-fact tone
+    MILD = "mild"  # Some frustration ("This is annoying")
+    HIGH = "high"  # Very frustrated ("I can't BELIEVE this!", ALL CAPS)
 
 
-class Confusion(str, Enum):
+class Confusion(StrEnum):
     """User's clarity on problem."""
-    CLEAR = "clear"        # Knows exactly what's wrong
+
+    CLEAR = "clear"  # Knows exactly what's wrong
     CONFUSED = "confused"  # "Not sure what's happening", "I don't know", "?"
 
 
 @dataclass
 class SentimentAnalysis:
     """Result of sentiment analysis on user message."""
+
     urgency: Urgency
     frustration: Frustration
     confusion: Confusion
@@ -102,11 +105,17 @@ class SentimentAnalyzerService:
             "minutes": Urgency.MEDIUM,
         }
 
+        # Match on WORD BOUNDARIES and keep the HIGHEST severity found. Plain
+        # substring matching mis-fired badly ("download"→"down"→CRITICAL,
+        # "know"→"now"→MEDIUM), and break-on-first-hit meant word order, not
+        # severity, decided the result.
+        _rank = {Urgency.LOW: 0, Urgency.MEDIUM: 1, Urgency.HIGH: 2, Urgency.CRITICAL: 3}
         detected_urgency = Urgency.LOW
         for keyword, level in urgency_keywords.items():
-            if keyword in msg_lower:
+            if _rank[level] <= _rank[detected_urgency]:
+                continue
+            if re.search(rf"\b{re.escape(keyword)}\b", msg_lower):
                 detected_urgency = level
-                break
 
         # ──── FRUSTRATION DETECTION ────
         frustration_patterns = {
@@ -130,22 +139,30 @@ class SentimentAnalyzerService:
                 frustration_score = max(frustration_score, score)
 
         frustration = (
-            Frustration.HIGH if frustration_score > 0.7
-            else Frustration.MILD if frustration_score > 0.3
+            Frustration.HIGH
+            if frustration_score > 0.7
+            else Frustration.MILD
+            if frustration_score > 0.3
             else Frustration.CALM
         )
 
         # ──── CONFUSION DETECTION ────
-        confusion_keywords = ["?", "not sure", "confused", "how do i", "what's", "what do i", "don't know"]
+        confusion_keywords = [
+            "?",
+            "not sure",
+            "confused",
+            "how do i",
+            "what's",
+            "what do i",
+            "don't know",
+        ]
         has_confusion = any(kw in msg_lower for kw in confusion_keywords)
         confusion = Confusion.CONFUSED if has_confusion else Confusion.CLEAR
 
         # ──── CONFIDENCE SCORE ────
         # High confidence if we detected strong signals
         has_strong_signal = (
-            detected_urgency != Urgency.LOW or
-            frustration != Frustration.CALM or
-            has_confusion
+            detected_urgency != Urgency.LOW or frustration != Frustration.CALM or has_confusion
         )
         confidence = 0.8 if has_strong_signal else 0.5
 
@@ -155,9 +172,7 @@ class SentimentAnalyzerService:
             confusion=confusion,
             confidence=confidence,
             raw_analysis={
-                "urgency_keyword": next(
-                    (k for k in urgency_keywords if k in msg_lower), None
-                ),
+                "urgency_keyword": next((k for k in urgency_keywords if k in msg_lower), None),
                 "frustration_score": frustration_score,
                 "has_confusion_keywords": has_confusion,
                 "method": "pattern",
@@ -172,8 +187,10 @@ Analyze this IT support message for tone.
 Message: "{message}"
 
 Detect:
-1. Urgency: low (casual, "when you get a chance") / medium (soon, "I need this soon") / high (ASAP) / critical (system down)
-2. Frustration: calm (neutral, professional) / mild (some frustration) / high (very frustrated, angry)
+1. Urgency: low (casual, "when you get a chance") / medium (soon, "I need this soon") / \
+high (ASAP) / critical (system down)
+2. Frustration: calm (neutral, professional) / mild (some frustration) / \
+high (very frustrated, angry)
 3. Confusion: clear (knows the issue) / confused (unsure what's happening)
 
 Return JSON with keys: urgency, frustration, confusion, reasoning (brief explanation).
@@ -183,7 +200,9 @@ All values must be lowercase.
         try:
             result = await self.llm.complete_json(
                 prompt=analysis_prompt,
-                system_prompt="You are analyzing customer support message tone. Be precise and consistent.",
+                system_prompt=(
+                    "You are analyzing customer support message tone. Be precise and consistent."
+                ),
             )
 
             return SentimentAnalysis(

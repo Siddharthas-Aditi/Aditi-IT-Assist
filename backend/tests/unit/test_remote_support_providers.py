@@ -262,10 +262,15 @@ class TestPrerequisiteGate:
 
 
 class TestSessionSweep:
+    # NOTE: sweep_sessions() runs THREE queries in order:
+    #   1) consent_pending past deadline, 2) consent_granted/connecting never
+    #   launched (stale), 3) live sessions over max duration.
+    # _mock_db_for takes one result list per query, in that order.
+
     @pytest.mark.asyncio
     async def test_expires_consent_pending_past_deadline(self):
         stale = _sweepable_session(status="consent_pending")
-        db = _mock_db_for([[stale], []])
+        db = _mock_db_for([[stale], [], []])
         svc = RemoteSupportService(MagicMock())
         svc.db = db
 
@@ -275,13 +280,29 @@ class TestSessionSweep:
         assert stale.termination_reason == "consent_expired"
 
     @pytest.mark.asyncio
+    async def test_expires_stale_consent_granted_never_launched(self):
+        abandoned = _sweepable_session(
+            status="consent_granted",
+            started_at=None,
+            created_at=datetime.now(UTC) - timedelta(hours=2),
+        )
+        db = _mock_db_for([[], [abandoned], []])
+        svc = RemoteSupportService(MagicMock())
+        svc.db = db
+
+        counts = await svc.sweep_sessions()
+        assert counts["stale_abandoned"] == 1
+        assert abandoned.status == "expired"
+        assert abandoned.termination_reason == "stale_no_launch"
+
+    @pytest.mark.asyncio
     async def test_terminates_sessions_over_max_duration(self):
         overrun = _sweepable_session(
             status="active",
             started_at=datetime.now(UTC) - timedelta(minutes=90),
             max_duration_minutes=30,
         )
-        db = _mock_db_for([[], [overrun]])
+        db = _mock_db_for([[], [], [overrun]])
         svc = RemoteSupportService(MagicMock())
         svc.db = db
 
@@ -297,10 +318,10 @@ class TestSessionSweep:
             started_at=datetime.now(UTC) - timedelta(minutes=5),
             max_duration_minutes=30,
         )
-        db = _mock_db_for([[], [healthy]])
+        db = _mock_db_for([[], [], [healthy]])
         svc = RemoteSupportService(MagicMock())
         svc.db = db
 
         counts = await svc.sweep_sessions()
-        assert counts == {"expired": 0, "max_duration_terminated": 0}
+        assert counts == {"expired": 0, "max_duration_terminated": 0, "stale_abandoned": 0}
         assert healthy.status == "active"

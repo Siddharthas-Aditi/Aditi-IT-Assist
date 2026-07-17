@@ -21,6 +21,7 @@ from __future__ import annotations
 import enum
 import uuid as _uuid
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     Boolean,
@@ -36,6 +37,10 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
+
+if TYPE_CHECKING:
+    from app.models.auth import User
+    from app.models.support import SupportSession
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -62,9 +67,9 @@ class FeedbackSource(str, enum.Enum):
 class QualityBucket(str, enum.Enum):
     """Coarse quality signal, computed at submission time."""
 
-    POSITIVE = "positive"   # helpful=True AND resolved=True AND (rating is None OR rating >= 4)
-    NEUTRAL = "neutral"     # mixed signals — at least one positive, at least one negative
-    NEGATIVE = "negative"   # helpful=False OR resolved=False OR rating <= 2
+    POSITIVE = "positive"  # helpful=True AND resolved=True AND (rating is None OR rating >= 4)
+    NEUTRAL = "neutral"  # mixed signals — at least one positive, at least one negative
+    NEGATIVE = "negative"  # helpful=False OR resolved=False OR rating <= 2
 
 
 def _utcnow() -> datetime:
@@ -116,7 +121,7 @@ class ConversationFeedback(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     # ── Survey answers ──────────────────────────────────────────────
     helpful: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     resolved: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
-    rating: Mapped[int | None] = mapped_column(Integer, nullable=True)   # 1–5
+    rating: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 1–5
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # ── Submission metadata ─────────────────────────────────────────
@@ -162,10 +167,10 @@ class ConversationFeedback(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     review_flag_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     # ── Relationships ────────────────────────────────────────────────
-    session: Mapped["app.models.support.SupportSession"] = relationship(  # type: ignore[name-defined]
+    session: Mapped[SupportSession] = relationship(
         "SupportSession", foreign_keys=[conversation_id], lazy="select"
     )
-    submitted_by: Mapped["app.models.auth.User"] = relationship(  # type: ignore[name-defined]
+    submitted_by: Mapped[User] = relationship(
         "User", foreign_keys=[submitted_by_user_id], lazy="select"
     )
 
@@ -219,6 +224,6 @@ class MessageFeedback(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
 
     # ── Relationships ────────────────────────────────────────────────
-    submitted_by: Mapped["app.models.auth.User"] = relationship(  # type: ignore[name-defined]
+    submitted_by: Mapped[User] = relationship(
         "User", foreign_keys=[submitted_by_user_id], lazy="select"
     )

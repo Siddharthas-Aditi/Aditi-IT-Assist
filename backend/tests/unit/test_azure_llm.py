@@ -16,10 +16,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def _mock_settings(**overrides) -> MagicMock:
     """Return a settings mock pre-loaded with sensible Azure defaults."""
@@ -67,6 +67,7 @@ def _litellm_embedding_response(
 # ─────────────────────────────────────────────────────────────────────────────
 # 1. Config computed properties
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TestAzureConfig:
     """Verify config.py computed properties for the Azure provider."""
@@ -152,6 +153,7 @@ class TestAzureConfig:
 # 2. LLMService — Azure routing
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestLLMServiceAzure:
     """LLMService correctly uses Azure model names and forwards routing kwargs."""
 
@@ -159,6 +161,7 @@ class TestLLMServiceAzure:
         s = _mock_settings(**overrides)
         with patch("app.services.llm_service.settings", s):
             from app.services.llm_service import LLMService
+
             svc = LLMService()
         return svc, s
 
@@ -181,8 +184,11 @@ class TestLLMServiceAzure:
         """When AZURE_OPENAI_VERIFY_SSL=False the LiteLLM global is disabled."""
         import litellm
 
-        with patch("app.services.llm_service.settings", _mock_settings(AZURE_OPENAI_VERIFY_SSL=False)):
+        with patch(
+            "app.services.llm_service.settings", _mock_settings(AZURE_OPENAI_VERIFY_SSL=False)
+        ):
             from app.services.llm_service import LLMService
+
             LLMService()
 
         assert litellm.ssl_verify is False
@@ -199,7 +205,9 @@ class TestLLMServiceAzure:
         # settings.is_azure at call time, not only at construction time.
         with (
             patch("app.services.llm_service.settings", mock_s),
-            patch("litellm.acompletion", new_callable=AsyncMock, return_value=mock_resp) as mock_call,
+            patch(
+                "litellm.acompletion", new_callable=AsyncMock, return_value=mock_resp
+            ) as mock_call,
         ):
             result = await svc.complete("say hi")
 
@@ -216,8 +224,11 @@ class TestLLMServiceAzure:
 
         with patch("app.services.llm_service.settings", s):
             from app.services.llm_service import LLMService
+
             svc = LLMService()
-            with patch("litellm.acompletion", new_callable=AsyncMock, return_value=mock_resp) as mock_call:
+            with patch(
+                "litellm.acompletion", new_callable=AsyncMock, return_value=mock_resp
+            ) as mock_call:
                 await svc.complete("hello")
 
         assert mock_call.call_args.kwargs["api_key"] == "test-azure-key-abc123"
@@ -256,8 +267,11 @@ class TestLLMServiceAzure:
 
         with patch("app.services.llm_service.settings", s):
             from app.services.llm_service import LLMService
+
             svc = LLMService()
-            with patch("litellm.acompletion", new_callable=AsyncMock, return_value=mock_resp) as mock_call:
+            with patch(
+                "litellm.acompletion", new_callable=AsyncMock, return_value=mock_resp
+            ) as mock_call:
                 await svc.complete("hi")
 
         call_kwargs = mock_call.call_args.kwargs
@@ -269,6 +283,7 @@ class TestLLMServiceAzure:
 # 3. AzureOpenAIEmbeddingClient
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestAzureEmbeddingClient:
     """AzureOpenAIEmbeddingClient wraps litellm.aembedding correctly."""
 
@@ -276,6 +291,7 @@ class TestAzureEmbeddingClient:
         s = _mock_settings(**overrides)
         with patch("app.services.knowledge.indexing.settings", s):
             from app.services.knowledge.indexing import AzureOpenAIEmbeddingClient
+
             client = AzureOpenAIEmbeddingClient()
         return client, s
 
@@ -321,7 +337,9 @@ class TestAzureEmbeddingClient:
         client, s = self._make_client()
         mock_resp = _litellm_embedding_response([[0.1]])
 
-        with patch("litellm.aembedding", new_callable=AsyncMock, return_value=mock_resp) as mock_call:
+        with patch(
+            "litellm.aembedding", new_callable=AsyncMock, return_value=mock_resp
+        ) as mock_call:
             await client.embed(["test"])
 
         kw = mock_call.call_args.kwargs
@@ -374,6 +392,7 @@ class TestAzureEmbeddingClient:
 # 4. get_embedding_client() factory
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestGetEmbeddingClientFactory:
     """Factory returns the Azure client when properly configured."""
 
@@ -384,6 +403,7 @@ class TestGetEmbeddingClientFactory:
                 AzureOpenAIEmbeddingClient,
                 get_embedding_client,
             )
+
             client = get_embedding_client()
         assert isinstance(client, AzureOpenAIEmbeddingClient)
 
@@ -395,6 +415,7 @@ class TestGetEmbeddingClientFactory:
                 EmbeddingClient,
                 get_embedding_client,
             )
+
             client = get_embedding_client()
         assert type(client) is EmbeddingClient
         assert not isinstance(client, AzureOpenAIEmbeddingClient)
@@ -403,10 +424,10 @@ class TestGetEmbeddingClientFactory:
         s = _mock_settings(AZURE_OPENAI_API_KEY="")
         with patch("app.services.knowledge.indexing.settings", s):
             from app.services.knowledge.indexing import (
-                AzureOpenAIEmbeddingClient,
                 EmbeddingClient,
                 get_embedding_client,
             )
+
             client = get_embedding_client()
         assert type(client) is EmbeddingClient
 
@@ -414,10 +435,10 @@ class TestGetEmbeddingClientFactory:
         s = _mock_settings(AZURE_OPENAI_ENDPOINT="")
         with patch("app.services.knowledge.indexing.settings", s):
             from app.services.knowledge.indexing import (
-                AzureOpenAIEmbeddingClient,
                 EmbeddingClient,
                 get_embedding_client,
             )
+
             client = get_embedding_client()
         assert type(client) is EmbeddingClient
 
@@ -425,6 +446,7 @@ class TestGetEmbeddingClientFactory:
 # ─────────────────────────────────────────────────────────────────────────────
 # 5. LLM Extractor (ingestion) via mocked LLMService
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TestLLMExtractorAzure:
     """enrich_with_llm in the ingestion pipeline uses LLMService correctly."""
@@ -458,7 +480,7 @@ class TestLLMExtractorAzure:
 
         with patch("app.services.ingestion.llm_extractor.settings") as mock_settings:
             mock_settings.INGESTION_LLM_ENABLED = True
-            result = await enrich_with_llm(candidate, profile, mock_svc)
+            await enrich_with_llm(candidate, profile, mock_svc)
 
         # The call was made
         mock_svc.complete.assert_awaited_once()

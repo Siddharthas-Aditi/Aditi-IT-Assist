@@ -122,6 +122,13 @@ class TestUnknownIntentTolerance:
             delta = await supervisor_shadow_node(state)
         # No crash; some valid action emitted.
         assert delta["supervisor_decision"]["action"] in {
-            "delegate", "delegate_sub", "respond", "clarify",
-            "retrieve", "escalate", "end", "reset_topic", "web_fallback",
+            "delegate",
+            "delegate_sub",
+            "respond",
+            "clarify",
+            "retrieve",
+            "escalate",
+            "end",
+            "reset_topic",
+            "web_fallback",
         }

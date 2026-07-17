@@ -13,7 +13,6 @@ not the exact script. The agent uses LLM for natural phrasing.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
 
 
 @dataclass
@@ -191,8 +190,7 @@ ZOOM_PLAYBOOK = IssuePlaybook(
         PlaybookQuestion(
             slot="symptom",
             question=(
-                "I can see this is a Zoom/video conferencing issue. "
-                "What exactly is going wrong?"
+                "I can see this is a Zoom/video conferencing issue. What exactly is going wrong?"
             ),
             priority=1,
             options=[
@@ -246,8 +244,7 @@ INTUNE_PLAYBOOK = IssuePlaybook(
         PlaybookQuestion(
             slot="symptom",
             question=(
-                "I can see this is a device management/Intune issue. "
-                "What's the device showing?"
+                "I can see this is a device management/Intune issue. What's the device showing?"
             ),
             priority=1,
             options=[
@@ -309,7 +306,9 @@ CAMERA_PLAYBOOK = IssuePlaybook(
         ),
         PlaybookQuestion(
             slot="affected_system",
-            question="Which application are you trying to use the camera with (Zoom, Teams, other)?",
+            question=(
+                "Which application are you trying to use the camera with (Zoom, Teams, other)?"
+            ),
             priority=2,
         ),
         PlaybookQuestion(
@@ -356,7 +355,10 @@ NETWORK_PLAYBOOK = IssuePlaybook(
         ),
         PlaybookQuestion(
             slot="error_message",
-            question="Do you see any specific error when trying to connect (e.g., 'connection timed out', 'authentication failed')?",
+            question=(
+                "Do you see any specific error when trying to connect "
+                "(e.g., 'connection timed out', 'authentication failed')?"
+            ),
             priority=3,
         ),
     ],
@@ -485,7 +487,10 @@ HARDWARE_OTHER_PLAYBOOK = IssuePlaybook(
         ),
         PlaybookQuestion(
             slot="symptom",
-            question="What's happening with the device — not detected, not working properly, or something else?",
+            question=(
+                "What's happening with the device — not detected, not working properly, "
+                "or something else?"
+            ),
             priority=2,
         ),
     ],
@@ -516,21 +521,26 @@ SIXTH_SENSE_PLAYBOOK = IssuePlaybook(
             priority=1,
             options=[
                 ClarificationOption(
-                    "Can't log in / login error", "login-failure",
+                    "Can't log in / login error",
+                    "login-failure",
                     follow_up="Are you seeing an 'Unhandled Message' error?",
                 ),
                 ClarificationOption(
-                    "Account seems locked/blocked", "account-locked",
+                    "Account seems locked/blocked",
+                    "account-locked",
                     follow_up="Did you enter your password incorrectly multiple times?",
                 ),
                 ClarificationOption(
-                    "'Unhandled Message' error", "unhandled-message",
+                    "'Unhandled Message' error",
+                    "unhandled-message",
                 ),
                 ClarificationOption(
-                    "OTP not received", "otp-issue",
+                    "OTP not received",
+                    "otp-issue",
                 ),
                 ClarificationOption(
-                    "Need to reset password", "password-reset",
+                    "Need to reset password",
+                    "password-reset",
                 ),
                 ClarificationOption("Something else", "other"),
             ],
@@ -563,8 +573,14 @@ SIXTH_SENSE_PLAYBOOK = IssuePlaybook(
     ],
     retrieval_category_filter="access/permissions",
     retrieval_boost_terms=[
-        "sixth sense", "naukri", "login", "locked", "blocked",
-        "unhandled message", "otp", "password",
+        "sixth sense",
+        "naukri",
+        "login",
+        "locked",
+        "blocked",
+        "unhandled message",
+        "otp",
+        "password",
     ],
     max_retrieval_results=3,
     escalation_triggers=[

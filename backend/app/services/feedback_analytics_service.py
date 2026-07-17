@@ -10,8 +10,7 @@ Responsibilities:
 
 from __future__ import annotations
 
-import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 import structlog
@@ -24,6 +23,8 @@ from app.schemas.feedback import (
 )
 
 if TYPE_CHECKING:
+    import uuid
+
     from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = structlog.get_logger()
@@ -66,7 +67,7 @@ class FeedbackAnalyticsService:
     ) -> FeedbackAnalyticsSummary:
         """Compute aggregate feedback metrics for the given window."""
         if not to_dt:
-            to_dt = datetime.now(timezone.utc)
+            to_dt = datetime.now(UTC)
         if not from_dt:
             from_dt = to_dt - timedelta(days=30)
 
@@ -115,9 +116,7 @@ class FeedbackAnalyticsService:
         for r in rows:
             if r.category:
                 cat_counts[r.category] = cat_counts.get(r.category, 0) + 1
-        top_cats = dict(
-            sorted(cat_counts.items(), key=lambda x: x[1], reverse=True)[:10]
-        )
+        top_cats = dict(sorted(cat_counts.items(), key=lambda x: x[1], reverse=True)[:10])
 
         flagged_count = await self.repo.count_flagged(category=category)
 
@@ -141,9 +140,7 @@ class FeedbackAnalyticsService:
             neutral_count=neutral_count,
             negative_count=negative_count,
             escalation_rate=_safe_rate(len(escalated_rows), total),
-            escalated_resolved_rate=_safe_rate(
-                len(escalated_resolved), len(escalated_rows)
-            ),
+            escalated_resolved_rate=_safe_rate(len(escalated_resolved), len(escalated_rows)),
             category_breakdown=top_cats,
             flagged_count=flagged_count,
         )
@@ -162,9 +159,7 @@ class FeedbackAnalyticsService:
         """Return feedback health summary for each of the given article IDs."""
         summaries: dict[str, ArticleFeedbackSummary] = {}
         for article_id in article_ids:
-            rows = await self.repo.get_rows_for_article(
-                article_id, from_dt=from_dt, to_dt=to_dt
-            )
+            rows = await self.repo.get_rows_for_article(article_id, from_dt=from_dt, to_dt=to_dt)
             total = len(rows)
             positive = sum(1 for r in rows if r.quality_bucket == "positive")
             negative = sum(1 for r in rows if r.quality_bucket == "negative")
@@ -200,14 +195,8 @@ class FeedbackAnalyticsService:
         writing the flag to the KnowledgeArticle record — this service
         only identifies candidates.
         """
-        health = await self.get_article_health(
-            article_ids, from_dt=from_dt, to_dt=to_dt
-        )
-        flagged = [
-            aid
-            for aid, summary in health.items()
-            if summary.negative_sessions >= threshold
-        ]
+        health = await self.get_article_health(article_ids, from_dt=from_dt, to_dt=to_dt)
+        flagged = [aid for aid, summary in health.items() if summary.negative_sessions >= threshold]
         if flagged:
             logger.warning(
                 "feedback.articles_flagged",
@@ -230,13 +219,11 @@ class FeedbackAnalyticsService:
     ) -> AgentFeedbackSummary:
         """Compute feedback metrics for a specific live IT agent."""
         if not to_dt:
-            to_dt = datetime.now(timezone.utc)
+            to_dt = datetime.now(UTC)
         if not from_dt:
             from_dt = to_dt - timedelta(days=30)
 
-        rows = await self.repo.get_rows_for_agent(
-            agent_user_id, from_dt=from_dt, to_dt=to_dt
-        )
+        rows = await self.repo.get_rows_for_agent(agent_user_id, from_dt=from_dt, to_dt=to_dt)
         total = len(rows)
         helpful_vals = [r.helpful for r in rows if r.helpful is not None]
         resolved_vals = [r.resolved for r in rows if r.resolved is not None]

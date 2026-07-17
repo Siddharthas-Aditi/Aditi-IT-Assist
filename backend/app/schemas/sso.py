@@ -6,7 +6,7 @@ manage group-role mappings, and handle certificate operations.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime  # noqa: TC003 - pydantic evaluates these annotations at runtime
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -18,7 +18,9 @@ class IdPConfigBase(BaseModel):
     """Base fields for Identity Provider configuration."""
 
     idp_id: str = Field(
-        ..., min_length=2, max_length=100,
+        ...,
+        min_length=2,
+        max_length=100,
         description="Short unique identifier (e.g., 'entra-prod')",
         pattern=r"^[a-z0-9][a-z0-9\-]+$",
     )
@@ -32,20 +34,24 @@ class IdPConfigCreate(IdPConfigBase):
 
     # Endpoints
     entity_id: str = Field(
-        ..., description="IdP Entity ID / Issuer URL",
+        ...,
+        description="IdP Entity ID / Issuer URL",
     )
     sso_url: str = Field(
-        ..., description="IdP Single Sign-On URL",
+        ...,
+        description="IdP Single Sign-On URL",
     )
     sso_post_url: str | None = None
     slo_url: str | None = None
     metadata_url: str | None = Field(
-        None, description="Federation metadata URL for auto-refresh",
+        None,
+        description="Federation metadata URL for auto-refresh",
     )
 
     # Certificate
     x509_cert: str = Field(
-        ..., description="IdP signing certificate (PEM format)",
+        ...,
+        description="IdP signing certificate (PEM format)",
     )
     x509_cert_secondary: str | None = None
 
@@ -189,13 +195,16 @@ class IdPPresetRequest(BaseModel):
 
     preset: Literal["entra_id", "okta", "onelogin", "google_workspace"]
     tenant_id: str | None = Field(
-        None, description="Azure AD Tenant ID (for Entra ID)",
+        None,
+        description="Azure AD Tenant ID (for Entra ID)",
     )
     okta_domain: str | None = Field(
-        None, description="Okta domain (e.g., company.okta.com)",
+        None,
+        description="Okta domain (e.g., company.okta.com)",
     )
     app_id: str | None = Field(
-        None, description="Application/Client ID at the IdP",
+        None,
+        description="Application/Client ID at the IdP",
     )
 
 
@@ -206,10 +215,12 @@ class GroupRoleMappingBase(BaseModel):
     """Base fields for group-to-role mapping."""
 
     idp_group_name: str = Field(
-        ..., description="Group name/ID as it appears in IdP claims",
+        ...,
+        description="Group name/ID as it appears in IdP claims",
     )
     internal_role_name: str = Field(
-        ..., description="Internal RBAC role (e.g., 'it_agent')",
+        ...,
+        description="Internal RBAC role (e.g., 'it_agent')",
         pattern=r"^(employee|it_agent|it_lead|it_admin|security_auditor)$",
     )
     match_type: Literal["exact", "prefix", "regex"] = "exact"
@@ -250,10 +261,12 @@ class CertificateUpload(BaseModel):
     """Upload an IdP signing certificate."""
 
     certificate_pem: str = Field(
-        ..., description="X.509 certificate in PEM format",
+        ...,
+        description="X.509 certificate in PEM format",
     )
     is_primary: bool = Field(
-        default=True, description="Set as primary signing certificate",
+        default=True,
+        description="Set as primary signing certificate",
     )
 
 
@@ -304,7 +317,8 @@ class JITProvisioningConfig(BaseModel):
     auto_activate: bool = True
     default_role: str = "employee"
     require_email_domain: str | None = Field(
-        None, description="Only provision users from this email domain",
+        None,
+        description="Only provision users from this email domain",
     )
     create_auth_identity: bool = True
     sync_attributes_on_login: bool = True
@@ -320,6 +334,7 @@ class OffboardingConfig(BaseModel):
     )
     revoke_sessions_on_deactivate: bool = True
     retain_data_days: int = Field(
-        default=90, description="Days to retain user data after deactivation",
+        default=90,
+        description="Days to retain user data after deactivation",
     )
     notify_admin_on_deactivation: bool = True
