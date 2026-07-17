@@ -222,6 +222,15 @@ class Settings(BaseSettings):
     # fail to resolve the issue (instead of walking every remaining step).
     RESOLUTION_MISS_ESCALATE_THRESHOLD: int = 3
 
+    # ── Web research (B2) ────────────────────────────────────────────
+    FEATURE_WEB_RESEARCH: bool = False
+    # Which provider backs governed web research: "google" | "tavily".
+    WEB_SEARCH_PROVIDER: str = "google"
+    GOOGLE_SEARCH_API_KEY: str = ""
+    GOOGLE_SEARCH_CX: str = ""  # Programmable Search Engine ID
+    # (TAVILY_API_KEY kept for the alternative provider.)
+    TAVILY_API_KEY: str = ""
+
     # ── Supervisor routing (Phase-1 dual-run) ────────────────────────
     # When SHADOW is on, the supervisor runs after triage on every turn but
     # its decision is only LOGGED — the legacy graph still drives routing.

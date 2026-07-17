@@ -82,6 +82,9 @@ ignore = [
 "app/core/config.py" = ["N802"]
 # Test helpers use short/upper-case locals (matrix/vector fixtures, `l`) freely.
 "tests/**" = ["N806", "E741"]
+# `import web_search_service as W` is a deliberate short module alias used
+# throughout this test file's assertions (W.httpx, W.settings, W.DomainTrust).
+"tests/unit/test_web_search_providers.py" = ["N812"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["app"]
