@@ -1721,7 +1721,7 @@ _YAML_ARTICLES = [
         "article_type": "troubleshooting",
         "audience": "employee",
         "category": "hardware/camera",
-        "subcategory": "camera-access",
+        "subcategory": "camera-not-detected",
         "platform": "windows",
         "issue_type": "camera_fault",
         "severity_hint": "medium",
@@ -2780,12 +2780,496 @@ _YAML_ARTICLES = [
         "escalation_criteria": "If audio issues persist after checking all device settings, contact IT.",
         "escalation_target_team": "Endpoint & Productivity",
     },
+    {
+        "slug": "laptop-keyboard-not-working",
+        "title": "Laptop Keyboard Not Working",
+        "short_summary": "Fix a laptop keyboard that is unresponsive, typing wrong characters, or intermittent.",
+        "article_type": "troubleshooting",
+        "audience": "employee",
+        "category": "hardware/laptop",
+        "subcategory": "keyboard-not-working",
+        "product_or_system": "laptop",
+        "platform": "windows",
+        "issue_type": "hardware_fault",
+        "severity_hint": "medium",
+        "tags": ["keyboard", "keys", "typing", "laptop", "hardware"],
+        "keywords": [
+            "keys not responding",
+            "typing wrong characters",
+            "on-screen keyboard",
+            "keyboard layout",
+        ],
+        "ownership_group": "endpoint-productivity",
+        "symptoms": [
+            "Keyboard keys are not responding",
+            "Typing produces incorrect characters",
+            "Keys work only intermittently",
+        ],
+        "probable_causes": [
+            "Physical dust or debris under the keys",
+            "Temporary driver/state glitch",
+            "Wrong keyboard language/layout selected",
+        ],
+        "prerequisites": ["Aditi laptop", "Ability to open Windows Settings"],
+        "resolution_steps": [
+            {
+                "step_number": 1,
+                "instruction": "Check for physical obstructions",
+                "details": "Remove dust or debris and make sure no key is physically stuck.",
+            },
+            {
+                "step_number": 2,
+                "instruction": "Restart the laptop",
+                "details": "Restart the device and test the keyboard again.",
+            },
+            {
+                "step_number": 3,
+                "instruction": "Test with the On-Screen Keyboard",
+                "details": (
+                    "Settings -> Accessibility -> Keyboard -> enable On-Screen "
+                    "Keyboard to confirm whether the issue is hardware or software."
+                ),
+            },
+            {
+                "step_number": 4,
+                "instruction": "Check the keyboard language/layout",
+                "details": (
+                    "Settings -> Time & Language -> Language & Region -> verify "
+                    "the correct keyboard layout is selected."
+                ),
+            },
+        ],
+        "validation_steps": [
+            {
+                "step_number": 1,
+                "instruction": "Open Notepad and confirm every key types the expected character.",
+            },
+        ],
+        "escalation_criteria": (
+            "Keyboard still unresponsive after these steps (likely hardware fault "
+            "needing diagnostics)."
+        ),
+        "escalation_target_team": "Endpoint & Productivity",
+    },
+    {
+        "slug": "laptop-trackpad-not-working",
+        "title": "Laptop Touchpad / Trackpad Not Working",
+        "short_summary": "Fix a laptop touchpad that is unresponsive, jumpy, or ignoring gestures.",
+        "article_type": "troubleshooting",
+        "audience": "employee",
+        "category": "hardware/laptop",
+        "subcategory": "trackpad-not-working",
+        "product_or_system": "laptop",
+        "platform": "windows",
+        "issue_type": "hardware_fault",
+        "severity_hint": "medium",
+        "tags": ["trackpad", "touchpad", "cursor", "gestures", "laptop"],
+        "keywords": [
+            "touchpad disabled",
+            "cursor jumping",
+            "gestures not working",
+            "external mouse",
+        ],
+        "ownership_group": "endpoint-productivity",
+        "symptoms": [
+            "Touchpad is not responding",
+            "Cursor moves unexpectedly",
+            "Gestures are not working",
+        ],
+        "probable_causes": [
+            "Touchpad disabled in settings",
+            "Conflict with a connected external mouse",
+            "Dirt or moisture on the touchpad surface",
+        ],
+        "prerequisites": ["Aditi laptop", "Ability to open Windows Settings"],
+        "resolution_steps": [
+            {
+                "step_number": 1,
+                "instruction": "Check touchpad settings",
+                "details": (
+                    "Settings -> Bluetooth & Devices -> Touchpad -> ensure the touchpad is enabled."
+                ),
+            },
+            {
+                "step_number": 2,
+                "instruction": "Disconnect any external mouse",
+                "details": "Remove external mice and test the touchpad on its own.",
+            },
+            {
+                "step_number": 3,
+                "instruction": "Restart the laptop",
+                "details": "Restart the device and verify touchpad functionality.",
+            },
+            {
+                "step_number": 4,
+                "instruction": "Clean the touchpad",
+                "details": ("Make sure the surface is clean and dry; remove any dirt or moisture."),
+            },
+        ],
+        "validation_steps": [
+            {
+                "step_number": 1,
+                "instruction": (
+                    "Move the cursor and perform a two-finger scroll to confirm normal behaviour."
+                ),
+            },
+        ],
+        "escalation_criteria": "Touchpad still malfunctions after these steps.",
+        "escalation_target_team": "Endpoint & Productivity",
+    },
+    {
+        "slug": "laptop-wont-power-on",
+        "title": "Laptop Not Powering On",
+        "short_summary": (
+            "Recover a laptop that does not turn on, shows no display, or is "
+            "unresponsive to the power button."
+        ),
+        "article_type": "troubleshooting",
+        "audience": "employee",
+        "category": "hardware/laptop",
+        "subcategory": "laptop-wont-power-on",
+        "product_or_system": "laptop",
+        "platform": "windows",
+        "issue_type": "hardware_fault",
+        "severity_hint": "high",
+        "tags": ["power", "won't turn on", "no display", "dead", "laptop"],
+        "keywords": ["charging led", "power reset", "hold power button", "no display"],
+        "ownership_group": "endpoint-productivity",
+        "symptoms": [
+            "Laptop does not turn on",
+            "No display when powered",
+            "No response when the power button is pressed",
+        ],
+        "probable_causes": [
+            "No power reaching the laptop (adapter/outlet)",
+            "External device interfering with boot",
+            "Residual power state needing a hard reset",
+        ],
+        "prerequisites": ["Power adapter", "A known-working wall outlet"],
+        "resolution_steps": [
+            {
+                "step_number": 1,
+                "instruction": "Check the power connection",
+                "details": (
+                    "Ensure the adapter is securely connected, the wall outlet "
+                    "works, and the charging LED is on."
+                ),
+            },
+            {
+                "step_number": 2,
+                "instruction": "Disconnect the charger and external devices",
+                "details": (
+                    "Remove the charger, all USB devices, docking stations, and "
+                    "external monitors, then try again."
+                ),
+            },
+            {
+                "step_number": 3,
+                "instruction": "Perform a power reset",
+                "details": (
+                    "Disconnect the charger, press and hold the power button for "
+                    "15-20 seconds, then reconnect the charger and power on."
+                ),
+            },
+        ],
+        "validation_steps": [
+            {
+                "step_number": 1,
+                "instruction": "Confirm the laptop boots to the Windows sign-in screen.",
+            },
+        ],
+        "escalation_criteria": (
+            "Laptop still does not power on after a power reset (hardware diagnostics required)."
+        ),
+        "escalation_target_team": "Endpoint & Productivity",
+    },
+    {
+        "slug": "laptop-battery-not-charging",
+        "title": "Laptop Battery Not Charging",
+        "short_summary": (
+            "Fix a laptop that stays at the same battery percentage or shows "
+            "'plugged in, not charging'."
+        ),
+        "article_type": "troubleshooting",
+        "audience": "employee",
+        "category": "hardware/laptop",
+        "subcategory": "battery-not-charging",
+        "product_or_system": "laptop",
+        "platform": "windows",
+        "issue_type": "hardware_fault",
+        "severity_hint": "medium",
+        "tags": ["battery", "charging", "power adapter", "laptop"],
+        "keywords": [
+            "plugged in not charging",
+            "charging led",
+            "charger damage",
+            "battery status",
+        ],
+        "ownership_group": "endpoint-productivity",
+        "symptoms": [
+            "Battery does not charge when plugged in",
+            "Battery percentage stays the same",
+            "Windows shows 'Plugged in, Not Charging'",
+        ],
+        "probable_causes": [
+            "Loose or faulty charger connection",
+            "Damaged charger or cable",
+            "Battery firmware/state glitch",
+        ],
+        "prerequisites": ["Original or compatible charger"],
+        "resolution_steps": [
+            {
+                "step_number": 1,
+                "instruction": "Verify the charger connection",
+                "details": (
+                    "Ensure the charger is securely connected and the charging indicator LED is on."
+                ),
+            },
+            {
+                "step_number": 2,
+                "instruction": "Inspect the charger",
+                "details": (
+                    "Check the charger and cable for visible damage; try another "
+                    "compatible charger if available."
+                ),
+            },
+            {
+                "step_number": 3,
+                "instruction": "Restart the laptop",
+                "details": "Restart while keeping the charger connected.",
+            },
+            {
+                "step_number": 4,
+                "instruction": "Check the battery status",
+                "details": (
+                    "If Windows shows 'Plugged in, Not Charging', note the exact "
+                    "message before contacting IT."
+                ),
+            },
+        ],
+        "validation_steps": [
+            {
+                "step_number": 1,
+                "instruction": "Confirm the battery percentage increases while plugged in.",
+            },
+        ],
+        "escalation_criteria": (
+            "Battery still does not charge (battery/charger replacement may be needed)."
+        ),
+        "escalation_target_team": "Endpoint & Productivity",
+    },
+    {
+        "slug": "laptop-external-monitor-not-detected",
+        "title": "External Monitor Not Detected",
+        "short_summary": (
+            "Get Windows to detect and display on an external monitor connected to the laptop."
+        ),
+        "article_type": "troubleshooting",
+        "audience": "employee",
+        "category": "hardware/laptop",
+        "subcategory": "external-monitor-not-detected",
+        "product_or_system": "laptop",
+        "platform": "windows",
+        "issue_type": "display_issue",
+        "severity_hint": "medium",
+        "tags": ["monitor", "external display", "hdmi", "displayport", "usb-c", "laptop"],
+        "keywords": ["detect displays", "windows + p", "input source", "second screen"],
+        "ownership_group": "endpoint-productivity",
+        "symptoms": [
+            "Laptop does not detect an external monitor",
+            "External monitor shows no content",
+        ],
+        "probable_causes": [
+            "Loose or wrong cable / port",
+            "Monitor on the wrong input source",
+            "Windows not projecting to the second display",
+        ],
+        "prerequisites": ["External monitor + video cable (HDMI/DisplayPort/USB-C)"],
+        "resolution_steps": [
+            {
+                "step_number": 1,
+                "instruction": "Check cable connections",
+                "details": (
+                    "Ensure HDMI/DisplayPort/USB-C cables are secure and the monitor is powered on."
+                ),
+            },
+            {
+                "step_number": 2,
+                "instruction": "Select the correct input source",
+                "details": (
+                    "Use the monitor's menu buttons to select the matching input (HDMI, DP, USB-C)."
+                ),
+            },
+            {
+                "step_number": 3,
+                "instruction": "Detect the display",
+                "details": "Settings -> System -> Display -> click Detect under Multiple displays.",
+            },
+            {
+                "step_number": 4,
+                "instruction": "Use the display shortcut",
+                "details": (
+                    "Press Windows + P and choose Duplicate, Extend, or Second screen only."
+                ),
+            },
+            {
+                "step_number": 5,
+                "instruction": "Restart both devices",
+                "details": "Restart the laptop and the monitor and retry.",
+            },
+        ],
+        "validation_steps": [
+            {
+                "step_number": 1,
+                "instruction": "Confirm the desktop appears on the external monitor.",
+            },
+        ],
+        "escalation_criteria": "Monitor still not detected after these steps.",
+        "escalation_target_team": "Endpoint & Productivity",
+    },
+    {
+        "slug": "laptop-slow-performance",
+        "title": "Laptop Running Slow",
+        "short_summary": "Speed up a laptop that is slow to open apps, browse, or perform daily tasks.",
+        "article_type": "troubleshooting",
+        "audience": "employee",
+        "category": "system/performance",
+        "subcategory": "slow-performance",
+        "product_or_system": "laptop",
+        "platform": "windows",
+        "issue_type": "performance",
+        "severity_hint": "medium",
+        "tags": ["slow", "performance", "lag", "freezing", "laptop"],
+        "keywords": ["free up disk space", "recycle bin", "pending updates", "restart"],
+        "ownership_group": "endpoint-productivity",
+        "symptoms": [
+            "Applications are slow to open",
+            "Browsing and daily tasks lag",
+            "The laptop freezes intermittently",
+        ],
+        "probable_causes": [
+            "Accumulated temporary memory usage",
+            "Low free disk space",
+            "Pending Windows updates",
+            "Device running for many days without a restart",
+        ],
+        "prerequisites": ["Aditi laptop"],
+        "resolution_steps": [
+            {
+                "step_number": 1,
+                "instruction": "Restart the laptop",
+                "details": "Restart to clear temporary memory usage.",
+            },
+            {
+                "step_number": 2,
+                "instruction": "Free up disk space",
+                "details": (
+                    "Delete unnecessary files, empty the Recycle Bin, and remove "
+                    "unused applications if permitted."
+                ),
+            },
+            {
+                "step_number": 3,
+                "instruction": "Install Windows updates",
+                "details": "Settings -> Windows Update -> install pending updates and restart.",
+            },
+            {
+                "step_number": 4,
+                "instruction": "Restart periodically",
+                "details": (
+                    "If the laptop has run for several days, restart it to restore performance."
+                ),
+            },
+        ],
+        "validation_steps": [
+            {
+                "step_number": 1,
+                "instruction": "Open a few applications and confirm they respond promptly.",
+            },
+        ],
+        "escalation_criteria": (
+            "Performance remains slow after these steps (further diagnostics needed)."
+        ),
+        "escalation_target_team": "Endpoint & Productivity",
+    },
+    {
+        "slug": "windows-update-failure",
+        "title": "Windows Update Fails or Gets Stuck",
+        "short_summary": "Resolve Windows updates that fail to install, get stuck, or show error codes.",
+        "article_type": "troubleshooting",
+        "audience": "employee",
+        "category": "software/windows-update",
+        "subcategory": "windows-update-failure",
+        "product_or_system": "windows",
+        "platform": "windows",
+        "issue_type": "update_failure",
+        "severity_hint": "medium",
+        "tags": ["windows update", "update stuck", "update error", "patching"],
+        "keywords": ["check for updates", "update troubleshooter", "disk space", "error code"],
+        "ownership_group": "endpoint-productivity",
+        "symptoms": [
+            "Windows updates fail to install",
+            "Updates remain stuck",
+            "Update error codes are displayed",
+        ],
+        "probable_causes": [
+            "Unstable internet connection",
+            "Transient update-service state",
+            "Insufficient free disk space",
+        ],
+        "prerequisites": ["Stable internet connection"],
+        "resolution_steps": [
+            {
+                "step_number": 1,
+                "instruction": "Check the internet connection",
+                "details": "Ensure the laptop has a stable internet connection.",
+            },
+            {
+                "step_number": 2,
+                "instruction": "Restart the laptop",
+                "details": "Restart and try checking for updates again.",
+            },
+            {
+                "step_number": 3,
+                "instruction": "Check for updates",
+                "details": "Settings -> Windows Update -> Check for updates.",
+            },
+            {
+                "step_number": 4,
+                "instruction": "Run the Windows Update troubleshooter",
+                "details": (
+                    "Settings -> System -> Troubleshoot -> Other troubleshooters "
+                    "-> run Windows Update."
+                ),
+            },
+            {
+                "step_number": 5,
+                "instruction": "Free up disk space",
+                "details": "Ensure there is sufficient free disk space before installing updates.",
+            },
+        ],
+        "validation_steps": [
+            {
+                "step_number": 1,
+                "instruction": "Confirm Windows Update reports the device is up to date.",
+            },
+        ],
+        "escalation_criteria": (
+            "Updates continue to fail or show an error code (contact IT with a "
+            "screenshot of the error)."
+        ),
+        "escalation_target_team": "Endpoint & Productivity",
+    },
 ]
 
 # Extend ARTICLES with the YAML-parity entries (slug uniqueness enforced by seeder)
 ARTICLES.extend(_YAML_ARTICLES)
 
-# Add hardware/audio to taxonomy if not present
+# Add newer categories to taxonomy if not present
 TAXONOMY_TERMS = list(TAXONOMY_TERMS) + [
     ("category", "hardware/audio", "Hardware - Audio", "hardware/audio"),
+    ("category", "hardware/laptop", "Hardware - Laptop", "hardware/laptop"),
+    ("category", "system/performance", "System - Performance", "system/performance"),
+    ("category", "software/windows-update", "Software - Windows Update", "software/windows-update"),
+    ("product", "laptop", "Laptop", None),
 ]
