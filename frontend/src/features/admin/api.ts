@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { apiRequest } from '@/lib/api';
+import { apiRequest, buildHeaders, buildUrl } from '@/lib/api';
 import type {
   AgentWorkload,
   AuditEventDetail,
@@ -11,6 +11,7 @@ import type {
   AuditListResponse,
   DashboardMetrics,
   RoleSummary,
+  SpecialistReport,
   SystemStats,
   UserDetail,
   UserFilters,
@@ -31,6 +32,8 @@ export const adminKeys = {
   audit: (filters: AuditFilters) => ['admin', 'audit', filters] as const,
   auditEvent: (id: string) => ['admin', 'audit-event', id] as const,
   auditFacets: ['admin', 'audit-facets'] as const,
+  specialistReport: (start: string, end: string) =>
+    ['admin', 'specialist-report', start, end] as const,
 };
 
 // ── Stats / analytics ─────────────────────────────────────────────────
@@ -170,4 +173,42 @@ export function useAuditFacets() {
     queryFn: () => apiRequest<AuditFacets>(`${ADMIN}/audit-log/facets`),
     staleTime: 5 * 60 * 1000,
   });
+}
+
+// ── Per-specialist report ────────────────────────────────────────────
+
+export function useSpecialistReport(start: string, end: string) {
+  return useQuery({
+    queryKey: adminKeys.specialistReport(start, end),
+    queryFn: () =>
+      apiRequest<SpecialistReport>('/analytics/specialist-report', {
+        query: { start, end },
+      }),
+  });
+}
+
+/**
+ * Fetches the specialist report export as a blob (with the same auth header
+ * `apiRequest` sends) and triggers a browser download.
+ *
+ * Not routed through `apiRequest` because the response is a binary export
+ * (csv/xlsx/pdf), not JSON — but it reuses the exact same base-URL builder
+ * (`buildUrl`) and auth-header helper (`buildHeaders`) from `lib/api.ts` so
+ * the request is authenticated identically.
+ */
+export async function downloadSpecialistReport(
+  start: string,
+  end: string,
+  format: 'csv' | 'xlsx' | 'pdf',
+): Promise<void> {
+  const url = buildUrl('/analytics/specialist-report/export', { start, end, format });
+  const res = await fetch(url, { headers: buildHeaders(undefined) });
+  if (!res.ok) throw new Error(`Export failed: ${res.status}`);
+  const blob = await res.blob();
+  const href = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = href;
+  a.download = `specialist-report.${format}`;
+  a.click();
+  URL.revokeObjectURL(href);
 }

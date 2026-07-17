@@ -150,3 +150,23 @@ export interface SystemStats {
   total_sessions: number;
   resolution_rate: number;
 }
+
+export interface SpecialistReportRow {
+  agent_id: string | null;
+  agent_name: string;
+  agent_email: string | null;
+  total_tickets: number;
+  reopened: number;
+  avg_resolution_hours: number | null;
+  sla_violations: number;
+  csat_avg: number | null;
+  dsat: number;
+  feedback_responses: number;
+}
+
+export interface SpecialistReport {
+  period_start: string;
+  period_end: string;
+  rows: SpecialistReportRow[];
+  totals: SpecialistReportRow;
+}

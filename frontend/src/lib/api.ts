@@ -65,7 +65,7 @@ export class ApiError extends Error {
   }
 }
 
-type Query = Record<string, string | number | boolean | null | undefined>;
+export type Query = Record<string, string | number | boolean | null | undefined>;
 
 /**
  * Turn a backend error body into a human-readable message.
@@ -120,7 +120,7 @@ interface RequestOptions {
   query?: Query;
 }
 
-function buildUrl(path: string, query?: Query): string {
+export function buildUrl(path: string, query?: Query): string {
   const url = `${API_BASE}${path}`;
   if (!query) return url;
   const params = new URLSearchParams();
@@ -174,7 +174,7 @@ async function refreshAccessToken(): Promise<string | null> {
 }
 
 /** Build headers for one attempt. Re-built on retry so the new token is sent. */
-function buildHeaders(body: unknown): Record<string, string> {
+export function buildHeaders(body: unknown): Record<string, string> {
   const token = useAuthStore.getState().token;
   const headers: Record<string, string> = {};
   if (token) headers.Authorization = `Bearer ${token}`;
