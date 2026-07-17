@@ -214,6 +214,16 @@ class Settings(BaseSettings):
     # sides can never disagree about what "stale" means.
     LIVE_WAIT_TIMEOUT_SECONDS: int = 900  # 15 minutes
 
+    # ── Scheduled report email (C2) ──────────────────────────────────
+    # Reuses the SMTP_* settings above for transport; off by default.
+    FEATURE_SCHEDULED_REPORTS: bool = False
+    REPORT_RECIPIENTS: str = ""  # comma-separated emails
+    SCHEDULED_REPORT_DAY: int = 1  # day-of-month to send
+    SCHEDULED_REPORT_CHECK_INTERVAL_SECONDS: int = 86400  # daily check
+
+    def report_recipients(self) -> list[str]:
+        return [e.strip() for e in self.REPORT_RECIPIENTS.split(",") if e.strip()]
+
     # ── Conversational chat (B1) ─────────────────────────────────────
     # How many troubleshooting steps to present per turn. 1 = guide one step
     # at a time like a human specialist.

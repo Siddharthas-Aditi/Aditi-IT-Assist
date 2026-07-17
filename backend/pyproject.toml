@@ -32,6 +32,7 @@ dependencies = [
     "python-pptx>=1.0",
     "openpyxl>=3.1",
     "reportlab>=4.0",
+    "aiosmtplib>=3.0",
 ]
 
 [tool.uv]
@@ -87,6 +88,9 @@ ignore = [
 # `import web_search_service as W` is a deliberate short module alias used
 # throughout this test file's assertions (W.httpx, W.settings, W.DomainTrust).
 "tests/unit/test_web_search_providers.py" = ["N812"]
+# `from app.services.email import sender as S` is a deliberate short module
+# alias used throughout this test file's assertions (S.settings, S.aiosmtplib).
+"tests/unit/test_email_sender.py" = ["N812"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["app"]
