@@ -266,6 +266,41 @@ async def resolution_node(state: WorkflowState) -> dict:
 
     ordered, remaining = _build_progression(knowledge_results, diag_ctx)
 
+    # ── Proactive escalation after N consecutive misses (B1) ──────────
+    # Even if more grounded steps exist, don't drag the user through all of
+    # them — offer a live specialist once enough steps have failed.
+    miss_threshold = max(1, settings.RESOLUTION_MISS_ESCALATE_THRESHOLD)
+    if remaining and len(diag_ctx.failed_steps) >= miss_threshold:
+        diag_ctx.resolution_attempts += 1
+        diag_ctx.resolution_confidence = 0.0
+        diag_ctx.phase = DiagnosticPhase.ESCALATING
+        diag_ctx.last_response_type = "escalate"
+        subtype = diag_ctx.issue_subtype or diag_ctx.symptom or "this issue"
+        diag_ctx.escalation_reason = (
+            f"{len(diag_ctx.failed_steps)} troubleshooting steps for '{subtype}' were "
+            f"attempted without resolving the issue."
+        )
+        logger.info(
+            "resolution_miss_threshold_escalation",
+            failed=len(diag_ctx.failed_steps),
+            threshold=miss_threshold,
+        )
+        return {
+            "current_node": "resolve",
+            "resolution_steps": [],
+            "resolution_confidence": 0.0,
+            "escalation_reason": diag_ctx.escalation_reason,
+            "diagnostic_context": diag_ctx.to_dict(),
+            "conversation_phase": diag_ctx.phase.value,
+            "audit_trail": [
+                {
+                    "event": "resolution.miss_threshold_escalation",
+                    "failed_steps": len(diag_ctx.failed_steps),
+                    "threshold": miss_threshold,
+                }
+            ],
+        }
+
     # ── Exhaustion / loop → escalate (no message; escalation speaks) ──
     if not remaining:
         diag_ctx.loop_counter += 1
