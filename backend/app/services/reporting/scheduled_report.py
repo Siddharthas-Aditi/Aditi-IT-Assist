@@ -4,13 +4,19 @@ Runs on a daily tick (see `SCHEDULED_REPORT_CHECK_INTERVAL_SECONDS`) and, on
 the configured day of month, builds the previous month's specialist report,
 renders it to PDF, and emails it to the configured recipients.
 
-Replica-safe: `ScheduledReportRun.period` is unique, so concurrent app
-replicas racing the same tick can only have one winner claim a given month.
-A crashed/failed attempt leaves its claim row in `status="failed"` (or a
-stuck `"sending"`), which is deliberately *reusable* by the next daily tick —
-otherwise a transient SMTP outage would permanently skip that month's report.
-A `status="sent"` row, in contrast, is never revisited: exactly one
-successful send per month.
+Replica-safe: `ScheduledReportRun.period` is unique, and the claim itself is
+committed to `status="sending"` in its own short transaction — under a
+`SELECT ... FOR UPDATE` row lock when reclaiming an existing row — BEFORE any
+send-side work (report build, PDF render, SMTP) begins. That ordering is the
+whole fix: two replicas can no longer both read the same `"failed"` row,
+both decide it's retryable, and both send — the second one blocks on the
+row lock, then re-reads the now-committed `"sending"` status and backs off.
+A crashed/cleanly-failed attempt leaves its claim row in `status="failed"`,
+which is deliberately *reusable* by the next daily tick — otherwise a
+transient SMTP outage would permanently skip that month's report. A
+`status="sending"` row is NOT auto-resumed (see `_claim_period`); a
+`status="sent"` row is never revisited: exactly one successful send per
+month, across any number of replicas.
 """
 
 from __future__ import annotations
@@ -36,9 +42,10 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-# Claim statuses that represent a prior attempt safe to retry (crashed mid-send
-# or explicitly failed). A "sent" row is the only terminal, non-retryable state.
-_RETRYABLE_STATUSES = ("sending", "failed")
+# The only prior-attempt status that is safe to reclaim and retry. A "sent"
+# row is terminal; a "sending" row is deliberately NOT auto-resumed — see
+# `_claim_period`.
+_RECLAIMABLE_STATUS = "failed"
 
 
 class ScheduledReportService:
@@ -124,31 +131,46 @@ class ScheduledReportService:
     async def _claim_period(
         self, period: str, *, recipient_count: int
     ) -> ScheduledReportRun | None:
-        """Return a claimed row to proceed with, or `None` if already sent.
+        """Durably claim `period`, committing BEFORE any send-side work.
 
-        A `"sent"` row for this period means the month was already delivered —
-        never resend. A `"sending"`/`"failed"` row means a prior attempt was
-        interrupted or failed; it is reused (retried) rather than re-inserted.
-        Only when no row exists at all do we insert a fresh claim, and even
-        then a concurrent replica may win the unique-index race — that loser
-        rolls back and reports `skipped_already`.
+        This is the fix for the double-send race: the claim is committed to
+        `status="sending"` in its own short transaction here, in `_claim_period`
+        — never deferred until after `build_report`/`to_pdf`/`sender.send()`
+        the way the old code did. `SELECT ... FOR UPDATE` locks an existing
+        row for the duration of this transaction, so a second concurrent
+        replica racing the same period blocks here until the first commits,
+        then re-reads the now-`"sending"` row and skips. It can never observe
+        a stale pre-claim `"failed"` value the way a plain `SELECT` could.
+
+        Returns the claimed row to proceed with, or `None` to skip:
+        - `"sent"` — terminal, never resend.
+        - `"sending"` — NOT auto-resumed. Because every "sending" write is
+          committed here before any send is attempted, a row genuinely stuck
+          in `"sending"` means a prior process crashed between this commit
+          and its own finalize commit — a rare ops anomaly, not the common
+          case. Auto-retrying it risks a double-send if that prior attempt
+          is merely slow rather than dead, so we deliberately skip and log
+          for on-call to investigate/reset rather than resend blind.
+        - `"failed"` — a prior attempt finished cleanly and failed; safe to
+          reclaim and retry.
+        - no row — fresh INSERT; a concurrent INSERT race is caught by the
+          unique index (`IntegrityError` on commit) and treated as skipped.
         """
-        existing = (
-            await self.db.execute(
-                select(ScheduledReportRun).where(ScheduledReportRun.period == period)
-            )
-        ).scalar_one_or_none()
+        stmt = select(ScheduledReportRun).where(ScheduledReportRun.period == period)
+        existing = (await self.db.execute(stmt.with_for_update())).scalar_one_or_none()
 
         if existing is not None:
             if existing.status == "sent":
                 logger.info("scheduled_report_already_sent", period=period)
                 return None
-            if existing.status in _RETRYABLE_STATUSES:
-                logger.info(
-                    "scheduled_report_retrying_claim", period=period, prior_status=existing.status
-                )
+            if existing.status == "sending":
+                logger.warning("scheduled_report_send_in_progress", period=period)
+                return None
+            if existing.status == _RECLAIMABLE_STATUS:
                 existing.status = "sending"
                 existing.recipient_count = recipient_count
+                await self.db.commit()
+                logger.info("scheduled_report_retrying_claim", period=period, prior_status="failed")
                 return existing
             # Unknown/unexpected status — treat conservatively as non-retryable.
             logger.warning(
@@ -161,7 +183,7 @@ class ScheduledReportService:
         claim = ScheduledReportRun(period=period, status="sending", recipient_count=recipient_count)
         self.db.add(claim)
         try:
-            await self.db.flush()
+            await self.db.commit()
         except IntegrityError:
             await self.db.rollback()
             logger.info("scheduled_report_already_claimed", period=period)

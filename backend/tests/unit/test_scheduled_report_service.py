@@ -72,11 +72,15 @@ class FakeSession:
     def __init__(self, existing: ScheduledReportRun | None = None) -> None:
         self.existing = existing
         self.added: list = []
-        self.raise_integrity_on_next_flush = False
+        self.raise_integrity_on_next_commit = False
         self.commits = 0
         self.rollbacks = 0
 
     async def execute(self, _stmt):
+        # `_stmt` is a real `sqlalchemy.select(...)`, possibly with
+        # `.with_for_update()` chained on — that's a no-op query-construction
+        # flag with no real DB to lock, so the fake just ignores it and
+        # returns the single row this test scenario cares about.
         return _ScalarOneResult(self.existing)
 
     def add(self, obj) -> None:
@@ -88,11 +92,12 @@ class FakeSession:
         return [obj for obj in self.added if isinstance(obj, ScheduledReportRun)]
 
     async def flush(self) -> None:
-        if self.raise_integrity_on_next_flush:
-            self.raise_integrity_on_next_flush = False
-            raise IntegrityError("insert", {}, Exception("duplicate key: period"))
+        pass
 
     async def commit(self) -> None:
+        if self.raise_integrity_on_next_commit:
+            self.raise_integrity_on_next_commit = False
+            raise IntegrityError("insert", {}, Exception("duplicate key: period"))
         self.commits += 1
         # Track the most recent claim row specifically — a later audit-event
         # `add()` must not shadow it as "the" persisted row on commit.
@@ -265,18 +270,26 @@ class TestRunOnceClaim:
         assert existing.status == "sent"
         assert existing.sent_at is not None
 
-    async def test_prior_stuck_sending_claim_is_retried(self, monkeypatch):
+    async def test_prior_stuck_sending_claim_is_skipped_without_resend(self, monkeypatch):
+        """A `"sending"` row is never auto-resumed — see `_claim_period` docstring:
+
+        double-sending is worse than a rare stuck row requiring ops
+        intervention, so a `"sending"` claim is left alone (skipped), not
+        reclaimed, unlike a cleanly-`"failed"` one.
+        """
         existing = ScheduledReportRun(period="2026-06", status="sending", recipient_count=1)
         env = _configure_happy_path(monkeypatch, existing=existing)
 
         outcome = await env.service.run_once(datetime(2026, 7, 1, tzinfo=UTC))
 
-        assert outcome == "sent"
-        assert existing.status == "sent"
+        assert outcome == "skipped_already"
+        assert env.sender.sent == []
+        assert existing.status == "sending"
+        assert env.session.commits == 0
 
     async def test_concurrent_insert_race_yields_skipped_already(self, monkeypatch):
         env = _configure_happy_path(monkeypatch)
-        env.session.raise_integrity_on_next_flush = True
+        env.session.raise_integrity_on_next_commit = True
 
         outcome = await env.service.run_once(datetime(2026, 7, 1, tzinfo=UTC))
 
@@ -319,3 +332,54 @@ class TestRunOnceClaim:
 
         assert second == "sent"
         assert len(env.sender.sent) == 1
+
+    async def test_claim_is_committed_as_sending_before_send_is_invoked(self, monkeypatch):
+        """The core assertion for the C2 fix: the durable claim must be
+        committed to `"sending"` in its own transaction BEFORE any send-side
+        work (build/PDF/SMTP) begins — that is what makes a concurrent
+        replica's row-locked re-read observe `"sending"` instead of racing
+        the pre-claim state. This spies on the fake sender to capture the
+        session's commit count + persisted row status at the exact moment
+        `send()` is invoked.
+        """
+        env = _configure_happy_path(monkeypatch)
+        observed: dict = {}
+        original_send = env.sender.send
+
+        async def spying_send(**kwargs):
+            observed["commits_before_send"] = env.session.commits
+            observed["status_before_send"] = (
+                env.session.existing.status if env.session.existing else None
+            )
+            return await original_send(**kwargs)
+
+        env.sender.send = spying_send
+
+        outcome = await env.service.run_once(datetime(2026, 7, 1, tzinfo=UTC))
+
+        assert outcome == "sent"
+        assert observed["commits_before_send"] >= 1
+        assert observed["status_before_send"] == "sending"
+
+    async def test_claim_is_committed_as_sending_before_send_on_reclaim(self, monkeypatch):
+        """Same ordering proof, but for the reclaimed-`"failed"` path — the
+        row is flipped to `"sending"` and committed before the retried send
+        goes out.
+        """
+        existing = ScheduledReportRun(period="2026-06", status="failed", recipient_count=1)
+        env = _configure_happy_path(monkeypatch, existing=existing)
+        observed: dict = {}
+        original_send = env.sender.send
+
+        async def spying_send(**kwargs):
+            observed["commits_before_send"] = env.session.commits
+            observed["status_before_send"] = existing.status
+            return await original_send(**kwargs)
+
+        env.sender.send = spying_send
+
+        outcome = await env.service.run_once(datetime(2026, 7, 1, tzinfo=UTC))
+
+        assert outcome == "sent"
+        assert observed["commits_before_send"] >= 1
+        assert observed["status_before_send"] == "sending"
