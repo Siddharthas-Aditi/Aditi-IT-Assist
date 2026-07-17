@@ -237,6 +237,18 @@ class TestBuildReport:
         assert report.totals.reopened == a.reopened + b.reopened
         assert report.totals.agent_id is None
 
+        # Non-empty totals: mean-of-per-agent-means, not a flat average over
+        # every ticket (agents with different ticket counts must weigh equally).
+        expected_avg_resolution_hours = (a.avg_resolution_hours + b.avg_resolution_hours) / 2
+        assert report.totals.avg_resolution_hours == pytest.approx(
+            expected_avg_resolution_hours, rel=0.01
+        )
+        # csat_avg: mean over agents that *have* a CSAT figure only (agent B
+        # has none, and must not pull the average toward zero/None).
+        assert a.csat_avg is not None
+        assert b.csat_avg is None
+        assert report.totals.csat_avg == pytest.approx(a.csat_avg, rel=0.01)
+
     async def test_empty_window_returns_no_rows_and_no_data_totals(self) -> None:
         session = FakeSession(tickets=[], events_with_assignee=[], users=[])
         svc = SpecialistReportService(session)

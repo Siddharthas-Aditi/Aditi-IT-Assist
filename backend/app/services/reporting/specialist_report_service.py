@@ -109,12 +109,18 @@ class SpecialistReportService:
     async def _resolved_tickets_by_agent(
         self, start: datetime, end: datetime
     ) -> dict[str, list[Ticket]]:
-        """Tickets resolved in [start, end], grouped by assignee."""
+        """Tickets resolved in [start, end], grouped by assignee.
+
+        Requires the current status to still be resolved/closed — a ticket
+        that was resolved and later reopened keeps its stale `resolved_at`
+        (never cleared on reopen) but must not be double-counted as resolved.
+        """
         stmt = select(Ticket).where(
             Ticket.assigned_to.is_not(None),
             Ticket.resolved_at.is_not(None),
             Ticket.resolved_at >= start,
             Ticket.resolved_at <= end,
+            Ticket.status.in_(_CLOSED_STATUSES),
         )
         tickets = list((await self.db.execute(stmt)).scalars().all())
         by_agent: dict[str, list[Ticket]] = {}
