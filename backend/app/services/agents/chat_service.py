@@ -728,10 +728,22 @@ class ChatService:
         diag = state.get("diagnostic_context") or {}
         # KB-insufficient = a real KB attempt happened (steps tried, or KB
         # retrieval actually ran), NOT a bare "I want a human" with no attempt.
+        #
+        # NOTE: `state["knowledge_results"]` is seeded to `[]` at the start of
+        # EVERY turn (see the turn-reset block above ~line 205 and the fresh-
+        # session initializer ~line 241), so `is not None` is always True and
+        # can never distinguish "retrieval ran and found nothing" from
+        # "retrieval never ran this turn". `retrieval_trace` is the correct
+        # signal: it is seeded `None` per turn and is ONLY ever set by
+        # `retrieval_node` (see app/workflows/nodes/retrieval.py), which
+        # always returns a non-empty dict (keys: kept/rejected/top_relevance/
+        # has_subtype_match) — truthy even when zero articles were found. So
+        # `retrieval_trace` is truthy iff retrieval actually ran this turn.
         kb_attempted = bool(
             diag.get("failed_steps")
             or diag.get("suggested_steps")
-            or state.get("knowledge_results") is not None
+            or state.get("retrieval_trace")
+            or state.get("knowledge_results")
         )
         bare_human_request = bool(diag.get("live_agent_requested")) and not kb_attempted
         if bare_human_request:
