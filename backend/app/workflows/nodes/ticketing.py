@@ -70,7 +70,7 @@ async def ticket_node(state: WorkflowState) -> dict:
         )
     else:
         message = await generate_ticket_offer(
-            diag_ctx, ticket_draft["priority"], ticket_draft["category"]
+            diag_ctx, str(ticket_draft["priority"]), str(ticket_draft["category"])
         )
 
     audit_entry = {

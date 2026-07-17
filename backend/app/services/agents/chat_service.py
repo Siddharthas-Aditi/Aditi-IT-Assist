@@ -545,11 +545,14 @@ class ChatService:
         session.waiting_since = datetime.now(UTC)
         await self._store.save(session_id, session)
 
-        return (
-            f"✅ I've created ticket **{ref.ticket_number}** and connected it to our IT "
-            f"specialists. They'll review the conversation and follow up with you directly.",
-            ref,
-        )
+        # Phrase the confirmation via the LLM (same generator used by the
+        # AI-first escalation path) so both routes to a ticket sound like the
+        # same assistant. Falls back to byte-identical canned wording when the
+        # LLM is unavailable — see conversation_messages._fallback_ticket_created.
+        diag_ctx = DiagnosticContext.from_dict((state or {}).get("diagnostic_context") or {})
+        confirmation = await generate_ticket_created(ref.ticket_number, diag_ctx)
+
+        return (confirmation, ref)
 
     async def cancel_waiting(self, session_id: str, requester: User) -> str:
         """Cancel the user's waiting state for a live specialist.
