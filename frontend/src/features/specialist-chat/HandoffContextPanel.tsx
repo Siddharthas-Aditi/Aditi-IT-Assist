@@ -20,6 +20,7 @@ import {
   ChevronDown,
   CircleDashed,
   FileSearch,
+  Globe,
   MessageSquareText,
   User,
   Wrench,
@@ -33,6 +34,7 @@ import {
   type StepAttempted,
   type TranscriptMessage,
   type TranscriptRole,
+  type WebResearchFinding,
   queueApi,
 } from '@/features/specialist-chat/api';
 
@@ -202,6 +204,33 @@ export function HandoffContextPanel({ ticketId }: Props) {
           </div>
         </section>
 
+        {/* ── Web research (unverified, specialist-only review) ──── */}
+        {view.web_research_findings && view.web_research_findings.length > 0 && (
+          <details className="group rounded-lg border border-border">
+            <summary className="flex cursor-pointer items-center justify-between px-3 py-2 text-sm font-medium text-foreground">
+              <span className="flex items-center gap-2">
+                <Globe size={14} />
+                Web research (for your review) ({view.web_research_findings.length})
+              </span>
+              <ChevronDown
+                size={16}
+                className="text-muted-foreground transition-transform group-open:rotate-180"
+              />
+            </summary>
+            <div className="space-y-2 border-t border-border px-3 py-3">
+              <p className="text-xs text-muted-foreground">
+                These are unverified external sources the AI found while researching this
+                issue — not KB-approved guidance. Review before sharing with the employee.
+              </p>
+              <ul className="space-y-2">
+                {view.web_research_findings.map((finding, i) => (
+                  <WebResearchFindingRow key={`${finding.url}-${i}`} finding={finding} />
+                ))}
+              </ul>
+            </div>
+          </details>
+        )}
+
         {/* ── Full transcript (secondary, collapsible) ───────────── */}
         {view.transcript && view.transcript.messages.length > 0 && (
           <details className="group rounded-lg border border-border">
@@ -260,6 +289,59 @@ function StepRow({ step }: { step: StepAttempted }) {
           </span>
         )}
       </span>
+    </li>
+  );
+}
+
+const TRUST_TIER_LABELS: Record<string, string> = {
+  official: 'Official',
+  vendor: 'Vendor',
+  trusted_community: 'Community',
+  general_blog: 'Blog',
+};
+
+function trustTierBadgeVariant(tier: string): 'success' | 'primary' | 'warning' | 'outline' {
+  switch (tier) {
+    case 'official':
+      return 'success';
+    case 'vendor':
+      return 'primary';
+    case 'trusted_community':
+      return 'warning';
+    default:
+      return 'outline';
+  }
+}
+
+/** Best-effort hostname for display; falls back to the raw URL if unparsable. */
+function sourceDomain(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return url;
+  }
+}
+
+function WebResearchFindingRow({ finding }: { finding: WebResearchFinding }) {
+  return (
+    <li className="rounded-md border border-border/60 px-3 py-2">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <a
+          href={finding.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-sm font-medium text-primary underline-offset-2 hover:underline"
+        >
+          {finding.title}
+        </a>
+        <Badge variant={trustTierBadgeVariant(finding.trust_tier)}>
+          {TRUST_TIER_LABELS[finding.trust_tier] ?? finding.trust_tier}
+        </Badge>
+      </div>
+      <p className="mt-0.5 text-xs text-muted-foreground">{sourceDomain(finding.url)}</p>
+      {finding.snippet && (
+        <p className="mt-1 text-xs text-foreground">{finding.snippet}</p>
+      )}
     </li>
   );
 }

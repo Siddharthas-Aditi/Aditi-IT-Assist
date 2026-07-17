@@ -79,6 +79,13 @@ class HandoffPackage(BaseModel):
     steps_attempted: list[StepAttempted] = Field(default_factory=list)
     kb_sources_consulted: list[KBSourceConsulted] = Field(default_factory=list)
     web_sources_consulted: list[WebSourceConsulted] = Field(default_factory=list)
+    # Raw, unverified findings from the controlled web-research fallback (B2),
+    # captured on the persisted EscalationContext. Specialist-only — never
+    # shown to employees. Mirrors EscalationContext.web_research_findings /
+    # EscalationContextOut.web_research_findings (list of {title, url, snippet,
+    # trust_tier, provider}). None/missing (older, pre-B2 contexts) normalizes
+    # to an empty list — see _package_from_context.
+    web_research_findings: list[dict] = Field(default_factory=list)
     conversation: list[ConversationTurn] = Field(default_factory=list)
     handoff_reason: str
     handoff_triggered_by: Literal[

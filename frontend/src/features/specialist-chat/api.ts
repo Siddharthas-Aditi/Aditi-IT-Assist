@@ -107,6 +107,27 @@ export interface StepAttempted {
   source_kb_title?: string | null;
 }
 
+/**
+ * Trust tier assigned by the controlled web-research fallback (B2). Mirrors
+ * backend `DomainTrust` (`app/services/web_search_service.py`).
+ */
+export type WebResearchTrustTier = 'official' | 'vendor' | 'trusted_community' | 'general_blog';
+
+/**
+ * One unverified external finding gathered by the AI's controlled web
+ * fallback and persisted on the escalation context. Specialist-only — never
+ * shown to employees. Mirrors backend `EscalationContext.web_research_findings`
+ * / `EscalationContextOut.web_research_findings` (raw dicts, shape documented
+ * in `app/models/escalation.py`).
+ */
+export interface WebResearchFinding {
+  title: string;
+  url: string;
+  snippet?: string | null;
+  trust_tier: WebResearchTrustTier | string;
+  provider?: string | null;
+}
+
 export interface HandoffPackage {
   schema_version: '1.0';
   session_id: string;
@@ -116,6 +137,7 @@ export interface HandoffPackage {
   steps_attempted: StepAttempted[];
   kb_sources_consulted: { article_id: string; title: string; relevance?: number | null }[];
   web_sources_consulted: { url: string; title: string; trust_tier: string; snippet?: string | null }[];
+  web_research_findings: WebResearchFinding[];
   conversation: ConversationTurn[];
   handoff_reason: string;
   handoff_triggered_by: string;
@@ -181,6 +203,9 @@ export interface SpecialistHandoffView {
   // KB signals
   kb_articles_referenced: KBArticleRef[];
   kb_gap_tags: string[];
+  // Unverified external sources from the controlled web-research fallback
+  // (B2) — specialist-only, rendered with an explicit "unverified" label.
+  web_research_findings?: WebResearchFinding[] | null;
   // Full transcript (collapsible / secondary)
   transcript?: TranscriptSnapshot | null;
   has_structured_context: boolean;

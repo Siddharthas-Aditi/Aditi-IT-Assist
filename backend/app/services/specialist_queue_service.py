@@ -414,6 +414,9 @@ class SpecialistQueueService:
             diagnostic_slots={k: str(v) for k, v in (context.diagnostic_slots or {}).items() if v},
             steps_attempted=steps,
             kb_sources_consulted=kb_sources,
+            # Back-compat: older persisted contexts (pre-B2) have this column
+            # as None — normalize to an empty list rather than surfacing None.
+            web_research_findings=context.web_research_findings or [],
             conversation=conversation,
             handoff_reason=context.escalation_reason or "AI exhausted grounded steps",
             handoff_triggered_by=handoff_triggered_by,  # type: ignore[arg-type]

@@ -80,4 +80,42 @@ describe('HandoffContextPanel', () => {
       ).toBeInTheDocument(),
     );
   });
+
+  it('renders web research findings with a source link and trust badge', async () => {
+    vi.spyOn(queueApi, 'getHandoffView').mockResolvedValue({
+      ...VIEW,
+      web_research_findings: [
+        {
+          title: 'Fix a full mailbox in Outlook',
+          url: 'https://support.microsoft.com/mailbox-quota',
+          snippet: 'Increase your quota via the admin center.',
+          trust_tier: 'official',
+          provider: 'bing',
+        },
+      ],
+    });
+    render(<HandoffContextPanel ticketId="t1" />);
+
+    await waitFor(() =>
+      expect(screen.getByText(/Web research \(for your review\)/)).toBeInTheDocument(),
+    );
+    const link = screen.getByRole('link', { name: 'Fix a full mailbox in Outlook' });
+    expect(link).toHaveAttribute('href', 'https://support.microsoft.com/mailbox-quota');
+    expect(screen.getByText('Official')).toBeInTheDocument();
+    expect(screen.getByText('support.microsoft.com')).toBeInTheDocument();
+    expect(screen.getByText(/unverified external sources/)).toBeInTheDocument();
+  });
+
+  it('renders no web research section when there are no findings', async () => {
+    vi.spyOn(queueApi, 'getHandoffView').mockResolvedValue({
+      ...VIEW,
+      web_research_findings: [],
+    });
+    render(<HandoffContextPanel ticketId="t1" />);
+
+    await waitFor(() =>
+      expect(screen.getByText('Mailbox is full and cannot send mail')).toBeInTheDocument(),
+    );
+    expect(screen.queryByText(/Web research \(for your review\)/)).not.toBeInTheDocument();
+  });
 });

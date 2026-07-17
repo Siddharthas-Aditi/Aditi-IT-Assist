@@ -9,6 +9,8 @@ from unittest.mock import AsyncMock, patch
 
 from httpx import AsyncClient
 
+from app.models.escalation import EscalationContext
+from app.models.ticket import Ticket
 from app.schemas.escalation import (
     AttemptedStepOut,
     EscalationContextOut,
@@ -16,6 +18,7 @@ from app.schemas.escalation import (
     TranscriptMessageOut,
     TranscriptSnapshotOut,
 )
+from app.services.specialist_queue_service import SpecialistQueueService
 
 TID = "00000000-0000-0000-0000-0000000000aa"
 
@@ -119,3 +122,59 @@ class TestResolutionComparison:
                 json={"specialist_resolution_summary": "x"},
             )
         assert resp.status_code == 404
+
+
+def _ticket() -> Ticket:
+    t = Ticket(
+        ticket_number="ITA-000099",
+        title="Mailbox full",
+        description="d",
+        requester_id=uuid.uuid4(),
+    )
+    t.id = uuid.uuid4()
+    t.category = "email/outlook"
+    t.subcategory = "mailbox-full"
+    return t
+
+
+class TestHandoffPackageWebResearch:
+    """HandoffPackage surfaces persisted web-research findings for specialists.
+
+    Findings are unverified external sources gathered by the controlled web
+    fallback (B2) and captured on the persisted EscalationContext — this
+    exercises the pure assembly in ``_package_from_context`` directly (no DB
+    required), matching the pattern used for other EscalationContext-backed
+    tests (``tests/unit/test_escalation_artifacts.py``).
+    """
+
+    def test_package_includes_web_research_findings(self):
+        ticket = _ticket()
+        ctx = EscalationContext(ticket_id=ticket.id, chat_session_id="s")
+        ctx.id = uuid.uuid4()
+        ctx.issue_summary = "Mailbox full"
+        ctx.web_research_findings = [
+            {
+                "title": "Fix a full mailbox in Outlook",
+                "url": "https://support.microsoft.com/mailbox-quota",
+                "snippet": "Increase your quota via the admin center.",
+                "trust_tier": "official",
+                "provider": "bing",
+            }
+        ]
+
+        svc = SpecialistQueueService(db=None)
+        package = svc._package_from_context(ticket, ctx)
+
+        assert package.web_research_findings == ctx.web_research_findings
+
+    def test_back_compat_none_normalizes_to_empty_list(self):
+        ticket = _ticket()
+        ctx = EscalationContext(ticket_id=ticket.id, chat_session_id="s")
+        ctx.id = uuid.uuid4()
+        # Older, pre-B2 persisted contexts never populated this column.
+        assert ctx.web_research_findings is None
+
+        svc = SpecialistQueueService(db=None)
+        package = svc._package_from_context(ticket, ctx)
+
+        assert package.web_research_findings == []
