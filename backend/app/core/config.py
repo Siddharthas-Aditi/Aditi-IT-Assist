@@ -370,6 +370,13 @@ class Settings(BaseSettings):
                 "REMOTE_SUPPORT_USE_MOCK=false requires REMOTE_HELP_TENANT_ID/"
                 "CLIENT_ID/CLIENT_SECRET"
             )
+        if self.FEATURE_SCHEDULED_REPORTS and not (
+            self.SMTP_HOST and self.SMTP_USER and self.SMTP_PASSWORD and self.report_recipients()
+        ):
+            violations.append(
+                "FEATURE_SCHEDULED_REPORTS is on but SMTP is not configured / "
+                "REPORT_RECIPIENTS is empty"
+            )
         # CORS is registered with allow_credentials=True, so a wildcard or any
         # plaintext origin is a credential-exposure risk — require https and no "*".
         for origin in self.CORS_ORIGINS:

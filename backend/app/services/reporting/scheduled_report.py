@@ -71,7 +71,23 @@ class ScheduledReportService:
 
     @staticmethod
     def should_send(now: datetime) -> bool:
-        return now.day == settings.SCHEDULED_REPORT_DAY
+        """Catch-up window: true from the configured send day through end of month.
+
+        The scheduler ticks once daily and sleeps a full interval before its
+        first tick, so a restart or rolling deploy can easily land its first
+        tick AFTER `SCHEDULED_REPORT_DAY` — with an exact-day check that whole
+        month is silently skipped forever (the period key moves on to the next
+        month once `now` rolls over, so there is no later day that maps back
+        to the missed period). Widening this to `now.day >= SCHEDULED_REPORT_DAY`
+        makes every day from the send day to month-end a valid attempt, so a
+        late-starting tick still catches up on the previous month's report.
+        This is safe to widen because `_claim_period`'s DB claim (unique
+        `period`, `"sent"` is terminal) already guarantees at most one
+        successful send per period — every tick after the first success on a
+        given month short-circuits via `skipped_already`, so the window
+        catches up on misses without ever double-sending.
+        """
+        return now.day >= settings.SCHEDULED_REPORT_DAY
 
     async def run_once(self, now: datetime) -> str:
         """Run a single scheduled-report tick. Never raises — the scheduler loop

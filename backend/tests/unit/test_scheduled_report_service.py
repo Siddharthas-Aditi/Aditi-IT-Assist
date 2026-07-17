@@ -40,10 +40,15 @@ def test_period_key_is_previous_month():
     assert ScheduledReportService.period_key(datetime(2026, 7, 1, tzinfo=UTC)) == "2026-06"
 
 
-def test_should_send_only_on_configured_day(monkeypatch):
-    monkeypatch.setattr(scheduled_report_module.settings, "SCHEDULED_REPORT_DAY", 1, raising=False)
-    assert ScheduledReportService.should_send(datetime(2026, 7, 1, tzinfo=UTC)) is True
-    assert ScheduledReportService.should_send(datetime(2026, 7, 2, tzinfo=UTC)) is False
+def test_should_send_is_a_catch_up_window_from_the_configured_day(monkeypatch):
+    """`should_send` is a catch-up window: true on the configured day AND any
+    later day in the month (so a restart/rolling-deploy whose first tick
+    lands after the send day still catches up), false before it.
+    """
+    monkeypatch.setattr(scheduled_report_module.settings, "SCHEDULED_REPORT_DAY", 5, raising=False)
+    assert ScheduledReportService.should_send(datetime(2026, 7, 4, tzinfo=UTC)) is False
+    assert ScheduledReportService.should_send(datetime(2026, 7, 5, tzinfo=UTC)) is True
+    assert ScheduledReportService.should_send(datetime(2026, 7, 20, tzinfo=UTC)) is True
 
 
 # ── Fake async session ──────────────────────────────────────────────────────
@@ -186,8 +191,16 @@ class TestRunOnceGating:
         assert env.session.commits == 0
         assert env.sender.sent == []
 
-    async def test_not_the_send_day_skips(self, monkeypatch):
+    async def test_before_the_send_day_skips(self, monkeypatch):
+        """`should_send` is now a catch-up window (day >= SCHEDULED_REPORT_DAY),
+        so this must pick a date strictly BEFORE the configured day to
+        exercise the gate — a later day in the month is expected to send
+        (see TestRunOnceClaim.test_catch_up_tick_after_send_day_still_sends_previous_month).
+        """
         env = _configure_happy_path(monkeypatch)
+        monkeypatch.setattr(
+            scheduled_report_module.settings, "SCHEDULED_REPORT_DAY", 15, raising=False
+        )
 
         outcome = await env.service.run_once(datetime(2026, 7, 2, tzinfo=UTC))
 
@@ -220,6 +233,20 @@ class TestRunOnceGating:
 
 
 class TestRunOnceClaim:
+    async def test_catch_up_tick_after_send_day_still_sends_previous_month(self, monkeypatch):
+        """A tick landing well after `SCHEDULED_REPORT_DAY` (e.g. a rolling
+        deploy whose first daily tick is late) must still catch up and send
+        the correct previous-month report — the period key is unaffected by
+        which day within the current month the tick lands on.
+        """
+        env = _configure_happy_path(monkeypatch)
+
+        outcome = await env.service.run_once(datetime(2026, 7, 20, tzinfo=UTC))
+
+        assert outcome == "sent"
+        assert len(env.session.claims_added) == 1
+        assert env.session.claims_added[0].period == "2026-06"
+
     async def test_fresh_claim_sends_and_marks_sent(self, monkeypatch):
         env = _configure_happy_path(monkeypatch)
 

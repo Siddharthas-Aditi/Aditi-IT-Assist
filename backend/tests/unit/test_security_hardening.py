@@ -353,6 +353,34 @@ class TestProductionValidation:
         s = self._prod_settings(AUTH_PROVIDER="saml", LOCAL_AUTH_ENABLED=False)
         assert s.validate_production() == []
 
+    def test_scheduled_reports_on_without_smtp_or_recipients_fires_violation(self):
+        s = self._prod_settings(
+            FEATURE_SCHEDULED_REPORTS=True,
+            SMTP_USER="",
+            SMTP_PASSWORD="",
+            REPORT_RECIPIENTS="",
+        )
+        violations = s.validate_production()
+        assert any("FEATURE_SCHEDULED_REPORTS" in v for v in violations), violations
+
+    def test_scheduled_reports_off_does_not_require_smtp(self):
+        s = self._prod_settings(
+            FEATURE_SCHEDULED_REPORTS=False,
+            SMTP_USER="",
+            SMTP_PASSWORD="",
+            REPORT_RECIPIENTS="",
+        )
+        assert s.validate_production() == []
+
+    def test_scheduled_reports_on_with_smtp_and_recipients_passes(self):
+        s = self._prod_settings(
+            FEATURE_SCHEDULED_REPORTS=True,
+            SMTP_USER="reports@aditiconsulting.com",
+            SMTP_PASSWORD="real-smtp-password",
+            REPORT_RECIPIENTS="lead@aditiconsulting.com",
+        )
+        assert s.validate_production() == []
+
 
 # ─────────────────────────────────────────────────────────────────────
 # Rate-limit client identity (spoof resistance)
