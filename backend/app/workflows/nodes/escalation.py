@@ -10,6 +10,10 @@ Upgraded to:
 from langchain_core.messages import AIMessage
 
 from app.core.logging import get_logger
+from app.services.agents.conversation_messages import (
+    generate_escalation_confirmed,
+    generate_escalation_offer,
+)
 from app.services.agents.diagnostic_state import DiagnosticContext
 from app.services.agents.intent_classifier import ConversationIntent
 from app.services.agents.llm_intent import classify_intent_with_llm
@@ -55,15 +59,15 @@ async def escalation_node(state: WorkflowState) -> dict:
         )
         reason = _determine_escalation_reason(state, diag_ctx)
         handoff_summary = _build_handoff_summary(state, reason, diag_ctx)
-        message = (
-            "Perfect! I'm connecting you with our IT team now. "
-            "I've included everything from our conversation so they can help you right away."
-        )
+        message = await generate_escalation_confirmed(diag_ctx)
     else:
         # New escalation request → offer with explanation
         reason = _determine_escalation_reason(state, diag_ctx)
         handoff_summary = _build_handoff_summary(state, reason, diag_ctx)
-        message = _build_escalation_message(diag_ctx, reason)
+        if diag_ctx.live_agent_requested:
+            message = _build_escalation_message(diag_ctx, reason)
+        else:
+            message = await generate_escalation_offer(diag_ctx, reason)
 
     audit_entry = {
         "event": "escalation.triggered",

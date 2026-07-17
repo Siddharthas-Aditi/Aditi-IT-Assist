@@ -283,3 +283,72 @@ async def generate_new_topic() -> str:
 
 def _fallback_new_topic() -> str:
     return "Of course — what's the new issue?"
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  ESCALATION — offering / confirming a handoff to the IT team
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_ESCALATION_OFFER_PROMPT = """You could not fully resolve the user's IT issue and want to
+hand off to the human IT team. Warmly let them know you'll bring in the IT team and that
+you'll pass along everything from the conversation so they don't have to repeat themselves.
+Keep it to 1-2 sentences. Do not promise a specific time.
+
+Context (for you — do NOT echo labels): system = {system}; why escalating = {reason}."""
+
+
+async def generate_escalation_offer(diag_ctx: DiagnosticContext, reason: str) -> str:
+    """Natural escalation message. Falls back to a deterministic template."""
+    llm = get_llm_service()
+    system = diag_ctx.affected_system or diag_ctx.normalized_system or "your system"
+    if llm.is_available:
+        try:
+            content = await llm.complete(
+                _ESCALATION_OFFER_PROMPT.format(system=system, reason=reason),
+                system_prompt=_PERSONA,
+                temperature=0.8,
+                max_tokens=140,
+            )
+            if content and len(content) > 20:
+                return content.strip()
+        except Exception as exc:
+            logger.warning("escalation_offer_llm_error", error=str(exc))
+    return _fallback_escalation_offer(system)
+
+
+def _fallback_escalation_offer(system: str) -> str:
+    return (
+        f"I wasn't able to fully sort out your {system} issue on my own, but our IT team "
+        f"can help from here. I'll include everything from our conversation so they can "
+        f"pick up right where we left off."
+    )
+
+
+_ESCALATION_CONFIRMED_PROMPT = """The user just agreed to be connected to the IT team.
+Reassure them warmly that you're connecting them now and have shared the full context.
+Keep it to 1-2 sentences."""
+
+
+async def generate_escalation_confirmed(diag_ctx: DiagnosticContext) -> str:
+    """Natural 'connecting you now' message. Falls back to a template."""
+    llm = get_llm_service()
+    if llm.is_available:
+        try:
+            content = await llm.complete(
+                _ESCALATION_CONFIRMED_PROMPT,
+                system_prompt=_PERSONA,
+                temperature=0.7,
+                max_tokens=100,
+            )
+            if content and len(content) > 20:
+                return content.strip()
+        except Exception as exc:
+            logger.warning("escalation_confirmed_llm_error", error=str(exc))
+    return _fallback_escalation_confirmed()
+
+
+def _fallback_escalation_confirmed() -> str:
+    return (
+        "Perfect! I'm connecting you with our IT team now. I've included everything from "
+        "our conversation so they can help you right away."
+    )
