@@ -664,8 +664,10 @@ git commit -m "feat(chat): LLM-phrase ticket offer + created confirmation with f
 ### Task 5: Frontend single-step rendering
 
 **Files:**
-- Read then Modify: `frontend/src/features/chat/ChatBubble.tsx` (the `ProseContent` / `proseSingleStep` numbered-pill path)
-- Test: `frontend/src/features/chat/ChatBubble.test.tsx` (create or extend — check if it exists first)
+- Read then Modify: the **live** employee chat component that renders the steps card. Per the Task-1 review this is `frontend/src/pages/employee/SupportChatPage.tsx` (~lines 629-653, a bordered "Troubleshooting Steps" card rendered **unconditionally when `resolution_steps` is non-empty** — including for a single step). Also check `frontend/src/features/chat/ChatBubble.tsx` (`ProseContent`/`proseSingleStep`) since it renders steps too — fix whichever component(s) are actually mounted in the employee chat route.
+- Test: a test co-located with the component you modify (create or extend — check if one exists first).
+
+**IMPORTANT (corrected from original plan):** The original plan assumed the card was gated on `steps.length > 1` in `ChatBubble.tsx`. The live page renders it unconditionally in `SupportChatPage.tsx`. So the real change is: **for the one-step flow, do NOT render the duplicate "Troubleshooting Steps" card** (the click-path now lives in the prose). Decide the cleanest rule — e.g. suppress the card when there is exactly one step, OR remove the card from the employee-facing single-step flow entirely — and apply it to the live component. Confirm which component is mounted by tracing the employee chat route before editing.
 
 **Interfaces:**
 - Consumes: the `ChatMessage` type (`content`, `steps?`, `conversationPhase`) from `frontend/src/types`.
