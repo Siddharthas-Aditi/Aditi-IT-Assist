@@ -74,6 +74,17 @@ export function SpecialistReportPage() {
     slaViolations: row.sla_violations,
   }));
 
+  // Agents with no resolved tickets in range have `avg_resolution_hours: null`
+  // ("No data") — plotting a 0-hour bar for them would misleadingly read as
+  // an instant resolution, so they're skipped from this chart entirely
+  // rather than coerced to 0.
+  const resolutionChartData = rows
+    .filter((row) => row.avg_resolution_hours != null)
+    .map((row) => ({
+      name: row.agent_name,
+      avgResolutionHours: row.avg_resolution_hours as number,
+    }));
+
   async function handleDownload(format: ExportFormat) {
     setDownloadError(null);
     setDownloading(format);
@@ -160,7 +171,7 @@ export function SpecialistReportPage() {
             ) : (
               <>
                 {/* Charts */}
-                <div className="mb-6 grid gap-6 lg:grid-cols-2">
+                <div className="mb-6 grid gap-6 lg:grid-cols-3">
                   <Card>
                     <h3 className="mb-4 text-sm font-semibold text-foreground">
                       Tickets per agent
@@ -182,6 +193,41 @@ export function SpecialistReportPage() {
                           <Bar dataKey="tickets" name="Total tickets" fill="hsl(211 84% 12%)" radius={[4, 4, 0, 0]} />
                         </BarChart>
                       </ResponsiveContainer>
+                    </div>
+                  </Card>
+
+                  <Card>
+                    <h3 className="mb-4 text-sm font-semibold text-foreground">
+                      Avg resolution time per agent (hrs)
+                    </h3>
+                    <div className="h-64">
+                      {resolutionChartData.length === 0 ? (
+                        <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                          No data
+                        </div>
+                      ) : (
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={resolutionChartData}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(0 0% 90%)" />
+                            <XAxis
+                              dataKey="name"
+                              tick={{ fontSize: 12 }}
+                              interval={0}
+                              angle={-20}
+                              textAnchor="end"
+                              height={50}
+                            />
+                            <YAxis allowDecimals tick={{ fontSize: 12 }} />
+                            <Tooltip />
+                            <Bar
+                              dataKey="avgResolutionHours"
+                              name="Avg resolution (hrs)"
+                              fill="hsl(211 60% 45%)"
+                              radius={[4, 4, 0, 0]}
+                            />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      )}
                     </div>
                   </Card>
 

@@ -43,7 +43,9 @@ class FakeSession:
     """Routes execute() to canned rows based on the query's primary entity.
 
     Only the entities this service actually queries are supported: Ticket,
-    the TicketEvent/Ticket join, and User. Anything else is a test bug.
+    the TicketEvent/Ticket join, User, and the distinct
+    ConversationFeedback.agent_user_id column query. Anything else is a
+    test bug.
     """
 
     def __init__(
@@ -51,10 +53,12 @@ class FakeSession:
         tickets: list[Ticket],
         events_with_assignee: list[tuple[TicketEvent, uuid.UUID]],
         users: list[User],
+        feedback_agent_ids: list[uuid.UUID] | None = None,
     ) -> None:
         self.tickets = tickets
         self.events_with_assignee = events_with_assignee
         self.users = users
+        self.feedback_agent_ids = feedback_agent_ids or []
 
     async def execute(self, stmt):
         entity_names = [d["name"] for d in stmt.column_descriptions]
@@ -64,6 +68,8 @@ class FakeSession:
             return _ScalarResult(self.events_with_assignee)
         if entity_names == ["User"]:
             return _ScalarResult(self.users)
+        if entity_names == ["agent_user_id"]:
+            return _ScalarResult(self.feedback_agent_ids)
         raise AssertionError(f"FakeSession: unexpected query shape {entity_names}")
 
 
@@ -294,3 +300,46 @@ class TestBuildReport:
         )
 
         assert report.rows[0].agent_name == "noname@aditi.com"
+
+    async def test_feedback_only_agent_appears_with_no_ticket_activity(self) -> None:
+        """An agent with feedback in range but zero resolved tickets must still
+        appear in the report — not be silently dropped — with real CSAT/DSAT
+        and zeroed/None ticket metrics.
+        """
+        agent = _user("Feedback Only Agent", "feedback-only@aditi.com")
+        start = datetime(2026, 7, 1, tzinfo=UTC)
+        end = datetime(2026, 7, 31, 23, 59, 59, tzinfo=UTC)
+
+        session = FakeSession(
+            tickets=[],
+            events_with_assignee=[],
+            users=[agent],
+            feedback_agent_ids=[agent.id],
+        )
+        svc = SpecialistReportService(session)
+        svc.feedback.get_agent_summary = AsyncMock(
+            return_value=AgentFeedbackSummary(
+                agent_user_id=agent.id,
+                total_sessions=3,
+                sessions_with_feedback=3,
+                helpful_rate=1.0,
+                resolved_rate=1.0,
+                csat_avg=4.7,
+                positive_count=3,
+                negative_count=0,
+                period_start=start,
+                period_end=end,
+            )
+        )
+
+        report = await svc.build_report(start=start, end=end)
+
+        assert len(report.rows) == 1
+        row = report.rows[0]
+        assert row.agent_id == str(agent.id)
+        assert row.total_tickets == 0
+        assert row.avg_resolution_hours is None
+        assert row.sla_violations == 0
+        assert row.reopened == 0
+        assert row.csat_avg == pytest.approx(4.7, rel=0.01)
+        assert row.feedback_responses == 3

@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import select
 
 from app.models.auth import User
+from app.models.feedback import ConversationFeedback
 from app.models.ticket import Ticket, TicketEvent
 from app.schemas.reporting import SpecialistReport, SpecialistReportRow
 from app.services.feedback_analytics_service import FeedbackAnalyticsService
@@ -50,8 +51,13 @@ class SpecialistReportService:
         """Aggregate ticket + feedback metrics per agent for [start, end]."""
         tickets_by_agent = await self._resolved_tickets_by_agent(start, end)
         reopened = await self._reopened_counts(start, end)
+        feedback_only_agents = await self._feedback_agent_ids(start, end)
 
-        agent_ids = set(tickets_by_agent) | set(reopened)
+        # Agents with feedback in range but no resolved ticket (e.g. a live
+        # chat that never became/resolved a ticket) must still appear, with
+        # real CSAT/DSAT and "no ticket activity" metrics — not be silently
+        # dropped because they have no entry in tickets_by_agent/reopened.
+        agent_ids = set(tickets_by_agent) | set(reopened) | feedback_only_agents
         names = await self._agent_names(agent_ids)
 
         rows: list[SpecialistReportRow] = [
@@ -148,6 +154,21 @@ class SpecialistReportService:
                 key = str(assigned_to)
                 counts[key] = counts.get(key, 0) + 1
         return counts
+
+    async def _feedback_agent_ids(self, start: datetime, end: datetime) -> set[str]:
+        """Distinct agent ids with feedback submitted in [start, end].
+
+        These agents must appear in the report even when they have zero
+        resolved tickets in the window (e.g. a live-chat handoff that was
+        rated but never became — or resolved — a ticket).
+        """
+        stmt = select(ConversationFeedback.agent_user_id).where(
+            ConversationFeedback.agent_user_id.is_not(None),
+            ConversationFeedback.submitted_at >= start,
+            ConversationFeedback.submitted_at <= end,
+        )
+        rows = (await self.db.execute(stmt)).scalars().all()
+        return {str(agent_id) for agent_id in rows if agent_id is not None}
 
     async def _agent_names(self, agent_ids: set[str]) -> dict[str, tuple[str, str | None]]:
         """Map agent id (str) -> (display name, email)."""

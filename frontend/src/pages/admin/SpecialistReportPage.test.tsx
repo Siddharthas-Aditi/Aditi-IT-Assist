@@ -96,6 +96,29 @@ describe('SpecialistReportPage', () => {
     expect(bobRow!.textContent).toContain('—');
   });
 
+  it('renders all three charts (tickets, avg resolution, SLA violations)', () => {
+    render(<SpecialistReportPage />, { wrapper });
+    expect(screen.getByText('Tickets per agent')).toBeInTheDocument();
+    expect(screen.getByText('Avg resolution time per agent (hrs)')).toBeInTheDocument();
+    expect(screen.getByText('SLA violations per agent')).toBeInTheDocument();
+  });
+
+  it('does not crash when an agent has a null avg_resolution_hours', () => {
+    useSpecialistReportMock.mockReturnValue({
+      data: {
+        ...REPORT,
+        rows: REPORT.rows.map((r) => ({ ...r, avg_resolution_hours: null })),
+      },
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+      isFetching: false,
+    });
+    render(<SpecialistReportPage />, { wrapper });
+    expect(screen.getByText('Avg resolution time per agent (hrs)')).toBeInTheDocument();
+    expect(screen.getByText(/no data/i)).toBeInTheDocument();
+  });
+
   it('renders the three download buttons', () => {
     render(<SpecialistReportPage />, { wrapper });
     expect(screen.getByRole('button', { name: /csv/i })).toBeInTheDocument();

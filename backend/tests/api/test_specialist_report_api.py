@@ -81,6 +81,32 @@ class TestSpecialistReportGating:
         assert "rows" in body
         assert "totals" in body
 
+    @pytest.mark.asyncio
+    async def test_it_lead_ok_with_bare_date_range(self, lead_client: AsyncClient):
+        """Regression: bare `YYYY-MM-DD` params (as sent by SpecialistReportPage).
+
+        FastAPI/pydantic parses a bare date as naive midnight. Before the
+        `_normalize_range` fix, an explicit bare-date `end` stayed naive
+        midnight (never promoted to end-of-day since `_default_month_range`
+        only fills in end-of-day when BOTH bounds are None) and the whole
+        last day was excluded by the `<= end` boundary; comparing a naive
+        datetime against tz-aware DB columns also risked an error. A 200
+        with `rows`/`totals` present is the minimum proof the normalized
+        naive-vs-tz-aware comparison executes without error end-to-end
+        against the real test DB.
+        """
+        resp = await lead_client.get(
+            f"{BASE}/specialist-report",
+            params={"start": "2026-07-01", "end": "2026-07-31"},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert "rows" in body
+        assert "totals" in body
+        # The resolved end boundary must be promoted to end-of-day, not left
+        # at naive midnight (which would silently drop the entire last day).
+        assert body["period_end"].startswith("2026-07-31T23:59:59")
+
 
 class TestSpecialistReportExport:
     @pytest.mark.asyncio

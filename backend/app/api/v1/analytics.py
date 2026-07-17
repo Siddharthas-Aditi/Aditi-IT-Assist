@@ -49,6 +49,29 @@ def _default_month_range(start: datetime | None, end: datetime | None) -> tuple[
     return start or first, end or last
 
 
+def _normalize_range(start: datetime | None, end: datetime | None) -> tuple[datetime, datetime]:
+    """Resolve a (possibly partial, possibly naive, possibly date-only) range.
+
+    The frontend sends bare `YYYY-MM-DD` query params for both `start` and
+    `end` (see SpecialistReportPage) — FastAPI parses those as naive midnight
+    datetimes. `_default_month_range` only fills in end-of-day when BOTH
+    bounds are None, so an explicit bare-date `end` was left at naive
+    midnight, excluding the entire last day (`<= end` boundary) and risking
+    naive-vs-tz-aware comparisons against tz-aware DB columns. This
+    normalizes both endpoints after the defaulting step: attaches UTC to any
+    naive datetime, and — since a date-only value always parses to exact
+    midnight — treats a midnight `end` as "through the end of that day".
+    """
+    start_dt, end_dt = _default_month_range(start, end)
+    if start_dt.tzinfo is None:
+        start_dt = start_dt.replace(tzinfo=UTC)
+    if end_dt.tzinfo is None:
+        end_dt = end_dt.replace(tzinfo=UTC)
+    if (end_dt.hour, end_dt.minute, end_dt.second, end_dt.microsecond) == (0, 0, 0, 0):
+        end_dt = end_dt.replace(hour=23, minute=59, second=59, microsecond=999999)
+    return start_dt, end_dt
+
+
 @router.get("/specialist-report", response_model=SpecialistReport)
 async def get_specialist_report(
     lead_user: ITLeadUser,
@@ -56,7 +79,7 @@ async def get_specialist_report(
     start: datetime | None = None,
     end: datetime | None = None,
 ) -> SpecialistReport:
-    start_dt, end_dt = _default_month_range(start, end)
+    start_dt, end_dt = _normalize_range(start, end)
     return await SpecialistReportService(db).build_report(start=start_dt, end=end_dt)
 
 
@@ -81,7 +104,7 @@ async def export_specialist_report(
 ) -> Response:
     if format not in _EXPORT:
         raise HTTPException(status_code=400, detail=f"Unsupported format: {format}")
-    start_dt, end_dt = _default_month_range(start, end)
+    start_dt, end_dt = _normalize_range(start, end)
     report = await SpecialistReportService(db).build_report(start=start_dt, end=end_dt)
     render, media_type, ext = _EXPORT[format]
     content = render(report)
