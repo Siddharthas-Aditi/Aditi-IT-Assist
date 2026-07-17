@@ -20,10 +20,19 @@ COLUMNS: list[tuple[str, str]] = [
     ("feedback_responses", "Feedback Responses"),
 ]
 
+_FORMULA_PREFIXES = ("=", "+", "-", "@")
+
+
+def _sanitize(value: str) -> str:
+    """Neutralize spreadsheet formula injection by prefixing risky cells."""
+    if value and (value[0] in _FORMULA_PREFIXES or value[0] in ("\t", "\r")):
+        return "'" + value
+    return value
+
 
 def _cell(row: SpecialistReportRow, attr: str) -> str:
     value = getattr(row, attr)
-    return "-" if value is None else str(value)
+    return "-" if value is None else _sanitize(str(value))
 
 
 def _all_rows(report: SpecialistReport) -> list[SpecialistReportRow]:
@@ -47,9 +56,16 @@ def to_xlsx(report: SpecialistReport) -> bytes:
     ws.title = "Specialist Report"
     ws.append([label for _, label in COLUMNS])
     for row in _all_rows(report):
-        ws.append(
-            [getattr(row, attr) if getattr(row, attr) is not None else "-" for attr, _ in COLUMNS]
-        )
+        cells: list[object] = []
+        for attr, _ in COLUMNS:
+            value = getattr(row, attr)
+            if value is None:
+                cells.append("-")
+            elif isinstance(value, str):
+                cells.append(_sanitize(value))
+            else:
+                cells.append(value)
+        ws.append(cells)
     out = io.BytesIO()
     wb.save(out)
     return out.getvalue()
