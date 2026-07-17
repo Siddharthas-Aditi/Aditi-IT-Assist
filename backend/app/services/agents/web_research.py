@@ -46,11 +46,14 @@ from app.services.agents.registry import (
 )
 from app.services.web_search_service import (
     DomainTrust,
+    WebSearchProvider,
     WebSearchResult,
     WebSearchService,
 )
 
 if TYPE_CHECKING:  # pragma: no cover
+    from sqlalchemy.ext.asyncio import AsyncSession
+
     from app.services.knowledge.improvement import KnowledgeImprovementService
 
 logger = get_logger(__name__)
@@ -118,11 +121,39 @@ class ControlledWebResearchAgent:
     def __init__(
         self,
         *,
-        search: WebSearchService | None = None,
+        search: WebSearchProvider | None = None,
         improvement_service: KnowledgeImprovementService | None = None,
+        db: AsyncSession | None = None,
     ) -> None:
         self.search = search or WebSearchService()
         self.improvement_service = improvement_service
+        self.db = db
+
+    async def _audit(
+        self,
+        *,
+        action: str,
+        resource_id: str | None,
+        description: str,
+        new_value: dict,
+        severity: str = "info",
+    ) -> None:
+        """Best-effort audit write. Audit failures must never break research."""
+        if self.db is None:
+            return
+        try:
+            from app.services.audit_service import AuditService
+
+            await AuditService(self.db).log(
+                action=action,
+                resource_type="web_research",
+                resource_id=resource_id,
+                description=description,
+                new_value=new_value,
+                severity=severity,
+            )
+        except Exception as exc:  # pragma: no cover - defensive, audit must not break flow
+            logger.warning("web_research_audit_failed", action=action, error=str(exc))
 
     async def research(
         self,
@@ -150,6 +181,13 @@ class ControlledWebResearchAgent:
                 specialist_name=specialist_name,
             )
             logger.warning("web_research_blocked", **policy.__dict__)
+            await self._audit(
+                action="web_research.blocked",
+                resource_id=specialist_name,
+                description=f"web research blocked: unknown specialist {specialist_name!r}",
+                new_value={"specialist": specialist_name, "reason": policy.reason},
+                severity="warning",
+            )
             return WebResearchOutcome(results=(), policy=policy)
 
         if not is_web_fallback_allowed_for(spec):
@@ -160,6 +198,15 @@ class ControlledWebResearchAgent:
                 specialist_name=spec.name,
             )
             logger.warning("web_research_blocked", **policy.__dict__)
+            await self._audit(
+                action="web_research.blocked",
+                resource_id=spec.name,
+                description=(
+                    f"web research blocked: specialist {spec.name!r} does not permit web fallback"
+                ),
+                new_value={"specialist": spec.name, "reason": policy.reason},
+                severity="warning",
+            )
             return WebResearchOutcome(results=(), policy=policy)
 
         tiers = _allowed_tiers_for(spec)
@@ -197,6 +244,19 @@ class ControlledWebResearchAgent:
                 ids.append(str(cand.id))
             candidate_ids = tuple(ids)
 
+        await self._audit(
+            action="web_research.completed",
+            resource_id=spec.name,
+            description=f"web research completed for specialist {spec.name!r}",
+            new_value={
+                "specialist": spec.name,
+                "results_in": len(raw),
+                "results_out": len(filtered),
+                "tiers": [t.value for t in tiers],
+                "candidate_ids": list(candidate_ids),
+            },
+        )
+
         return WebResearchOutcome(
             results=filtered,
             policy=policy,
@@ -204,9 +264,26 @@ class ControlledWebResearchAgent:
         )
 
 
+def build_default_web_research_agent(db: AsyncSession) -> ControlledWebResearchAgent | None:
+    """Wire the configured web-search provider + improvement service, or None when off."""
+    from app.services.web_search_service import get_web_search_provider
+
+    provider = get_web_search_provider()
+    if provider is None:
+        return None
+    from app.services.knowledge.improvement import KnowledgeImprovementService
+
+    return ControlledWebResearchAgent(
+        search=provider,
+        improvement_service=KnowledgeImprovementService(db),
+        db=db,
+    )
+
+
 __all__ = [
     "ControlledWebResearchAgent",
     "WebResearchOutcome",
     "WebResearchPolicyDecision",
+    "build_default_web_research_agent",
     "is_web_fallback_allowed_for",
 ]
