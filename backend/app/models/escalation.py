@@ -143,6 +143,10 @@ class EscalationContext(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     kb_articles_referenced: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     # kb_gap_tags: controlled vocabulary (see services/agents/kb_gap_tags.py)
     kb_gap_tags: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    # web_research_findings: trust-filtered external findings captured at
+    # escalation (B2). Each entry:
+    # {"title": str, "url": str, "snippet": str, "trust_tier": str, "provider": str}
+    web_research_findings: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     ai_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     ai_resolution_status: Mapped[str] = mapped_column(
         String(40),

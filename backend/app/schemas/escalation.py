@@ -82,6 +82,7 @@ class EscalationContextOut(BaseModel):
     user_feedback_on_steps: list[dict] = Field(default_factory=list)
     kb_articles_referenced: list[KBArticleRefOut] = Field(default_factory=list)
     kb_gap_tags: list[str] = Field(default_factory=list)
+    web_research_findings: list[dict] | None = None
     ai_confidence: float | None = None
     ai_resolution_status: str = "unresolved"
 
@@ -128,6 +129,7 @@ class SpecialistHandoffView(BaseModel):
     # KB signals
     kb_articles_referenced: list[KBArticleRefOut] = Field(default_factory=list)
     kb_gap_tags: list[str] = Field(default_factory=list)
+    web_research_findings: list[dict] | None = None
     # Full transcript (rendered collapsible / secondary)
     transcript: TranscriptSnapshotOut | None = None
     # True when no persisted escalation context exists yet (degraded view).

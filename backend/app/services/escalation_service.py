@@ -251,6 +251,7 @@ class EscalationService:
             user_feedback_on_steps=diag.get("user_feedback_on_steps") or [],
             kb_articles_referenced=kb_refs,
             kb_gap_tags=kb_gap_tags,
+            web_research_findings=state.get("web_research_findings"),
             ai_confidence=state.get("resolution_confidence") or ticket.ai_confidence,
             ai_resolution_status=ai_status,
             escalation_reason=escalation_reason,
@@ -338,6 +339,7 @@ class EscalationService:
                 KBArticleRefOut(**r) for r in (context.kb_articles_referenced or [])
             ],
             kb_gap_tags=context.kb_gap_tags or [],
+            web_research_findings=context.web_research_findings,
             transcript=transcript,
             has_structured_context=True,
         )
@@ -414,6 +416,7 @@ class EscalationService:
             user_feedback_on_steps=c.user_feedback_on_steps or [],
             kb_articles_referenced=[KBArticleRefOut(**r) for r in (c.kb_articles_referenced or [])],
             kb_gap_tags=c.kb_gap_tags or [],
+            web_research_findings=c.web_research_findings,
             ai_confidence=c.ai_confidence,
             ai_resolution_status=c.ai_resolution_status,
             escalation_reason=c.escalation_reason,
