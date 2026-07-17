@@ -71,3 +71,16 @@ these, read the linked docs, run the named eval/tests, and update memory + docs.
 ## 10. Frontend session/auth flow
 - **Risk**: breaking the refresh-once mutex, idle-tab logout, or open-redirect guard.
 - Docs: `docs/architecture/session-expiry.md`.
+
+## 11. Scheduled-report replica-safe claim (C2)
+- **Risk**: the monthly report email double-sends across replicas. The guarantee is
+  "exactly one successful send per month" via the `scheduled_report_runs` unique
+  `period` claim.
+- **Guards**: `ScheduledReportService._claim_period` commits the `sending` claim
+  (SELECT ... FOR UPDATE on reuse; unique-insert race → IntegrityError → skip)
+  **before** `sender.send()` — never defer the claim past the send. `sent` is
+  terminal (never resend); `sending` is not auto-resumed; `failed` is reclaimable.
+  `should_send` is a catch-up window (`day >= SCHEDULED_REPORT_DAY`) so a missed
+  send-day still delivers once (claim prevents duplicates).
+- **Verify**: `test_scheduled_report_service.py` (esp. the claim-before-send
+  ordering + already-sent-skip tests). Behind `FEATURE_SCHEDULED_REPORTS`.
