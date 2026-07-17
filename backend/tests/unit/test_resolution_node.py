@@ -47,7 +47,9 @@ class TestResolutionNode:
             result = await resolution_node(state)
 
         assert result["current_node"] == "resolve"
-        assert len(result["resolution_steps"]) == 2
+        # B1: the resolver presents RESOLUTION_STEP_BATCH_SIZE (default 1) steps per
+        # turn, not the full KB batch.
+        assert len(result["resolution_steps"]) == 1
         assert result["resolution_steps"][0]["instruction"] == "Restart Outlook"
         assert result["resolution_confidence"] > 0.0
         assert len(result["messages"]) == 1

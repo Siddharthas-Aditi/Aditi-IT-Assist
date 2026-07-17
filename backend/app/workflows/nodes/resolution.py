@@ -9,6 +9,7 @@ This upgraded resolution node:
 
 from langchain_core.messages import AIMessage
 
+from app.core.config import settings
 from app.core.logging import get_logger
 from app.services.agents.confidence import compute_resolution_confidence
 from app.services.agents.diagnostic_state import DiagnosticContext, DiagnosticPhase
@@ -17,9 +18,6 @@ from app.services.llm_service import get_llm_service
 from app.workflows.state import WorkflowState
 
 logger = get_logger(__name__)
-
-# How many steps to present per turn (progressive disclosure).
-_BATCH_SIZE = 3
 
 RESOLUTION_SYSTEM_PROMPT = (
     "You are a friendly, human IT Support Specialist at Aditi Consulting's internal help desk. "
@@ -33,8 +31,10 @@ RESOLUTION_SYSTEM_PROMPT = (
     "- Briefly acknowledge the problem in plain language (no internal codes/slugs).\n"
     "- End by asking, warmly, whether that helped.\n"
     "- If unsure, say so and offer to bring in the IT team.\n"
-    "- The precise click-by-click steps are shown to the user separately, so you don't need\n"
-    "  to repeat them verbatim — summarise the gist naturally and point to them.\n"
+    "- Include the concrete actions (e.g. the exact menu path like Settings > "
+    "Accessibility > Keyboard) naturally inside your sentences — the user does NOT "
+    "see a separate steps list, so the how-to must live in your reply.\n"
+    "- Focus on the SINGLE next step; do not preview later steps.\n"
     "- TONE ADAPTATION: If the user is frustrated, lead with empathy. "
     "If urgent, prioritize speed over detail.\n"
     "  If confused, simplify and clarify."
@@ -47,9 +47,9 @@ What we understand about their issue (for your context — do NOT echo these lab
 - Plain-English problem: {problem_description}
 {additional_context}
 
-Approved next steps you may rely on (the user already sees these as a numbered list —
-explain them naturally in your own words, do NOT paste them as a list, and do NOT add
-any step that is not here):
+The approved next step you may rely on (explain it naturally in your own words,
+including the exact click-path/actions, and do NOT add any step that is not here.
+The user does NOT see a separate list — put the how-to in your reply):
 {knowledge_articles}
 
 Write a short, friendly reply (2-4 sentences) that:
@@ -302,7 +302,8 @@ async def resolution_node(state: WorkflowState) -> dict:
         }
 
     # ── Present the next batch of NEW steps ──────────────────────
-    batch = remaining[:_BATCH_SIZE]
+    batch_size = max(1, settings.RESOLUTION_STEP_BATCH_SIZE)
+    batch = remaining[:batch_size]
     confidence_bd = _score_confidence(state, diag_ctx, trace)
 
     resolution = await _render_resolution(
@@ -567,8 +568,11 @@ def _format_concise_response(
         parts.append(_friendly_problem(diag_ctx))
         parts.append(f"The best place to start is to {first_action}.")
 
-    if len(steps) > 1:
-        parts.append("I've laid out the exact steps for you just below.")
+    detail = steps[0].get("details")
+    if len(steps) == 1 and detail:
+        parts.append(f"Specifically: {detail}")
+    elif len(steps) > 1:
+        parts.append("Here are the exact steps to try.")
 
     if confidence >= 0.8:
         parts.append(

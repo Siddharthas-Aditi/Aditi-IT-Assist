@@ -214,6 +214,14 @@ class Settings(BaseSettings):
     # sides can never disagree about what "stale" means.
     LIVE_WAIT_TIMEOUT_SECONDS: int = 900  # 15 minutes
 
+    # ── Conversational chat (B1) ─────────────────────────────────────
+    # How many troubleshooting steps to present per turn. 1 = guide one step
+    # at a time like a human specialist.
+    RESOLUTION_STEP_BATCH_SIZE: int = 1
+    # Proactively offer a live specialist after this many consecutive steps
+    # fail to resolve the issue (instead of walking every remaining step).
+    RESOLUTION_MISS_ESCALATE_THRESHOLD: int = 3
+
     # ── Supervisor routing (Phase-1 dual-run) ────────────────────────
     # When SHADOW is on, the supervisor runs after triage on every turn but
     # its decision is only LOGGED — the legacy graph still drives routing.
