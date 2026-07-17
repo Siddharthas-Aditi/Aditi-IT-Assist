@@ -516,6 +516,126 @@ _AUDIO_RULES: tuple[SubtypeRule, ...] = (
     SubtypeRule(subtype="bluetooth-audio-issue", keywords=("bluetooth", "won't pair")),
 )
 
+_LAPTOP_RULES: tuple[SubtypeRule, ...] = (
+    SubtypeRule(
+        subtype="battery-not-charging",
+        keywords=(
+            "not charging",
+            "won't charge",
+            "wont charge",
+            "battery not charging",
+            "plugged in not charging",
+            "not charging when plugged",
+            "battery stuck",
+            "battery percentage not",
+        ),
+    ),
+    SubtypeRule(
+        subtype="laptop-wont-power-on",
+        keywords=(
+            "won't turn on",
+            "wont turn on",
+            "not turning on",
+            "won't power on",
+            "wont power on",
+            "not powering on",
+            "won't boot",
+            "wont boot",
+            "no display",
+            "does not turn on",
+            "doesn't turn on",
+            "dead laptop",
+            "power button",
+        ),
+        anti_keywords=("monitor", "external"),
+    ),
+    SubtypeRule(
+        subtype="external-monitor-not-detected",
+        keywords=(
+            "external monitor",
+            "second monitor",
+            "second screen",
+            "monitor not detected",
+            "monitor not detecting",
+            "display not detected",
+            "dual monitor",
+            "extend display",
+            "hdmi not",
+            "docking station monitor",
+        ),
+    ),
+    SubtypeRule(
+        subtype="keyboard-not-working",
+        keywords=(
+            "keyboard not working",
+            "keyboard is not working",
+            "keyboard not responding",
+            "keys not responding",
+            "keys not working",
+            "typing wrong",
+            "wrong characters",
+            "keyboard stopped",
+            "keys stuck",
+            "keyboard isn't",
+        ),
+        anti_keywords=("on-screen keyboard works",),
+    ),
+    SubtypeRule(
+        subtype="trackpad-not-working",
+        keywords=(
+            "trackpad",
+            "track pad",
+            "touchpad",
+            "cursor moving",
+            "cursor jumping",
+            "cursor keeps jumping",
+            "gestures not",
+            "pad not responding",
+        ),
+    ),
+)
+
+_PERFORMANCE_RULES: tuple[SubtypeRule, ...] = (
+    SubtypeRule(
+        subtype="slow-performance",
+        keywords=(
+            "slow",
+            "very slow",
+            "running slow",
+            "laggy",
+            "lagging",
+            "freezing",
+            "freezes",
+            "hangs",
+            "sluggish",
+            "takes forever",
+            "poor performance",
+        ),
+    ),
+)
+
+_WINDOWS_UPDATE_RULES: tuple[SubtypeRule, ...] = (
+    SubtypeRule(
+        subtype="windows-update-failure",
+        keywords=(
+            "windows update",
+            "update failed",
+            "update stuck",
+            "update error",
+            "won't update",
+            "update not installing",
+            "stuck installing update",
+            "check for updates",
+            "install updates",
+            "update loop",
+        ),
+    ),
+)
+
+# Combined catch-all for the generic "hardware/other" bucket so it no longer
+# aliases audio-only rules (the old cross-family misclassification bug).
+_HARDWARE_OTHER_RULES: tuple[SubtypeRule, ...] = _LAPTOP_RULES + _AUDIO_RULES + _CAMERA_RULES
+
 # Map a normalized category to its rule table.
 _CATEGORY_RULES: dict[str, tuple[SubtypeRule, ...]] = {
     "email/outlook": _OUTLOOK_RULES,
@@ -527,7 +647,10 @@ _CATEGORY_RULES: dict[str, tuple[SubtypeRule, ...]] = {
     "device-management/intune": _INTUNE_RULES,
     "hardware/camera": _CAMERA_RULES,
     "hardware/audio": _AUDIO_RULES,
-    "hardware/other": _AUDIO_RULES,
+    "hardware/laptop": _LAPTOP_RULES,
+    "hardware/other": _HARDWARE_OTHER_RULES,
+    "system/performance": _PERFORMANCE_RULES,
+    "software/windows-update": _WINDOWS_UPDATE_RULES,
     "network/connectivity": _NETWORK_RULES,
     "software/other": _ACCESS_RULES,
 }
