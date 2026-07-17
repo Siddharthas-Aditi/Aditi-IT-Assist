@@ -3,6 +3,7 @@
 from langchain_core.messages import AIMessage
 
 from app.core.logging import get_logger
+from app.services.agents.conversation_messages import generate_ticket_offer
 from app.services.agents.diagnostic_state import DiagnosticContext
 from app.workflows.state import WorkflowState
 
@@ -54,6 +55,12 @@ async def ticket_node(state: WorkflowState) -> dict:
     # was never created (the previous bug).
     confirmed = bool(state.get("escalation_confirmed"))
 
+    # Mark the session as having been offered escalation, so a future bare
+    # "yes" can be unambiguously interpreted as "yes please escalate" rather
+    # than the prior bug where any confirmation became ticket consent.
+    diag_ctx = DiagnosticContext.from_dict(state.get("diagnostic_context") or {})
+    diag_ctx.escalation_offered_in_session = True
+
     if confirmed:
         # User already confirmed → the service will create + queue the ticket and
         # replace this content with the real ticket number. Interim text only.
@@ -62,14 +69,8 @@ async def ticket_node(state: WorkflowState) -> dict:
             "an IT specialist now."
         )
     else:
-        message = (
-            f"I wasn't able to fully resolve this one on my own, so the best next "
-            f"step is our IT team.\n\n"
-            f"I can raise a **{ticket_draft['priority']}**-priority support ticket "
-            f"(**{ticket_draft['category']}**) with everything we've covered — your "
-            f"problem details and the steps we tried — and connect you with a "
-            f"specialist.\n\n"
-            f"Click **Connect with a specialist** below (or reply *yes*) and I'll set it up."
+        message = await generate_ticket_offer(
+            diag_ctx, ticket_draft["priority"], ticket_draft["category"]
         )
 
     audit_entry = {
@@ -78,12 +79,6 @@ async def ticket_node(state: WorkflowState) -> dict:
         "priority": ticket_draft["priority"],
         "confirmed": confirmed,
     }
-
-    # Mark the session as having been offered escalation, so a future bare
-    # "yes" can be unambiguously interpreted as "yes please escalate" rather
-    # than the prior bug where any confirmation became ticket consent.
-    diag_ctx = DiagnosticContext.from_dict(state.get("diagnostic_context") or {})
-    diag_ctx.escalation_offered_in_session = True
 
     return {
         "current_node": "draft_ticket",

@@ -352,3 +352,78 @@ def _fallback_escalation_confirmed() -> str:
         "Perfect! I'm connecting you with our IT team now. I've included everything from "
         "our conversation so they can help you right away."
     )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  TICKETING — offering to raise a ticket / confirming it was created
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_TICKET_OFFER_PROMPT = """You want to offer to raise a support ticket for the IT team and
+connect the user with a specialist. Warmly explain you can raise a {priority}-priority
+ticket capturing everything discussed, and ask them to confirm (they can click
+"Connect with a specialist" or reply yes). Keep it to 2-3 sentences."""
+
+
+async def generate_ticket_offer(diag_ctx: DiagnosticContext, priority: str, category: str) -> str:
+    """Natural ticket-offer message. Falls back to a deterministic template."""
+    llm = get_llm_service()
+    if llm.is_available:
+        try:
+            content = await llm.complete(
+                _TICKET_OFFER_PROMPT.format(priority=priority),
+                system_prompt=_PERSONA,
+                temperature=0.7,
+                max_tokens=160,
+            )
+            if content and len(content) > 20:
+                return content.strip()
+        except Exception as exc:
+            logger.warning("ticket_offer_llm_error", error=str(exc))
+    return _fallback_ticket_offer(priority)
+
+
+def _fallback_ticket_offer(priority: str) -> str:
+    return (
+        f"I wasn't able to fully resolve this one on my own, so the best next step is our "
+        f"IT team. I can raise a {priority}-priority support ticket with everything we've "
+        f"covered and connect you with a specialist — just click "
+        f"'Connect with a specialist' below or reply yes."
+    )
+
+
+# The persona normally avoids ticket numbers; the created-confirmation is the one
+# place we intentionally include it because the number is the point of the message.
+_TICKET_CREATED_PROMPT = """A support ticket was just created for the user. Confirm warmly
+that ticket {number} is created, that you've shared the full conversation with the
+specialist so they won't have to repeat anything, and that they'll stay in this chat
+until a specialist picks it up. You MUST include the ticket number {number}. 2-3
+sentences."""
+
+
+async def generate_ticket_created(ticket_number: str, diag_ctx: DiagnosticContext) -> str:
+    """Natural ticket-created confirmation (includes the number). Falls back."""
+    llm = get_llm_service()
+    if llm.is_available:
+        try:
+            content = await llm.complete(
+                _TICKET_CREATED_PROMPT.format(number=ticket_number),
+                system_prompt=_PERSONA,
+                temperature=0.6,
+                max_tokens=160,
+            )
+            if content and ticket_number in content:
+                return content.strip()
+        except Exception as exc:
+            logger.warning("ticket_created_llm_error", error=str(exc))
+    return _fallback_ticket_created(ticket_number)
+
+
+def _fallback_ticket_created(ticket_number: str) -> str:
+    return (
+        f"✅ I've created support ticket {ticket_number} and I'm sharing our full "
+        f"conversation with the IT specialist — including what you asked, what I "
+        f"understood, and the steps we already tried — so they can continue without "
+        f"asking you to repeat everything.\n\nYou'll stay in this chat; a specialist "
+        f"will pick it up shortly. Is there anything else I can help you with in the "
+        f"meantime?"
+    )

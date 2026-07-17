@@ -18,6 +18,7 @@ from app.schemas.chat import (
     TicketRef,
 )
 from app.services.agents.context_summarizer import ContextSummarizerService
+from app.services.agents.conversation_messages import generate_ticket_created
 from app.services.agents.diagnostic_state import DiagnosticContext
 from app.services.agents.escalation_policy import (
     GATHER_PROBLEM_PROMPT,
@@ -138,8 +139,18 @@ class ChatService:
             # half-updated session behind for the next turn).
             session.state = result
             await self._store.save(session_id, session)
+            ticket_created_message = None
+            if ticket_ref is not None:
+                diag_ctx = DiagnosticContext.from_dict(result.get("diagnostic_context") or {})
+                ticket_created_message = await generate_ticket_created(
+                    ticket_ref.ticket_number, diag_ctx
+                )
             return self._format_response(
-                session_id, result, ticket_ref=ticket_ref, include_debug=include_debug
+                session_id,
+                result,
+                ticket_ref=ticket_ref,
+                include_debug=include_debug,
+                ticket_created_message=ticket_created_message,
             )
         except SessionOwnershipError:
             # Don't disclose that the session exists — same generic error.
@@ -306,6 +317,7 @@ class ChatService:
         *,
         ticket_ref: TicketRef | None = None,
         include_debug: bool = False,
+        ticket_created_message: str | None = None,
     ) -> ChatMessageResponse:
         """Format workflow result into API response."""
         messages = result.get("messages", [])
@@ -322,7 +334,7 @@ class ChatService:
         # workflow message with a definitive, accurate confirmation citing the
         # real ticket number. Never claim a ticket exists unless one does.
         if ticket_ref is not None:
-            content = (
+            content = ticket_created_message or (
                 f"✅ I've created support ticket **{ticket_ref.ticket_number}** and I'm "
                 f"sharing our full conversation with the IT specialist — including what you "
                 f"asked, what I understood, and the steps we already tried — so they can "

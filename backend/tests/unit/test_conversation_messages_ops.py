@@ -45,3 +45,17 @@ async def test_escalation_confirmed_falls_back(monkeypatch, ctx):
     monkeypatch.setattr(CM, "get_llm_service", lambda: _FakeLLM(False))
     msg = await CM.generate_escalation_confirmed(ctx)
     assert "connect" in msg.lower() and len(msg) > 20
+
+
+@pytest.mark.asyncio
+async def test_ticket_offer_falls_back(monkeypatch, ctx):
+    monkeypatch.setattr(CM, "get_llm_service", lambda: _FakeLLM(False))
+    msg = await CM.generate_ticket_offer(ctx, "high", "hardware/laptop")
+    assert "ticket" in msg.lower() and len(msg) > 20
+
+
+@pytest.mark.asyncio
+async def test_ticket_created_includes_number(monkeypatch, ctx):
+    monkeypatch.setattr(CM, "get_llm_service", lambda: _FakeLLM(False))
+    msg = await CM.generate_ticket_created("INC-1001", ctx)
+    assert "INC-1001" in msg
