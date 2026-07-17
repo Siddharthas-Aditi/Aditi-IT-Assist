@@ -28,6 +28,7 @@ from app.models.knowledge import (
 )
 from app.models.knowledge_candidate import KnowledgeCandidate
 from app.models.remote_support import RemoteSessionEvent, RemoteSupportConsent, RemoteSupportSession
+from app.models.reporting import ScheduledReportRun
 from app.models.specialist_chat import SpecialistChatMessage, SpecialistChatSession
 from app.models.sso import IdentityProviderConfig, IdPGroupRoleMapping, SPCertificate
 from app.models.support import Message, SupportSession
@@ -80,6 +81,8 @@ __all__ = [
     "RemoteSupportSession",
     "RemoteSupportConsent",
     "RemoteSessionEvent",
+    # Scheduled reporting
+    "ScheduledReportRun",
     # Audit & Analytics
     "AuditEvent",
     "AnalyticsSnapshot",
