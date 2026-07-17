@@ -1,6 +1,7 @@
 """B1: the resolver presents one step per turn and advances on the next turn."""
 
 import pytest
+from langchain_core.messages import HumanMessage
 
 from app.services.agents.diagnostic_state import DiagnosticContext
 from app.workflows.nodes import resolution as R  # noqa: N812
@@ -107,6 +108,25 @@ async def test_escalation_turn_has_no_quick_replies():
     result = await R.resolution_node(state)
     assert result["conversation_phase"] == "escalating"
     assert not result.get("quick_replies")
+
+
+@pytest.mark.asyncio
+async def test_simplification_turn_includes_quick_replies():
+    ctx = _ctx()
+    ctx.resolution_attempts = 2
+    state = {
+        "knowledge_results": _kb(),
+        "diagnostic_context": ctx.to_dict(),
+        "messages": [HumanMessage(content="can you break it down more simply?")],
+    }
+    result = await R.resolution_node(state)
+    assert result["conversation_phase"] == "confirming"
+    assert result["resolution_steps"]
+    assert result["quick_replies"] == [
+        {"label": "That worked", "value": "that worked"},
+        {"label": "Still not working", "value": "still not working"},
+        {"label": "Talk to a specialist", "value": "talk to a specialist"},
+    ]
 
 
 @pytest.mark.asyncio

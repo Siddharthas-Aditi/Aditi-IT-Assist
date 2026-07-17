@@ -14,6 +14,7 @@ import { WelcomeCategories } from '@/features/chat/WelcomeCategories';
 import { liveChatApi } from '@/features/specialist-chat/api';
 import { chatApi } from '@/lib/api';
 import { restoreChatSession, saveChatSession } from '@/lib/chat-session-sync';
+import type { QuickReplyOption } from '@/types';
 
 // Teams Webhook
 // Set VITE_TEAMS_WEBHOOK_URL in your .env to enable Teams notifications on
@@ -108,7 +109,7 @@ interface ChatMessage {
   confidence?: number;
   isError?: boolean;
   /** Quick-reply chips offered after a troubleshooting step (e.g. "That worked"). */
-  quickReplies?: { label: string; value: string }[];
+  quickReplies?: QuickReplyOption[];
 }
 
 /** Render **bold** markdown and newlines without a full MD library. */
@@ -350,7 +351,7 @@ export function SupportChatPage() {
         follow_up_question?: string;
         issue_category?: string;
         confidence_score?: number;
-        quick_replies?: { label: string; value: string }[];
+        quick_replies?: QuickReplyOption[];
         detail?: string | { msg?: string; loc?: unknown[] }[];
       } = {};
 

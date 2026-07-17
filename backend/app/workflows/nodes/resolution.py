@@ -783,6 +783,11 @@ async def _handle_simplification_request(
         "diagnostic_context": diag_ctx.to_dict(),
         "conversation_phase": diag_ctx.phase.value,
         "messages": [AIMessage(content=resolution["response"])],
+        "quick_replies": [
+            {"label": "That worked", "value": "that worked"},
+            {"label": "Still not working", "value": "still not working"},
+            {"label": "Talk to a specialist", "value": "talk to a specialist"},
+        ],
         "audit_trail": [
             {
                 "event": "resolution.simplified",

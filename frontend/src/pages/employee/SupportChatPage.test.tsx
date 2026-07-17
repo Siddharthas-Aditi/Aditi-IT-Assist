@@ -146,6 +146,49 @@ describe('SupportChatPage quick-reply chips', () => {
     expect(screen.getByRole('button', { name: 'Talk to a specialist' })).toBeInTheDocument();
   });
 
+  it('clicking "That worked" sends that text as the next message', async () => {
+    seedChatSession([
+      {
+        id: 'ai-1',
+        role: 'assistant',
+        content: 'Try restarting the app and let me know how it goes.',
+        timestamp: new Date().toISOString(),
+        resolutionSteps: [{ step_number: 1, instruction: 'Restart the app' }],
+        quickReplies: QUICK_REPLIES,
+      },
+    ]);
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        session_id: 'sess-1',
+        message_id: 'ai-2',
+        content: 'Glad that worked!',
+        resolution_steps: [],
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <MemoryRouter>
+        <SupportChatPage />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'That worked' }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining('/chat/message'),
+        expect.objectContaining({
+          body: JSON.stringify({ message: 'that worked', session_id: 'sess-1' }),
+        }),
+      );
+    });
+
+    vi.unstubAllGlobals();
+  });
+
   it('clicking "Still not working" sends that text as the next message', async () => {
     seedChatSession([
       {
