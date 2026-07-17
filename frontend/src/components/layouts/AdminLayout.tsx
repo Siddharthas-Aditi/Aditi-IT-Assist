@@ -19,6 +19,7 @@ import {
   ChevronDown,
   LifeBuoy,
   Bot,
+  FileBarChart,
 } from 'lucide-react';
 
 import { useAuthStore } from '@/stores/auth-store';
@@ -62,6 +63,12 @@ const NAV: NavItem[] = [
     can: (u) => hasPermission(u, P.ADMIN_VIEW_AUDIT_LOG),
   },
   { to: '/dashboard/agent-ops', label: 'Agent Operations', icon: Bot, can: isLeadOrAbove },
+  {
+    to: '/dashboard/reports/specialists',
+    label: 'Specialist Report',
+    icon: FileBarChart,
+    can: isLeadOrAbove,
+  },
 ];
 
 export function AdminLayout() {

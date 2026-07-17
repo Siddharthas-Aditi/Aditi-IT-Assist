@@ -48,6 +48,7 @@ import { CandidateReviewPage } from '@/pages/admin/knowledge/CandidateReviewPage
 import { CandidateEditorPage } from '@/pages/admin/knowledge/CandidateEditorPage';
 import { FeedbackReviewPage } from '@/pages/admin/FeedbackReviewPage';
 import { AgentOperationsPage } from '@/pages/admin/AgentOperationsPage';
+import { SpecialistReportPage } from '@/pages/admin/SpecialistReportPage';
 
 function HomeRedirect() {
   const { user, isAuthenticated } = useAuthStore();
@@ -109,6 +110,7 @@ export function App() {
         <Route path="users/:id" element={<UserDetailPage />} />
         <Route path="feedback/review" element={<FeedbackReviewPage />} />
         <Route path="agent-ops" element={<AgentOperationsPage />} />
+        <Route path="reports/specialists" element={<SpecialistReportPage />} />
       </Route>
 
       {/* Audit (admin + auditor) */}
