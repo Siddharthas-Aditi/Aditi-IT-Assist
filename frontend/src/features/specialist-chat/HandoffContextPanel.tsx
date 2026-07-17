@@ -322,18 +322,40 @@ function sourceDomain(url: string): string {
   }
 }
 
+/**
+ * Returns the URL only if it is a safe, absolute http(s) URL — otherwise null.
+ *
+ * `finding.url` comes from external web-search results and is attacker-influenceable
+ * (e.g. `javascript:`, `data:`, `vbscript:` schemes). Rendering it directly as an
+ * anchor `href` would let a malicious search result execute script when a specialist
+ * clicks the link. We only ever render a clickable link for a verified http(s) URL.
+ */
+function safeHttpUrl(raw: string): string | null {
+  try {
+    const u = new URL(raw);
+    return u.protocol === 'http:' || u.protocol === 'https:' ? u.href : null;
+  } catch {
+    return null;
+  }
+}
+
 function WebResearchFindingRow({ finding }: { finding: WebResearchFinding }) {
+  const safeUrl = safeHttpUrl(finding.url);
   return (
     <li className="rounded-md border border-border/60 px-3 py-2">
       <div className="flex flex-wrap items-start justify-between gap-2">
-        <a
-          href={finding.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-sm font-medium text-primary underline-offset-2 hover:underline"
-        >
-          {finding.title}
-        </a>
+        {safeUrl ? (
+          <a
+            href={safeUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm font-medium text-primary underline-offset-2 hover:underline"
+          >
+            {finding.title}
+          </a>
+        ) : (
+          <span className="text-sm font-medium text-foreground">{finding.title}</span>
+        )}
         <Badge variant={trustTierBadgeVariant(finding.trust_tier)}>
           {TRUST_TIER_LABELS[finding.trust_tier] ?? finding.trust_tier}
         </Badge>

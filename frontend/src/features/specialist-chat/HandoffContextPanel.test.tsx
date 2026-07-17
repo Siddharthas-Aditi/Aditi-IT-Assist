@@ -106,6 +106,47 @@ describe('HandoffContextPanel', () => {
     expect(screen.getByText(/unverified external sources/)).toBeInTheDocument();
   });
 
+  it('renders a javascript: scheme finding as plain text, never as a clickable link', async () => {
+    vi.spyOn(queueApi, 'getHandoffView').mockResolvedValue({
+      ...VIEW,
+      web_research_findings: [
+        {
+          title: 'Malicious finding',
+          url: 'javascript:alert(1)',
+          snippet: 'Untrusted external content',
+          trust_tier: 'general_blog',
+          provider: 'bing',
+        },
+        {
+          title: 'Fix a full mailbox in Outlook',
+          url: 'https://support.microsoft.com/mailbox-quota',
+          snippet: 'Increase your quota via the admin center.',
+          trust_tier: 'official',
+          provider: 'bing',
+        },
+      ],
+    });
+    render(<HandoffContextPanel ticketId="t1" />);
+
+    await waitFor(() =>
+      expect(screen.getByText(/Web research \(for your review\)/)).toBeInTheDocument(),
+    );
+
+    // The malicious finding renders as plain text, not a link.
+    expect(screen.getByText('Malicious finding')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Malicious finding' })).toBeNull();
+
+    // The safe finding still renders as a proper clickable link.
+    const safeLink = screen.getByRole('link', { name: 'Fix a full mailbox in Outlook' });
+    expect(safeLink).toHaveAttribute('href', 'https://support.microsoft.com/mailbox-quota');
+
+    // Belt-and-suspenders: no rendered element ever carries a javascript: href.
+    const allLinks = screen.getAllByRole('link');
+    for (const l of allLinks) {
+      expect(l.getAttribute('href')).not.toMatch(/^javascript:/i);
+    }
+  });
+
   it('renders no web research section when there are no findings', async () => {
     vi.spyOn(queueApi, 'getHandoffView').mockResolvedValue({
       ...VIEW,
