@@ -39,10 +39,12 @@ class _FakeAsyncClient:
 async def test_google_provider_parses_and_assesses_trust(monkeypatch):
     payload = {
         "items": [
-            {"title": "Fix keyboard", "link": "https://support.microsoft.com/kb/1",
-             "snippet": "Try the on-screen keyboard."},
-            {"title": "Random blog", "link": "https://someblog.example.com/post",
-             "snippet": "..."},
+            {
+                "title": "Fix keyboard",
+                "link": "https://support.microsoft.com/kb/1",
+                "snippet": "Try the on-screen keyboard.",
+            },
+            {"title": "Random blog", "link": "https://someblog.example.com/post", "snippet": "..."},
         ]
     }
     monkeypatch.setattr(W.httpx, "AsyncClient", lambda *a, **k: _FakeAsyncClient(payload))
@@ -57,9 +59,15 @@ async def test_google_provider_parses_and_assesses_trust(monkeypatch):
 async def test_google_provider_returns_empty_on_error(monkeypatch):
     class _Boom:
         def __init__(self, *a, **k): ...
-        async def __aenter__(self): return self
-        async def __aexit__(self, *a): return False
-        async def get(self, *a, **k): raise RuntimeError("network down")
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def get(self, *a, **k):
+            raise RuntimeError("network down")
+
     monkeypatch.setattr(W.httpx, "AsyncClient", lambda *a, **k: _Boom())
     provider = W.GoogleProgrammableSearchProvider(api_key="k", cx="cx")
     assert await provider.search("q", category="c", system="s") == []
