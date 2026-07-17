@@ -96,6 +96,26 @@ async def _sweep_remote_sessions_once() -> dict[str, int]:
             return {"expired": 0, "max_duration_terminated": 0}
 
 
+async def _run_scheduled_report_once() -> str:
+    """One pass of the monthly scheduled-report job.
+
+    Same isolation pattern as the other sweepers: short-lived session,
+    rollback + log on failure, never kills the loop.
+    """
+    from datetime import UTC, datetime
+
+    from app.core.database import async_session_factory
+    from app.services.reporting.scheduled_report import ScheduledReportService
+
+    async with async_session_factory() as db:
+        try:
+            return await ScheduledReportService(db).run_once(datetime.now(UTC))
+        except Exception:  # noqa: BLE001 — never let a bad pass kill the loop
+            await db.rollback()
+            logger.exception("scheduled_report_pass_failed")
+            return "failed"
+
+
 async def _run_loop(
     name: str,
     job: Callable[[], Awaitable[object]],
@@ -128,6 +148,8 @@ async def start_background_jobs(
     background_agents_poll_seconds: int = 60,
     remote_sweeper_enabled: bool = True,
     remote_sweeper_interval_seconds: int = 60,
+    scheduled_reports_enabled: bool = False,
+    scheduled_report_interval_seconds: int = 86400,
 ) -> AsyncIterator[None]:
     """Async context manager — start jobs on enter, cancel on exit.
 
@@ -163,6 +185,18 @@ async def start_background_jobs(
                     remote_sweeper_interval_seconds,
                 ),
                 name="remote_support.session_sweeper",
+            )
+        )
+
+    if scheduled_reports_enabled:
+        tasks.append(
+            asyncio.create_task(
+                _run_loop(
+                    "reporting.scheduled_report",
+                    _run_scheduled_report_once,
+                    scheduled_report_interval_seconds,
+                ),
+                name="reporting.scheduled_report",
             )
         )
 
