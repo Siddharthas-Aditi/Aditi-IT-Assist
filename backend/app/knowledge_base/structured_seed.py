@@ -2783,7 +2783,7 @@ _YAML_ARTICLES = [
     {
         "slug": "laptop-keyboard-not-working",
         "title": "Laptop Keyboard Not Working",
-        "short_summary": "Fix a laptop keyboard that is unresponsive, typing wrong characters, or intermittent.",
+        "short_summary": "Fix a laptop keyboard that's unresponsive, wrong chars, or intermittent.",
         "article_type": "troubleshooting",
         "audience": "employee",
         "category": "hardware/laptop",
@@ -3130,7 +3130,7 @@ _YAML_ARTICLES = [
     {
         "slug": "laptop-slow-performance",
         "title": "Laptop Running Slow",
-        "short_summary": "Speed up a laptop that is slow to open apps, browse, or perform daily tasks.",
+        "short_summary": "Speed up a laptop that is slow to open apps or do daily tasks.",
         "article_type": "troubleshooting",
         "audience": "employee",
         "category": "system/performance",
@@ -3195,7 +3195,7 @@ _YAML_ARTICLES = [
     {
         "slug": "windows-update-failure",
         "title": "Windows Update Fails or Gets Stuck",
-        "short_summary": "Resolve Windows updates that fail to install, get stuck, or show error codes.",
+        "short_summary": "Resolve Windows updates that fail, get stuck, or show error codes.",
         "article_type": "troubleshooting",
         "audience": "employee",
         "category": "software/windows-update",
