@@ -2,12 +2,24 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { AlertCircle, Clock, MessageSquarePlus, RefreshCw, UserCheck } from 'lucide-react';
+import {
+  AlertCircle,
+  Clock,
+  MessageSquarePlus,
+  RefreshCw,
+  RotateCcw,
+  UserCheck,
+} from 'lucide-react';
 
 import { PageHeader } from '@/components/admin';
 import { Card } from '@/components/ui';
-import { apiRequest } from '@/lib/api';
+import { apiRequest, ticketsApi } from '@/lib/api';
+import { isITStaff } from '@/lib/permissions';
 import { useAuthStore } from '@/stores/auth-store';
+
+/** Terminal statuses from which a ticket can be reopened (mirrors the backend
+ *  `TicketService.reopen_ticket` guard). */
+const REOPENABLE_STATUSES = new Set(['resolved', 'closed']);
 
 interface TicketDetail {
   id: string;
@@ -123,6 +135,11 @@ export function TicketWorkspacePage() {
   const isMine = Boolean(
     ticket?.assigned_to && currentUser && ticket.assigned_to === currentUser.id,
   );
+  // Mirrors the backend `POST /tickets/{id}/reopen` gate: IT staff only
+  // (it_agent/it_lead/it_admin), and only from a terminal ticket status.
+  const canReopen = Boolean(
+    ticket && isITStaff(currentUser) && REOPENABLE_STATUSES.has(ticket.status),
+  );
 
   const timeline = useMemo(() => {
     if (!data) return [];
@@ -202,6 +219,18 @@ export function TicketWorkspacePage() {
                 className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground disabled:opacity-50"
               >
                 <UserCheck size={14} /> Assign to me
+              </button>
+            )}
+            {canReopen && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() =>
+                  runAction(() => ticketsApi.reopen(id!))
+                }
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-50"
+              >
+                <RotateCcw size={14} /> Reopen ticket
               </button>
             )}
           </div>

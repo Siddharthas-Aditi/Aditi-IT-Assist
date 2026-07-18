@@ -355,6 +355,21 @@ export const chatApi = {
     }>(`/chat/waiting-status/${sessionId}`),
 };
 
+export interface TicketReopenResult {
+  id: string;
+  ticket_number: string;
+  status: string;
+}
+
+export const ticketsApi = {
+  /** Reopen a resolved/closed ticket back to active work (IT staff only). */
+  reopen: (id: string, comment?: string) =>
+    apiRequest<TicketReopenResult>(`/tickets/${id}/reopen`, {
+      method: 'POST',
+      body: comment ? { comment } : undefined,
+    }),
+};
+
 const REMOTE = '/remote-support';
 
 export const remoteApi = {
