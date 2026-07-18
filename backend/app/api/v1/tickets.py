@@ -8,14 +8,10 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.permissions import P
-from app.models.auth import User
-from app.services.auth.dependencies import CurrentUser, ITAgentUser, require_permissions
+from app.services.auth.dependencies import CurrentUser, ITAgentUser
 from app.services.ticket_service import TicketService
 
 router = APIRouter()
-
-ReopenUser = Annotated[User, Depends(require_permissions(P.TICKET_REOPEN))]
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -280,17 +276,19 @@ async def update_ticket_status(
 @router.post("/{ticket_id}/reopen")
 async def reopen_ticket(
     ticket_id: str,
-    reopen_user: ReopenUser,
+    agent_user: ITAgentUser,
     db: Annotated[AsyncSession, Depends(get_db)],
     data: TicketReopenRequest | None = None,
 ) -> TicketResponse:
-    """Reopen a resolved/closed ticket back to active work."""
+    """Reopen a resolved/closed ticket back to active work (IT staff only)."""
     service = TicketService(db)
     try:
         ticket = await service.reopen_ticket(
-            uuid.UUID(ticket_id), reopen_user, comment=(data.comment if data else None)
+            uuid.UUID(ticket_id), agent_user, comment=(data.comment if data else None)
         )
     except ValueError as exc:
+        if str(exc) == "Ticket not found":
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return _ticket_to_response(ticket)
 

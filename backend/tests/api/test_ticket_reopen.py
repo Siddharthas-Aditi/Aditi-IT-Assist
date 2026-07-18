@@ -95,10 +95,23 @@ class TestReopenGating:
         assert resp.status_code == 401
 
     async def test_auditor_forbidden_no_reopen_permission(self, auditor_client: AsyncClient):
-        # security_auditor has no ticket:reopen grant in ROLE_PERMISSIONS.
+        # security_auditor is not an IT-staff role (it_agent/it_lead/it_admin).
         ticket_id = await _seed_ticket("resolved")
         resp = await auditor_client.post(f"{BASE}/{ticket_id}/reopen")
         assert resp.status_code == 403
+
+    async def test_employee_forbidden_idor_regression(self, employee_client: AsyncClient):
+        # IDOR regression guard: an employee (even a non-owner) must never be
+        # able to reopen a ticket via role-gated ticket:reopen scope-bypass.
+        # Reopen is IT-staff-only; employees get a categorical 403.
+        ticket_id = await _seed_ticket("resolved")
+        resp = await employee_client.post(f"{BASE}/{ticket_id}/reopen")
+        assert resp.status_code == 403
+
+    async def test_reopen_nonexistent_ticket_returns_404(self, agent_client: AsyncClient):
+        missing_id = uuid.uuid4()
+        resp = await agent_client.post(f"{BASE}/{missing_id}/reopen")
+        assert resp.status_code == 404
 
 
 class TestReopenAction:
