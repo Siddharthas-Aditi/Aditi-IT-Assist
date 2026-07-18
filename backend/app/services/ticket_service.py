@@ -150,6 +150,44 @@ class TicketService:
 
         return ticket
 
+    async def reopen_ticket(
+        self,
+        ticket_id: uuid.UUID,
+        actor: User,
+        comment: str | None = None,
+    ) -> Ticket:
+        """Reopen a resolved/closed ticket back to active work.
+
+        Logs a `status_changed` event (what the specialist report derives
+        "reopened" from) and clears the resolution/closure timestamps. Only
+        valid from a terminal state (`resolved`/`closed`) — reopening a
+        ticket that's already active is rejected.
+        """
+        ticket = await self._get_ticket(ticket_id)
+        if not ticket:
+            raise ValueError("Ticket not found")
+        if ticket.status not in ("resolved", "closed"):
+            raise ValueError(f"Cannot reopen a ticket in status '{ticket.status}'")
+
+        old_status = ticket.status
+        ticket.status = "in_progress"
+        ticket.resolved_at = None
+        ticket.closed_at = None
+
+        await self._add_event(
+            ticket_id,
+            actor.id,
+            "status_changed",
+            f"Status changed from {old_status} to in_progress (reopened)",
+            old_value=old_status,
+            new_value="in_progress",
+        )
+
+        if comment:
+            await self.add_comment(ticket_id, actor, comment, is_internal=True)
+
+        return ticket
+
     async def assign_ticket(
         self,
         ticket_id: uuid.UUID,

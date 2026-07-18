@@ -223,8 +223,21 @@ class SpecialistQueueService:
         await SpecialistChatService(self.db).end_active_for_ticket(
             ticket.id, actor=by_user, reason="specialist_ended"
         )
+        old_status = ticket.status
         ticket.assigned_to = None
         ticket.status = "triaged"
+
+        from app.services.ticket_service import TicketService
+
+        await TicketService(self.db)._add_event(
+            ticket.id,
+            by_user.id,
+            "status_changed",
+            f"Status changed from {old_status} to triaged",
+            old_value=old_status,
+            new_value="triaged",
+        )
+
         await self.db.flush()
         return ticket
 
@@ -249,6 +262,7 @@ class SpecialistQueueService:
         if ticket.assigned_to != by_user.id:
             raise PermissionError("Only the current claimer may resolve this ticket")
 
+        old_status = ticket.status
         now = datetime.now(UTC)
         ticket.status = "resolved"
         ticket.resolved_at = now
@@ -260,6 +274,17 @@ class SpecialistQueueService:
 
         await SpecialistChatService(self.db).end_active_for_ticket(
             ticket.id, actor=by_user, reason="resolved", resolution_notes=resolution_notes
+        )
+
+        from app.services.ticket_service import TicketService
+
+        await TicketService(self.db)._add_event(
+            ticket.id,
+            by_user.id,
+            "status_changed",
+            f"Status changed from {old_status} to resolved",
+            old_value=old_status,
+            new_value="resolved",
         )
 
         candidate_id: uuid.UUID | None = None
