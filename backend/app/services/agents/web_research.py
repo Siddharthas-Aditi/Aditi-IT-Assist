@@ -1,6 +1,6 @@
 """Controlled web-research agent.
 
-Wraps :class:`app.services.web_search_service.WebSearchService` with the
+Wraps a :class:`app.services.web_search_service.WebSearchProvider` with the
 governance layer required for production use:
 
 1. **Policy gate** — the calling code asks
@@ -19,8 +19,8 @@ governance layer required for production use:
    :class:`AuditEvent` so security review can trace every external content
    pull.
 
-Why a wrapper (not "just call WebSearchService")
-------------------------------------------------
+Why a wrapper (not "just call the search provider directly")
+--------------------------------------------------------------
 Production assistants must be defensive about external content. Without this
 layer, a misrouted call could pull untrusted blog content directly into a
 user-facing response, or grow the KB with unreviewed material. The wrapper
@@ -48,7 +48,6 @@ from app.services.web_search_service import (
     DomainTrust,
     WebSearchProvider,
     WebSearchResult,
-    WebSearchService,
 )
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -125,7 +124,11 @@ class ControlledWebResearchAgent:
         improvement_service: KnowledgeImprovementService | None = None,
         db: AsyncSession | None = None,
     ) -> None:
-        self.search = search or WebSearchService()
+        if search is None:
+            from app.services.web_search_service import get_web_search_provider
+
+            search = get_web_search_provider()
+        self.search = search
         self.improvement_service = improvement_service
         self.db = db
 
