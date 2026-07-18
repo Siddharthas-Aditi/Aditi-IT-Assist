@@ -174,3 +174,27 @@ def test_build_default_web_research_agent_wires_provider(monkeypatch):
     assert isinstance(agent, ControlledWebResearchAgent)
     assert agent.search is provider
     assert agent.db is db
+
+
+@pytest.mark.asyncio
+async def test_research_with_no_search_provider_returns_empty_not_allowed(monkeypatch):
+    """Constructing with search=None (e.g. get_web_search_provider() returned None)
+
+    must never raise AttributeError from `self.search.search(...)`; it should
+    degrade to a safe, empty, not-allowed outcome instead.
+    """
+    monkeypatch.setattr("app.services.web_search_service.get_web_search_provider", lambda: None)
+    agent = ControlledWebResearchAgent(search=None)
+    assert agent.search is None
+
+    outcome = await agent.research(
+        query="q",
+        specialist_name="zoom_meetings",
+        category="video-conferencing/zoom",
+        subtype="no-audio",
+        system="zoom",
+    )
+    assert outcome.results == ()
+    assert outcome.candidate_ids == ()
+    assert outcome.policy.allowed is False
+    assert outcome.policy.reason == "no web search provider configured"

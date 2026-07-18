@@ -822,7 +822,6 @@ ROLE_PERMISSIONS: dict[UserRole, list[P]] = {
     UserRole.EMPLOYEE: [
         P.TICKET_CREATE,
         P.TICKET_READ_OWN,
-        P.TICKET_REOPEN,
         P.TICKET_ADD_COMMENT,
         P.CHAT_START,
         P.CHAT_READ_OWN,

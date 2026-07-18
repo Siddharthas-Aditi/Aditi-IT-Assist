@@ -175,6 +175,23 @@ class ControlledWebResearchAgent:
         defensive measure. A blocked call returns an empty
         :class:`WebResearchOutcome` with the policy reason populated.
         """
+        if self.search is None:
+            policy = WebResearchPolicyDecision(
+                allowed=False,
+                reason="no web search provider configured",
+                allowed_tiers=(),
+                specialist_name=specialist_name,
+            )
+            logger.warning("web_research_blocked", **policy.__dict__)
+            await self._audit(
+                action="web_research.blocked",
+                resource_id=specialist_name,
+                description="web research blocked: no web search provider configured",
+                new_value={"specialist": specialist_name, "reason": policy.reason},
+                severity="warning",
+            )
+            return WebResearchOutcome(results=(), policy=policy)
+
         spec = get_agent(specialist_name)
         if not isinstance(spec, SpecialistAgentSpec):
             policy = WebResearchPolicyDecision(
