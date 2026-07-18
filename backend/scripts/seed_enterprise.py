@@ -5,6 +5,7 @@ Run: uv run python -m scripts.seed_enterprise
 """
 
 import asyncio
+import os
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -41,69 +42,59 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
 # Sample Users (local dev only)
 # ─────────────────────────────────────────────────────────────────────
 
+# ─────────────────────────────────────────────────────────────────────
+# Seed roster — LOCAL DEV / TEAM SEED ONLY.
+# These credentials are committed so colleagues get the same users when they
+# run `python -m scripts.seed_enterprise`. Each password can be overridden via
+# an env var (e.g. SEED_HAREESH_PASSWORD) without editing this file.
+# SECURITY: do NOT reuse these credentials in staging/production. Rotate them
+# and provision real users out-of-band before any non-local deployment.
+# ─────────────────────────────────────────────────────────────────────
 SAMPLE_USERS = [
     {
-        "email": "alice.johnson@aditi.com",
-        "full_name": "Alice Johnson",
-        "employee_id": "EMP-001",
-        "department": "Engineering",
-        "job_title": "Software Engineer",
-        "password": "employee123",
-        "role": "employee",
-    },
-    {
-        "email": "bob.williams@aditi.com",
-        "full_name": "Bob Williams",
-        "employee_id": "EMP-002",
-        "department": "Marketing",
-        "job_title": "Marketing Specialist",
-        "password": "employee123",
-        "role": "employee",
-    },
-    {
-        "email": "charlie.agent@aditi.com",
-        "full_name": "Charlie Martinez",
-        "employee_id": "IT-001",
-        "department": "IT Support",
-        "job_title": "IT Support Specialist",
-        "password": "agent123",
-        "role": "it_agent",
-    },
-    {
-        "email": "diana.agent@aditi.com",
-        "full_name": "Diana Chen",
-        "employee_id": "IT-002",
-        "department": "IT Support",
-        "job_title": "Senior IT Specialist",
-        "password": "agent123",
-        "role": "it_agent",
-    },
-    {
-        "email": "edward.lead@aditi.com",
-        "full_name": "Edward Thompson",
-        "employee_id": "IT-010",
-        "department": "IT Support",
-        "job_title": "IT Team Lead",
-        "password": "lead123",
-        "role": "it_lead",
-    },
-    {
-        "email": "admin@aditi.com",
-        "full_name": "System Administrator",
+        "email": "hareesh@aditiconsulting.com",
+        "full_name": "Hareesh",
         "employee_id": "IT-ADMIN",
         "department": "IT Operations",
         "job_title": "IT Administrator",
-        "password": "admin123",
+        "password": os.getenv("SEED_HAREESH_PASSWORD", "Hareesh@2026"),
         "role": "it_admin",
     },
     {
-        "email": "auditor@aditi.com",
-        "full_name": "Frank Auditor",
-        "employee_id": "SEC-001",
-        "department": "Security",
-        "job_title": "Security Auditor",
-        "password": "auditor123",
-        "role": "security_auditor",
+        "email": "sagar@aditiconsulting.com",
+        "full_name": "Sagar",
+        "employee_id": "IT-011",
+        "department": "IT Support",
+        "job_title": "IT Team Lead",
+        "password": os.getenv("SEED_SAGAR_PASSWORD", "Sagar@2026"),
+        "role": "it_lead",
+    },
+    {
+        "email": "madhukar@aditiconsulting.com",
+        "full_name": "Madhukar",
+        "employee_id": "IT-012",
+        "department": "IT Support",
+        "job_title": "IT Team Lead",
+        "password": os.getenv("SEED_MADHUKAR_PASSWORD", "Madhukar@2026"),
+        "role": "it_lead",
+    },
+    {
+        "email": "siddhartha@aditiconsulting.com",
+        "full_name": "Siddhartha",
+        "employee_id": "EMP-001",
+        "department": "Engineering",
+        "job_title": "Software Engineer",
+        "password": os.getenv("SEED_SIDDHARTHA_PASSWORD", "Siddhartha@2026"),
+        "role": "employee",
+    },
+    {
+        "email": "naresh@aditiconsulting.com",
+        "full_name": "Naresh",
+        "employee_id": "EMP-002",
+        "department": "Engineering",
+        "job_title": "Software Engineer",
+        "password": os.getenv("SEED_NARESH_PASSWORD", "Naresh@2026"),
+        "role": "employee",
     },
 ]
 
@@ -320,14 +311,12 @@ async def run_seed() -> None:
 
         await db.commit()
         print("\n✅ Enterprise seed complete!")
-        print("\n📋 Sample credentials (local dev only):")
-        print("  Employee:  alice.johnson@aditi.com / employee123")
-        print("  Employee:  bob.williams@aditi.com / employee123")
-        print("  IT Agent:  charlie.agent@aditi.com / agent123")
-        print("  IT Agent:  diana.agent@aditi.com / agent123")
-        print("  IT Lead:   edward.lead@aditi.com / lead123")
-        print("  Admin:     admin@aditi.com / admin123")
-        print("  Auditor:   auditor@aditi.com / auditor123")
+        print("\n📋 Seeded users (local dev — rotate before any real deployment):")
+        print("  Admin:     hareesh@aditiconsulting.com / Hareesh@2026")
+        print("  IT Lead:   sagar@aditiconsulting.com / Sagar@2026")
+        print("  IT Lead:   madhukar@aditiconsulting.com / Madhukar@2026")
+        print("  Employee:  siddhartha@aditiconsulting.com / Siddhartha@2026")
+        print("  Employee:  naresh@aditiconsulting.com / Naresh@2026")
 
 
 if __name__ == "__main__":
