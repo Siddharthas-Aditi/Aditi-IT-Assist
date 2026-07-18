@@ -168,6 +168,37 @@ async def test_kb_insufficient_retrieval_ran_but_found_nothing_triggers_research
 
 
 @pytest.mark.asyncio
+async def test_unrouted_category_resolves_specialist_via_registry(monkeypatch):
+    """No routed specialist (no `supervisor_decision`) — only `issue_category` is
+    set. The slash-form category is not a registry name, so the old fallback
+    (`diag.get("issue_category")`) would have passed "email/outlook" straight
+    through as `specialist_name`, silently failing the registry lookup inside
+    `agent.research()`. It must instead resolve via `find_specialist_for` to
+    the real registry specialist name, "outlook".
+    """
+    fake_agent = _FakeWebResearchAgent(_make_outcome())
+    monkeypatch.setattr(
+        "app.services.agents.web_research.build_default_web_research_agent",
+        lambda db: fake_agent,
+    )
+
+    chat = ChatService(_FakeTicketService())
+    state = {
+        "issue_category": "email/outlook",
+        "knowledge_results": [{"title": "Some Outlook Article"}],
+        "diagnostic_context": {
+            "exact_problem_statement": "Outlook keeps crashing on launch",
+            "failed_steps": ["Restart Outlook"],
+        },
+    }
+
+    await chat._maybe_run_web_research("sess-unrouted-category", state)
+
+    assert fake_agent.calls, "governed research agent should have been invoked"
+    assert fake_agent.calls[0]["specialist_name"] == "outlook"
+
+
+@pytest.mark.asyncio
 async def test_web_research_failure_never_raises(monkeypatch):
     """Best-effort: any exception from the research agent must be swallowed."""
 

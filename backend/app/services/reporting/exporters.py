@@ -32,7 +32,11 @@ def _sanitize(value: str) -> str:
 
 def _cell(row: SpecialistReportRow, attr: str) -> str:
     value = getattr(row, attr)
-    return "-" if value is None else _sanitize(str(value))
+    if value is None:
+        return "-"
+    if isinstance(value, str):
+        return _sanitize(value)
+    return str(value)
 
 
 def _all_rows(report: SpecialistReport) -> list[SpecialistReportRow]:

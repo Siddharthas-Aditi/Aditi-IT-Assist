@@ -26,6 +26,7 @@ from app.services.agents.escalation_policy import (
 )
 from app.services.agents.intent_classifier import ConversationIntent
 from app.services.agents.llm_intent import classify_intent_with_llm
+from app.services.agents.registry import AGENT_REGISTRY, find_specialist_for
 from app.services.agents.session_store import ChatSession, get_session_store
 from app.services.llm_service import get_llm_service
 from app.services.ticket_service import TicketService
@@ -759,16 +760,22 @@ class ChatService:
             if not query:
                 return
             supervisor_decision = state.get("supervisor_decision") or {}
+            issue_category = state.get("issue_category") or diag.get("issue_category")
             specialist_name = (
-                supervisor_decision.get("specialist")
-                or supervisor_decision.get("agent")
-                or diag.get("issue_category")
-                or ""
+                supervisor_decision.get("specialist") or supervisor_decision.get("agent") or ""
             )
+            if specialist_name not in AGENT_REGISTRY:
+                # Not a routed/valid registry specialist (e.g. the caller only
+                # set issue_category, or the routed name is a slash-form
+                # category, not a registry name) — resolve one from the
+                # category so the policy check in `agent.research()` isn't a
+                # silent no-op. Still a safe no-op if nothing matches.
+                resolved = find_specialist_for(category=issue_category)
+                specialist_name = resolved.name if resolved else ""
             outcome = await agent.research(
                 query=query,
                 specialist_name=specialist_name,
-                category=state.get("issue_category") or diag.get("issue_category"),
+                category=issue_category,
                 subtype=diag.get("issue_subtype"),
                 system=diag.get("normalized_system"),
                 session_id=session_id,

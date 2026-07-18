@@ -125,3 +125,46 @@ def test_xlsx_leaves_safe_names_unchanged():
     rows = list(ws.iter_rows(values_only=True))
     agent_name = rows[1][0]
     assert agent_name == "Alex Agent"
+
+
+def _negative_number_report():
+    row = SpecialistReportRow(
+        agent_id="a4",
+        agent_name="=SUM(A1)",
+        agent_email="agent4@aditi.com",
+        total_tickets=1,
+        reopened=0,
+        avg_resolution_hours=-1.0,
+        sla_violations=0,
+        csat_avg=5.0,
+        dsat=0,
+        feedback_responses=1,
+    )
+    totals = SpecialistReportRow(
+        agent_id=None,
+        agent_name="Team totals",
+        total_tickets=1,
+        reopened=0,
+        avg_resolution_hours=-1.0,
+        sla_violations=0,
+        csat_avg=5.0,
+        dsat=0,
+        feedback_responses=1,
+    )
+    return SpecialistReport(
+        period_start=datetime(2026, 7, 1, tzinfo=UTC),
+        period_end=datetime(2026, 7, 31, tzinfo=UTC),
+        rows=[row],
+        totals=totals,
+    )
+
+
+def test_csv_negative_number_not_quote_prefixed_but_formula_string_is():
+    """Numbers must pass through untouched (matching to_xlsx); only string
+    cells are formula-injection sanitized. A negative float like -1.0 must
+    NOT be quote-prefixed, while a formula-injection string cell still must
+    be."""
+    data = exporters.to_csv(_negative_number_report()).decode("utf-8")
+    assert "-1.0" in data
+    assert "'-1.0" not in data
+    assert "'=SUM(A1)" in data

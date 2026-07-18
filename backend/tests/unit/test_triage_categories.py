@@ -21,6 +21,8 @@ def test_new_categories_registered():
         ("external monitor not detected", "hardware/laptop"),
         ("my laptop is really slow", "system/performance"),
         ("windows update is stuck", "software/windows-update"),
+        ("windows won't update", "software/windows-update"),
+        ("my pc is stuck in an update loop", "software/windows-update"),
     ],
 )
 def test_keyword_classify_new_categories(message, expected):

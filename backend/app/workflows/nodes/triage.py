@@ -1481,6 +1481,10 @@ def _keyword_classify(message: str, diag_ctx: DiagnosticContext | None = None) -
             "update error",
             "check for updates",
             "install updates",
+            "won't update",
+            "update not installing",
+            "stuck installing update",
+            "update loop",
         ]
     ):
         return {
