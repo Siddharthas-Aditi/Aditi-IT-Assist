@@ -57,6 +57,8 @@ class SpecialistChatSessionOut(BaseModel):
     id: UUID
     ticket_id: UUID
     ticket_number: str | None = None
+    # Linked AI support session (for post-chat feedback / durable transcript).
+    ai_session_id: UUID | None = None
     user_id: UUID
     user_name: str | None = None
     user_email: str | None = None

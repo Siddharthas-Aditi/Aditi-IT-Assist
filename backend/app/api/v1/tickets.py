@@ -300,14 +300,22 @@ async def add_comment(
     current_user: CurrentUser,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> dict:
-    """Add a comment to a ticket."""
+    """Add a comment to a ticket.
+
+    Employees may only comment on their own tickets (public notes only).
+    """
     service = TicketService(db)
-    comment = await service.add_comment(
-        uuid.UUID(ticket_id),
-        current_user,
-        data.content,
-        is_internal=data.is_internal,
-    )
+    try:
+        comment = await service.add_comment(
+            uuid.UUID(ticket_id),
+            current_user,
+            data.content,
+            is_internal=data.is_internal,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
     return {
         "id": str(comment.id),
         "content": comment.content,

@@ -11,7 +11,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 import { type QueueEntry, liveChatApi, queueApi } from '@/features/specialist-chat/api';
 import { ApiError } from '@/lib/api';
@@ -96,14 +96,13 @@ export function LiveQueuePage() {
       const claimed = await queueApi.claim(entry.ticket_id);
 
       if (claimed.waiting_state === 'likely_left') {
-        // The employee waited past the live-chat timeout and has likely already
-        // left. Do NOT open a live session — it would be an empty room. The
-        // ticket is now in the specialist's assigned queue for async follow-up.
-        await load();
+        // Employee waited past the live-chat timeout — open the ticket workspace
+        // for async follow-up (matches the claim contract / API docs).
         setInfo(
           `${entry.ticket_number} claimed — employee may have left (waited ${Math.round(claimed.waited_seconds / 60)}m). ` +
-            'Ticket saved to your assigned queue for async follow-up.',
+            'Opening ticket workspace for async follow-up.',
         );
+        navigate(`/operations/tickets/${entry.ticket_id}`);
       } else {
         // Employee is still actively waiting — start the live session immediately.
         const live = await liveChatApi.start(entry.ticket_id);
@@ -223,7 +222,15 @@ export function LiveQueuePage() {
                   key={e.ticket_id}
                   className={`hover:bg-gray-50 ${e.waiting_state === 'likely_left' ? 'opacity-60' : ''}`}
                 >
-                  <td className="px-4 py-3 font-medium text-indigo-700">{e.ticket_number}</td>
+                  <td className="px-4 py-3 font-medium text-indigo-700">
+                    <Link
+                      to={`/operations/tickets/${e.ticket_id}`}
+                      className="hover:underline"
+                      onClick={(ev) => ev.stopPropagation()}
+                    >
+                      {e.ticket_number}
+                    </Link>
+                  </td>
                   <td className="px-4 py-3 text-gray-700">
                     <div>{e.summary.issue_one_liner || e.title}</div>
                     <div className="text-xs text-gray-400">
@@ -245,32 +252,40 @@ export function LiveQueuePage() {
                     )}
                   </td>
                   <td className="px-4 py-3 text-right">
-                    {e.claimed_at ? (
-                      <span className="text-xs text-gray-400">
-                        Claimed{e.claimed_by_name ? ` by ${e.claimed_by_name}` : ''}
-                      </span>
-                    ) : (
-                      <button
-                        onClick={() => void onClaim(e)}
-                        disabled={claimingId === e.ticket_id}
-                        title={
-                          e.waiting_state === 'likely_left'
-                            ? 'Employee may have left — claim routes to async queue'
-                            : 'Claim and open live chat'
-                        }
-                        className={`px-3 py-1 text-xs rounded-md disabled:opacity-50 ${
-                          e.waiting_state === 'likely_left'
-                            ? 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                            : 'bg-indigo-600 text-white hover:bg-indigo-700'
-                        }`}
+                    <div className="flex items-center justify-end gap-2">
+                      <Link
+                        to={`/operations/tickets/${e.ticket_id}`}
+                        className="px-2.5 py-1 text-xs rounded-md border border-gray-200 text-gray-700 hover:bg-gray-50"
                       >
-                        {claimingId === e.ticket_id
-                          ? 'Claiming…'
-                          : e.waiting_state === 'likely_left'
-                            ? 'Claim (async)'
-                            : 'Claim'}
-                      </button>
-                    )}
+                        View ticket
+                      </Link>
+                      {e.claimed_at ? (
+                        <span className="text-xs text-gray-400">
+                          Claimed{e.claimed_by_name ? ` by ${e.claimed_by_name}` : ''}
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => void onClaim(e)}
+                          disabled={claimingId === e.ticket_id}
+                          title={
+                            e.waiting_state === 'likely_left'
+                              ? 'Employee may have left — opens ticket workspace'
+                              : 'Claim and open live chat'
+                          }
+                          className={`px-3 py-1 text-xs rounded-md disabled:opacity-50 ${
+                            e.waiting_state === 'likely_left'
+                              ? 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                              : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                          }`}
+                        >
+                          {claimingId === e.ticket_id
+                            ? 'Claiming…'
+                            : e.waiting_state === 'likely_left'
+                              ? 'Claim (async)'
+                              : 'Claim'}
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}

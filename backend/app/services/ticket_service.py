@@ -228,7 +228,24 @@ class TicketService:
         is_internal: bool = False,
         comment_type: str = "note",
     ) -> TicketComment:
-        """Add a comment to a ticket."""
+        """Add a comment to a ticket.
+
+        Employees may only comment on their own tickets, and never as
+        internal notes (``is_internal`` is forced False for non-staff).
+        """
+        ticket = await self._get_ticket(ticket_id)
+        if ticket is None:
+            raise ValueError("Ticket not found")
+
+        staff_roles = {"it_agent", "it_lead", "it_admin"}
+        author_roles = set(getattr(author, "role_names", None) or [])
+        is_staff = bool(author_roles & staff_roles)
+
+        if not is_staff:
+            if ticket.requester_id != author.id:
+                raise PermissionError("You may only comment on your own tickets")
+            is_internal = False
+
         comment = TicketComment(
             ticket_id=ticket_id,
             author_id=author.id,

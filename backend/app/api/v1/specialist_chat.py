@@ -77,6 +77,7 @@ def _to_out(
         id=session.id,
         ticket_id=session.ticket_id,
         ticket_number=ticket_number,
+        ai_session_id=session.ai_session_id,
         user_id=session.user_id,
         user_name=session.user_name,
         user_email=session.user_email,
@@ -136,6 +137,7 @@ async def start_session(
         ticket=ticket,
         specialist=current_user,
         user=user_row,
+        ai_session_id=ticket.session_id,
         idle_warning_seconds=body.idle_warning_seconds,
         idle_end_seconds=body.idle_end_seconds,
     )

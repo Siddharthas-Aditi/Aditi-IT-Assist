@@ -13,10 +13,11 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import { useAuthStore } from '@/stores/auth-store';
 import { Breadcrumbs } from '@/components/admin/Breadcrumbs';
+import { PostChatFeedbackCard } from '@/features/chat/PostChatFeedbackCard';
 
 import {
   type SpecialistChatEndReason,
@@ -43,6 +44,7 @@ export function LiveChatPage() {
   const [ending, setEnding] = useState(false);
   const [requestingRemote, setRequestingRemote] = useState(false);
   const [remoteRequested, setRemoteRequested] = useState(false);
+  const [feedbackDismissed, setFeedbackDismissed] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   // Typing-indicator heartbeat: throttle "typing=true" pings and schedule a
   // "typing=false" once the user pauses, so we never spam the network.
@@ -179,6 +181,7 @@ export function LiveChatPage() {
 
       <Header
         session={session}
+        isSpecialist={isSpecialist}
         onBack={() => navigate(isSpecialist ? '/operations/assigned' : '/support')}
       />
 
@@ -197,6 +200,15 @@ export function LiveChatPage() {
       {isEnded && (
         <div className="mb-3 p-3 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-700">
           This chat has ended ({session.end_reason || session.status.replace('ended_by_', '')}).
+        </div>
+      )}
+
+      {isEnded && !isSpecialist && session.ai_session_id && !feedbackDismissed && (
+        <div className="mb-4">
+          <PostChatFeedbackCard
+            sessionId={session.ai_session_id}
+            onDismiss={() => setFeedbackDismissed(true)}
+          />
         </div>
       )}
 
@@ -317,9 +329,11 @@ export function LiveChatPage() {
 function Header({
   session,
   onBack,
+  isSpecialist,
 }: {
   session: SpecialistChatSessionOut;
   onBack: () => void;
+  isSpecialist: boolean;
 }) {
   return (
     <div className="mb-4 flex items-center justify-between">
@@ -328,7 +342,23 @@ function Header({
           ← Back
         </button>
         <h1 className="text-xl font-bold text-gray-900">
-          {session.ticket_number || 'Live support chat'}
+          {isSpecialist && session.ticket_id ? (
+            <Link
+              to={`/operations/tickets/${session.ticket_id}`}
+              className="hover:underline"
+            >
+              {session.ticket_number || 'Live support chat'}
+            </Link>
+          ) : session.ticket_id ? (
+            <Link
+              to={`/support/tickets/${session.ticket_id}`}
+              className="hover:underline"
+            >
+              {session.ticket_number || 'Live support chat'}
+            </Link>
+          ) : (
+            session.ticket_number || 'Live support chat'
+          )}
         </h1>
         <p className="text-sm text-gray-500">
           {session.user_name || 'User'} with {session.specialist_name || 'IT specialist'}

@@ -234,6 +234,8 @@ export interface SpecialistChatSessionOut {
   id: string;
   ticket_id: string;
   ticket_number?: string | null;
+  /** Linked AI support session id — used for post-chat feedback. */
+  ai_session_id?: string | null;
   user_id: string;
   user_name?: string | null;
   user_email?: string | null;

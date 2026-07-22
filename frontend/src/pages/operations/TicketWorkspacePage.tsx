@@ -13,6 +13,7 @@ import {
 
 import { PageHeader } from '@/components/admin';
 import { Card } from '@/components/ui';
+import { HandoffContextPanel } from '@/features/specialist-chat/HandoffContextPanel';
 import { apiRequest, ticketsApi } from '@/lib/api';
 import { isITStaff } from '@/lib/permissions';
 import { useAuthStore } from '@/stores/auth-store';
@@ -246,6 +247,8 @@ export function TicketWorkspacePage() {
 
         {/* Main */}
         <div className="space-y-6 lg:col-span-2">
+          {id && <HandoffContextPanel ticketId={id} />}
+
           <Card>
             <div className="mb-3 flex flex-wrap items-center gap-2">
               <span

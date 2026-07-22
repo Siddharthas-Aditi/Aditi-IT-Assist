@@ -9,7 +9,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 import { type MyAssignedItem, liveChatApi, queueApi } from '@/features/specialist-chat/api';
 
@@ -96,19 +96,34 @@ export function AssignedTicketsPage() {
             <tbody className="divide-y divide-gray-100">
               {items.map((it) => (
                 <tr key={it.ticket_id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 font-medium text-indigo-700">{it.ticket_number}</td>
+                  <td className="px-4 py-3 font-medium text-indigo-700">
+                    <Link
+                      to={`/operations/tickets/${it.ticket_id}`}
+                      className="hover:underline"
+                    >
+                      {it.ticket_number}
+                    </Link>
+                  </td>
                   <td className="px-4 py-3 text-gray-700">{it.title}</td>
                   <td className="px-4 py-3 text-gray-600">{it.user_name || '—'}</td>
                   <td className="px-4 py-3">
                     <LiveStatusBadge status={it.live_status} />
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <button
-                      onClick={() => void openChat(it)}
-                      className="px-3 py-1 text-xs rounded-md bg-indigo-600 text-white hover:bg-indigo-700"
-                    >
-                      {it.live_session_id ? 'Open Chat' : 'Start Chat'}
-                    </button>
+                    <div className="flex items-center justify-end gap-2">
+                      <Link
+                        to={`/operations/tickets/${it.ticket_id}`}
+                        className="px-2.5 py-1 text-xs rounded-md border border-gray-200 text-gray-700 hover:bg-gray-50"
+                      >
+                        View ticket
+                      </Link>
+                      <button
+                        onClick={() => void openChat(it)}
+                        className="px-3 py-1 text-xs rounded-md bg-indigo-600 text-white hover:bg-indigo-700"
+                      >
+                        {it.live_session_id ? 'Open Chat' : 'Start Chat'}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

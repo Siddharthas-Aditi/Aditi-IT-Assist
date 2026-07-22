@@ -7,7 +7,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { AlertTriangle, Bot, CheckCircle2, ChevronRight, Headset, Send, Ticket, User, X } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { WelcomeCategories } from '@/features/chat/WelcomeCategories';
@@ -717,7 +717,7 @@ export function SupportChatPage() {
 
                 {/* Escalation banner — offer to create a ticket + connect a human.
                     No ticket exists yet; clicking Connect creates and queues one. */}
-                {msg.requiresEscalation && !msg.ticket && (
+                {(msg.requiresEscalation || msg.escalationOffered) && !msg.ticket && (
                   <div className="flex w-full items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5">
                     <AlertTriangle size={14} className="mt-0.5 shrink-0 text-amber-600" />
                     <div className="flex-1">
@@ -751,6 +751,12 @@ export function SupportChatPage() {
                           ? 'Queued for a live IT specialist — they have your full conversation context.'
                           : `Priority: ${msg.ticket.priority} · Status: ${msg.ticket.status}`}
                       </p>
+                      <Link
+                        to={`/support/tickets/${msg.ticket.ticket_id}`}
+                        className="mt-1.5 inline-block text-xs font-medium text-emerald-800 underline hover:text-emerald-950"
+                      >
+                        View ticket details
+                      </Link>
                     </div>
                   </div>
                 )}

@@ -1,8 +1,8 @@
-/** Ticket detail page — employee view with timeline. */
+/** Ticket detail page — employee view with timeline and reply. */
 
 import { useParams, useNavigate } from 'react-router-dom';
 import { useState, useEffect, useCallback } from 'react';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Send } from 'lucide-react';
 
 import { apiRequest } from '@/lib/api';
 
@@ -55,6 +55,14 @@ const PRIORITY_COLORS: Record<string, string> = {
   low: 'bg-emerald-100 text-emerald-700',
 };
 
+const OPEN_STATUSES = new Set([
+  'new',
+  'triaged',
+  'in_progress',
+  'waiting_for_user',
+  'escalated',
+]);
+
 function fmt(iso: string): string {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString();
@@ -68,6 +76,8 @@ export function TicketDetailPage() {
   const [events, setEvents] = useState<TicketEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [reply, setReply] = useState('');
+  const [sending, setSending] = useState(false);
 
   const fetchDetail = useCallback(async () => {
     setLoading(true);
@@ -88,10 +98,28 @@ export function TicketDetailPage() {
     fetchDetail();
   }, [fetchDetail]);
 
+  const sendReply = async () => {
+    if (!id || !reply.trim() || sending) return;
+    setSending(true);
+    setError(null);
+    try {
+      await apiRequest(`/tickets/${id}/comments`, {
+        method: 'POST',
+        body: { content: reply.trim(), is_internal: false },
+      });
+      setReply('');
+      await fetchDetail();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to send reply');
+    } finally {
+      setSending(false);
+    }
+  };
+
   if (loading) {
     return <div className="p-6 text-center text-muted-foreground">Loading ticket…</div>;
   }
-  if (error || !ticket) {
+  if (error && !ticket) {
     return (
       <div className="p-6 text-center">
         <p className="mb-4 text-destructive">{error ?? 'Ticket not found'}</p>
@@ -104,6 +132,9 @@ export function TicketDetailPage() {
       </div>
     );
   }
+  if (!ticket) return null;
+
+  const canReply = OPEN_STATUSES.has(ticket.status);
 
   const timeline = [
     ...events.map((e) => ({
@@ -180,6 +211,9 @@ export function TicketDetailPage() {
       {/* Timeline */}
       <div className="rounded-xl border border-border bg-card p-6">
         <h3 className="mb-4 text-sm font-semibold text-foreground">Activity Timeline</h3>
+        {error && (
+          <p className="mb-3 text-sm text-destructive">{error}</p>
+        )}
         {timeline.length > 0 ? (
           <div className="relative space-y-4 before:absolute before:bottom-2 before:left-[7px] before:top-2 before:w-0.5 before:bg-border">
             {timeline.map((item, i) => (
@@ -202,6 +236,33 @@ export function TicketDetailPage() {
           </div>
         ) : (
           <p className="py-4 text-center text-sm text-muted-foreground">No activity yet</p>
+        )}
+
+        {canReply && (
+          <div className="mt-6 border-t border-border pt-4">
+            <label className="mb-2 block text-xs font-medium text-muted-foreground">
+              Reply to IT support
+            </label>
+            <textarea
+              value={reply}
+              onChange={(e) => setReply(e.target.value)}
+              rows={3}
+              maxLength={4000}
+              placeholder="Add an update or answer a specialist question…"
+              className="w-full rounded-lg border border-border bg-background p-3 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+            />
+            <div className="mt-2 flex justify-end">
+              <button
+                type="button"
+                disabled={sending || !reply.trim()}
+                onClick={() => void sendReply()}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground disabled:opacity-50"
+              >
+                <Send size={14} />
+                {sending ? 'Sending…' : 'Send reply'}
+              </button>
+            </div>
+          </div>
         )}
       </div>
     </div>

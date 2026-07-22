@@ -20,6 +20,7 @@ import {
   LifeBuoy,
   Bot,
   FileBarChart,
+  Headset,
 } from 'lucide-react';
 
 import { useAuthStore } from '@/stores/auth-store';
@@ -121,6 +122,17 @@ export function AdminLayout() {
               {item.label}
             </NavLink>
           ))}
+
+          <p className="px-3 pb-1.5 pt-4 text-[10px] font-semibold uppercase tracking-wider text-white/40">
+            Live support
+          </p>
+          <NavLink
+            to="/operations/queue"
+            className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-white/70 transition-colors hover:bg-white/5 hover:text-white"
+          >
+            <Headset size={18} />
+            IT Operations
+          </NavLink>
         </nav>
 
         {/* Account summary */}
