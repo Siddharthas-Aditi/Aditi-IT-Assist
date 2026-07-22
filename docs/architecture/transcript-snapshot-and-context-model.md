@@ -12,10 +12,12 @@ time. This satisfies the compliance/triage requirement exactly: the artifact
 reflects the conversation *as it stood at handoff* and can never be altered by
 later session edits, message deletions, or chat-state mutations.
 
-> Decision: snapshot-at-escalation (not full chat persistence). A future
-> follow-up may persist every turn to `support_sessions`/`messages`; this model
-> is forward-compatible (the snapshot would then be taken from the DB instead of
-> memory, with no schema change).
+> Decision: snapshot-at-escalation (not full chat persistence). **Update
+> (2026-07-22):** per-turn mirroring to ``support_sessions``/``messages`` now
+> ships via ``SupportSessionService`` (migration ``012``); the escalation
+> snapshot remains the immutable handoff artifact. Session history APIs and
+> feedback read from the durable rows; the snapshot is still taken from live
+> workflow state at escalation time.
 
 ## `transcript_snapshots`
 

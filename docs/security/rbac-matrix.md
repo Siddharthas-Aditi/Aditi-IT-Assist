@@ -223,12 +223,11 @@ These actions require explicit user consent before execution:
 
 | User | Email | Password | Role |
 |------|-------|----------|------|
-| Alice Johnson | alice.johnson@aditi.com | employee123 | employee |
-| Bob Williams | bob.williams@aditi.com | employee123 | employee |
-| Charlie Martinez | charlie.agent@aditi.com | agent123 | it_agent |
-| Diana Chen | diana.agent@aditi.com | agent123 | it_agent |
-| Edward Thompson | edward.lead@aditi.com | lead123 | it_lead |
-| System Administrator | admin@aditi.com | admin123 | it_admin |
+| Hareesh | hareesh@aditiconsulting.com | Hareesh@2026 | it_admin |
+| Sagar | sagar@aditiconsulting.com | Sagar@2026 | it_lead |
+| Madhukar | madhukar@aditiconsulting.com | Madhukar@2026 | it_lead |
+| Siddhartha | siddhartha@aditiconsulting.com | Siddhartha@2026 | employee |
+| Naresh | naresh@aditiconsulting.com | Naresh@2026 | employee |
 | Frank Auditor | auditor@aditi.com | auditor123 | security_auditor |
 
 ⚠️ **These credentials are for local development ONLY. Never use in production.**

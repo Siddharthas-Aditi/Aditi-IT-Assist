@@ -1,5 +1,6 @@
 """Chat service — orchestrates the support conversation flow."""
 
+import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from uuid import uuid4
@@ -29,10 +30,11 @@ from app.services.agents.llm_intent import classify_intent_with_llm
 from app.services.agents.registry import AGENT_REGISTRY, find_specialist_for
 from app.services.agents.session_store import ChatSession, get_session_store
 from app.services.llm_service import get_llm_service
+from app.services.support_session_service import SupportSessionService
 from app.services.ticket_service import TicketService
 
 if TYPE_CHECKING:
-    from app.schemas.chat import WaitingStatusResponse
+    from app.schemas.chat import SessionDetail, SessionSummary, WaitingStatusResponse
 
 logger = get_logger(__name__)
 
@@ -65,10 +67,15 @@ class ChatService:
     ticket *draft*. A real ticket is created only on explicit user confirmation.
     """
 
-    def __init__(self, ticket_service: TicketService | None = None) -> None:
+    def __init__(
+        self,
+        ticket_service: TicketService | None = None,
+        support_session_service: SupportSessionService | None = None,
+    ) -> None:
         # Optional so workflow-only/unit contexts can run without a DB; ticket
         # creation simply degrades to "offer only" when no ticket_service.
         self.ticket_service = ticket_service
+        self.support_session_service = support_session_service
         self._store = get_session_store()
 
     async def _load_owned(self, session_id: str, user_id: str | None) -> ChatSession | None:
@@ -146,13 +153,22 @@ class ChatService:
                 ticket_created_message = await generate_ticket_created(
                     ticket_ref.ticket_number, diag_ctx
                 )
-            return self._format_response(
+            response = self._format_response(
                 session_id,
                 result,
                 ticket_ref=ticket_ref,
                 include_debug=include_debug,
                 ticket_created_message=ticket_created_message,
             )
+            await self._persist_support_session_turn(
+                session_id=session_id,
+                user_id=user_id,
+                user_message=user_message,
+                response=response,
+                state=result,
+                envelope=session,
+            )
+            return response
         except SessionOwnershipError:
             # Don't disclose that the session exists — same generic error.
             return self._error_response(session_id)
@@ -545,6 +561,7 @@ class ChatService:
         # Record the waiting start time for timeout tracking, then persist.
         session.waiting_since = datetime.now(UTC)
         await self._store.save(session_id, session)
+        await self._sync_support_envelope(session_id, str(requester.id), state, session)
 
         # Phrase the confirmation via the LLM (same generator used by the
         # AI-first escalation path) so both routes to a ticket sound like the
@@ -662,13 +679,19 @@ class ChatService:
         is preserved in TWO immutable, linked records (transcript snapshot +
         escalation context) created here — NOT shoved into the ticket description.
 
-        NOTE: chat sessions are currently in-memory only (no `support_sessions`
-        row), so we still do NOT set ticket.session_id (FK to a persisted session).
-        The conversation is preserved via the transcript snapshot instead, and the
-        ticket links to it through the escalation context (one-per-ticket).
+        NOTE: the durable ``support_sessions`` row is synced per-turn by
+        :meth:`_persist_support_session_turn`; we set ``ticket.session_id`` when
+        the session id is a valid UUID. Full conversation detail for specialists
+        still lives in escalation artifacts (transcript snapshot + context).
         """
         svc = self.ticket_service
         assert svc is not None  # guarded by callers
+
+        session_uuid = None
+        try:
+            session_uuid = uuid.UUID(session_id)
+        except ValueError:
+            session_uuid = None
 
         ticket = await svc.create_ticket(
             requester=requester,
@@ -677,6 +700,7 @@ class ChatService:
             priority=draft.get("priority", "medium"),
             category=draft.get("category"),
             source="chat",
+            session_id=session_uuid,
             ai_summary=draft.get("problem_statement") or draft.get("conversation_summary"),
         )
         # Ticket-before-handoff: create first, THEN queue for a human.
@@ -867,6 +891,75 @@ class ChatService:
             citations=result.get("knowledge_citations") or [],
         )
 
+    async def _persist_support_session_turn(
+        self,
+        *,
+        session_id: str,
+        user_id: str,
+        user_message: str,
+        response: ChatMessageResponse,
+        state: dict,
+        envelope: ChatSession,
+    ) -> None:
+        """Mirror a successful chat turn into durable support_sessions/messages."""
+        if self.support_session_service is None or self.ticket_service is None:
+            return
+        try:
+            await self.support_session_service.sync_turn(
+                session_id,
+                user_id,
+                user_message=user_message,
+                assistant_message=response.content,
+                assistant_message_id=response.message_id,
+                state=state,
+                envelope=envelope,
+            )
+            await self.ticket_service.db.commit()
+        except Exception as exc:  # noqa: BLE001 — persistence must never break chat
+            logger.warning(
+                "support_session_sync_failed",
+                session_id=session_id,
+                error=str(exc),
+            )
+            await self.ticket_service.db.rollback()
+
+    async def _sync_support_envelope(
+        self,
+        session_id: str,
+        user_id: str,
+        state: dict,
+        envelope: ChatSession,
+    ) -> None:
+        if self.support_session_service is None or self.ticket_service is None:
+            return
+        try:
+            await self.support_session_service.sync_envelope(
+                session_id,
+                user_id,
+                state=state,
+                envelope=envelope,
+            )
+            await self.ticket_service.db.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "support_session_envelope_sync_failed",
+                session_id=session_id,
+                error=str(exc),
+            )
+            await self.ticket_service.db.rollback()
+
+    async def list_sessions(self, user_id: str, *, limit: int = 50) -> list["SessionSummary"]:
+        """Return durable session summaries for the authenticated user."""
+        if self.support_session_service is None:
+            return []
+        return await self.support_session_service.list_sessions(user_id, limit=limit)
+
+    async def get_session_detail(self, session_id: str, user_id: str) -> "SessionDetail | None":
+        """Return session detail with message history for the owner."""
+        if self.support_session_service is None:
+            return None
+        return await self.support_session_service.get_session(session_id, user_id)
+
     def _error_response(self, session_id: str) -> ChatMessageResponse:
         """Generate error response when workflow fails."""
         return ChatMessageResponse(
@@ -888,7 +981,12 @@ def get_chat_service(db: AsyncSession | None = None) -> ChatService:
     """Create a ChatService instance.
 
     Wired in the API layer via `get_chat_service_dep` (injects a DB session so
-    tickets can be persisted). Callable bare in tests/non-DB contexts, where it
-    degrades to offer-only escalation.
+    tickets and durable session rows can be persisted). Callable bare in
+    tests/non-DB contexts, where it degrades to offer-only escalation.
     """
-    return ChatService(TicketService(db) if db is not None else None)
+    if db is None:
+        return ChatService()
+    return ChatService(
+        TicketService(db),
+        SupportSessionService(db),
+    )

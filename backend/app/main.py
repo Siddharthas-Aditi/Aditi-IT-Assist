@@ -57,6 +57,23 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             await conn.run_sync(Base.metadata.create_all)
         logger.info("database_schema_ready", env=settings.APP_ENV)
 
+    # Idempotent team + KB seed for local/dev. Never runs in production —
+    # production uses migrate + explicit ops seeding.
+    if settings.SEED_ON_STARTUP and not settings.is_production:
+        try:
+            # Prefer package import (works when backend/ is on sys.path).
+            try:
+                from scripts.seed_enterprise import run_seed
+            except ImportError:  # pragma: no cover — container layout fallback
+                import importlib
+
+                run_seed = importlib.import_module("scripts.seed_enterprise").run_seed
+
+            await run_seed()
+            logger.info("startup_seed_complete")
+        except Exception as exc:  # noqa: BLE001 — boot should still succeed
+            logger.warning("startup_seed_failed", error=str(exc))
+
     # Background jobs — the idle sweeper auto-ends abandoned specialist
     # chat sessions every N seconds. Runs in the same event loop as the
     # API; the context manager cancels + awaits each task on shutdown.

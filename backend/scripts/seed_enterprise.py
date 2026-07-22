@@ -7,7 +7,6 @@ Run: uv run python -m scripts.seed_enterprise
 import asyncio
 import os
 import uuid
-from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,7 +19,6 @@ from app.core.permissions import (
 )
 from app.core.security import hash_password
 from app.models.auth import Permission, Role, RolePermission, User, UserRoleAssignment
-from app.models.ticket import Ticket
 
 # ─────────────────────────────────────────────────────────────────────
 # Permission Definitions — sourced from core/permissions.py registry
@@ -154,8 +152,29 @@ async def seed_roles(db: AsyncSession, perm_ids: dict[str, uuid.UUID]) -> dict[s
     return role_ids
 
 
+async def _ensure_role(
+    db: AsyncSession, user: User, role_name: str, role_ids: dict[str, uuid.UUID]
+) -> None:
+    """Ensure the user has the expected primary role assignment."""
+    role_id = role_ids.get(role_name)
+    if role_id is None:
+        return
+    existing = await db.execute(
+        select(UserRoleAssignment).where(
+            UserRoleAssignment.user_id == user.id,
+            UserRoleAssignment.role_id == role_id,
+        )
+    )
+    if existing.scalar_one_or_none() is None:
+        db.add(UserRoleAssignment(user_id=user.id, role_id=role_id))
+
+
 async def seed_users(db: AsyncSession, role_ids: dict[str, uuid.UUID]) -> dict[str, User]:
-    """Seed sample users with role assignments."""
+    """Seed (or sync) sample users with role assignments.
+
+    Idempotent: existing users get password + profile fields refreshed so a
+    teammate pulling a roster change does not keep a stale hash after restart.
+    """
     users: dict[str, User] = {}
     for user_data in SAMPLE_USERS:
         existing = await db.execute(select(User).where(User.email == user_data["email"]))
@@ -173,117 +192,22 @@ async def seed_users(db: AsyncSession, role_ids: dict[str, uuid.UUID]) -> dict[s
             )
             db.add(user)
             await db.flush()
+        else:
+            user.full_name = user_data["full_name"]
+            user.employee_id = user_data["employee_id"]
+            user.department = user_data["department"]
+            user.job_title = user_data.get("job_title")
+            user.hashed_password = hash_password(user_data["password"])
+            user.is_active = True
+            user.is_verified = True
 
-            # Assign role
-            role_name = user_data["role"]
-            if role_name in role_ids:
-                db.add(UserRoleAssignment(user_id=user.id, role_id=role_ids[role_name]))
-
+        await _ensure_role(db, user, user_data["role"], role_ids)
         users[user_data["email"]] = user
     return users
 
 
-async def seed_sample_tickets(db: AsyncSession, users: dict[str, User]) -> None:
-    """Seed sample tickets for demo/testing."""
-    alice = users.get("alice.johnson@aditi.com")
-    bob = users.get("bob.williams@aditi.com")
-    charlie = users.get("charlie.agent@aditi.com")
-
-    if not alice or not bob or not charlie:
-        return
-
-    now = datetime.now(UTC)
-
-    sample_tickets = [
-        {
-            "ticket_number": "ITA-000001",
-            "title": "Outlook not syncing emails on laptop",
-            "description": (
-                "My Outlook desktop app stopped syncing new emails since this morning. "
-                "Web version works fine."
-            ),
-            "requester_id": alice.id,
-            "assigned_to": charlie.id,
-            "priority": "high",
-            "status": "in_progress",
-            "category": "email/outlook",
-            "source": "chat",
-            "sla_response_target": now + timedelta(hours=4),
-            "sla_resolution_target": now + timedelta(hours=12),
-            "first_response_at": now - timedelta(hours=1),
-        },
-        {
-            "ticket_number": "ITA-000002",
-            "title": "VPN connection drops frequently",
-            "description": (
-                "VPN disconnects every 15-20 minutes when working from home. "
-                "Using GlobalProtect client."
-            ),
-            "requester_id": bob.id,
-            "priority": "medium",
-            "status": "new",
-            "category": "network/connectivity",
-            "source": "chat",
-            "sla_response_target": now + timedelta(hours=8),
-            "sla_resolution_target": now + timedelta(hours=48),
-        },
-        {
-            "ticket_number": "ITA-000003",
-            "title": "Cannot access SharePoint site",
-            "description": (
-                "Getting 'Access Denied' when trying to access the Engineering team SharePoint."
-            ),
-            "requester_id": alice.id,
-            "assigned_to": charlie.id,
-            "priority": "medium",
-            "status": "waiting_for_user",
-            "category": "access/permissions",
-            "source": "manual",
-            "sla_response_target": now + timedelta(hours=8),
-            "sla_resolution_target": now + timedelta(hours=48),
-            "first_response_at": now - timedelta(hours=2),
-        },
-        {
-            "ticket_number": "ITA-000004",
-            "title": "Laptop camera not working in Teams",
-            "description": "Camera shows black screen in Microsoft Teams. Works in other apps.",
-            "requester_id": bob.id,
-            "assigned_to": charlie.id,
-            "priority": "low",
-            "status": "resolved",
-            "category": "hardware/camera",
-            "source": "chat",
-            "resolution_notes": "Updated camera driver and reset Teams cache. Camera working now.",
-            "resolved_at": now - timedelta(hours=3),
-            "sla_response_target": now + timedelta(hours=24),
-            "sla_resolution_target": now + timedelta(hours=120),
-        },
-        {
-            "ticket_number": "ITA-000005",
-            "title": "Critical: Production server unresponsive",
-            "description": (
-                "Production app server not responding to health checks. All services affected."
-            ),
-            "requester_id": alice.id,
-            "priority": "critical",
-            "status": "escalated",
-            "category": "software/other",
-            "source": "manual",
-            "sla_response_target": now + timedelta(hours=1),
-            "sla_resolution_target": now + timedelta(hours=4),
-        },
-    ]
-
-    for ticket_data in sample_tickets:
-        existing = await db.execute(
-            select(Ticket).where(Ticket.ticket_number == ticket_data["ticket_number"])
-        )
-        if not existing.scalar_one_or_none():
-            db.add(Ticket(**ticket_data))
-
-
 async def run_seed() -> None:
-    """Run all seed operations."""
+    """Run all seed operations (roles, users, knowledge base)."""
     async with async_session_factory() as db:
         print("🌱 Seeding enterprise data...")
 
@@ -298,10 +222,6 @@ async def run_seed() -> None:
         print("  → Users...")
         users = await seed_users(db, role_ids)
         print(f"    ✓ {len(users)} users")
-
-        print("  → Sample tickets...")
-        await seed_sample_tickets(db, users)
-        print("    ✓ Sample tickets created")
 
         print("  → Knowledge base (structured articles)...")
         from app.knowledge_base.structured_seed import seed_knowledge

@@ -1067,8 +1067,12 @@ async def seed_knowledge(db, users: dict) -> int:
     repo = KnowledgeRepository(db)
     indexing = KnowledgeIndexingService(repo)
 
-    lead = users.get("edward.lead@aditi.com")
-    admin = users.get("admin@aditi.com")
+    lead = (
+        users.get("sagar@aditiconsulting.com")
+        or users.get("madhukar@aditiconsulting.com")
+        or users.get("edward.lead@aditi.com")
+    )
+    admin = users.get("hareesh@aditiconsulting.com") or users.get("admin@aditi.com")
     now = datetime.now(UTC)
 
     # Ownership groups

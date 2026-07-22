@@ -17,6 +17,8 @@ from httpx import ASGITransport, AsyncClient
 # client would otherwise trip the per-client budget across the suite.
 # Must be set before app.main (and therefore Settings) is imported.
 os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
+# Startup seed hits a real DB and is not needed for unit/API tests.
+os.environ.setdefault("SEED_ON_STARTUP", "false")
 
 from app.core.permissions import UserRole, get_effective_permissions  # noqa: E402
 from app.main import app  # noqa: E402

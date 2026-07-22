@@ -14,6 +14,36 @@ const REASON_BANNERS: Record<string, string> = {
   logged_out_other_tab: 'You were signed out from another tab.',
 };
 
+/** Local-dev roster seeded on backend startup — keep in sync with
+ *  `backend/scripts/seed_enterprise.py` SAMPLE_USERS. */
+const DEV_ACCOUNTS = [
+  {
+    role: 'Admin',
+    email: 'hareesh@aditiconsulting.com',
+    password: 'Hareesh@2026',
+  },
+  {
+    role: 'IT Lead',
+    email: 'sagar@aditiconsulting.com',
+    password: 'Sagar@2026',
+  },
+  {
+    role: 'IT Lead',
+    email: 'madhukar@aditiconsulting.com',
+    password: 'Madhukar@2026',
+  },
+  {
+    role: 'Employee',
+    email: 'siddhartha@aditiconsulting.com',
+    password: 'Siddhartha@2026',
+  },
+  {
+    role: 'Employee',
+    email: 'naresh@aditiconsulting.com',
+    password: 'Naresh@2026',
+  },
+] as const;
+
 export function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -92,7 +122,7 @@ export function LoginPage() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@aditi.com"
+              placeholder="you@aditiconsulting.com"
               className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
               required
             />
@@ -119,14 +149,27 @@ export function LoginPage() {
           </button>
         </form>
 
-        {/* Dev credentials hint */}
-        <div className="mt-6 p-3 bg-gray-50 rounded-lg">
-          <p className="text-xs font-medium text-gray-600 mb-2">Dev Accounts:</p>
-          <div className="text-xs text-gray-500 space-y-0.5">
-            <p>Employee: alice.johnson@aditi.com / employee123</p>
-            <p>IT Agent: charlie.agent@aditi.com / agent123</p>
-            <p>IT Lead: edward.lead@aditi.com / lead123</p>
-            <p>Admin: admin@aditi.com / admin123</p>
+        {/* Dev credentials — click a row to fill the form */}
+        <div className="mt-6 rounded-lg bg-gray-50 p-3">
+          <p className="mb-2 text-xs font-medium text-gray-600">
+            Dev Accounts (click to fill):
+          </p>
+          <div className="space-y-1">
+            {DEV_ACCOUNTS.map((account) => (
+              <button
+                key={account.email}
+                type="button"
+                onClick={() => {
+                  setEmail(account.email);
+                  setPassword(account.password);
+                  setError('');
+                }}
+                className="block w-full rounded-md px-2 py-1.5 text-left text-xs text-gray-600 transition-colors hover:bg-white hover:text-indigo-700"
+              >
+                <span className="font-medium text-gray-700">{account.role}:</span>{' '}
+                {account.email} / {account.password}
+              </button>
+            ))}
           </div>
         </div>
 

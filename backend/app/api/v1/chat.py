@@ -122,18 +122,22 @@ async def get_waiting_status(
 
 
 @router.get("/sessions", response_model=list[SessionSummary])
-async def list_sessions(current_user: CurrentUser) -> list[SessionSummary]:
+async def list_sessions(
+    current_user: CurrentUser,
+    service: ChatServiceDep,
+) -> list[SessionSummary]:
     """List all support sessions for the current user."""
-    # TODO(team): Implement with database query filtered by user
-    return []
+    return await service.list_sessions(str(current_user.id))
 
 
 @router.get("/sessions/{session_id}", response_model=SessionDetail)
-async def get_session(session_id: str, current_user: CurrentUser) -> SessionDetail:
+async def get_session(
+    session_id: str,
+    current_user: CurrentUser,
+    service: ChatServiceDep,
+) -> SessionDetail:
     """Get full session details including message history."""
-    # TODO(team): Implement with database query
-    return SessionDetail(
-        session_id=session_id,
-        status="active",
-        messages=[],
-    )
+    detail = await service.get_session_detail(session_id, str(current_user.id))
+    if detail is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return detail

@@ -11,6 +11,7 @@ import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, Bot, CheckCircle2, ChevronRight, Headset, Send, Ticket, User, X } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { WelcomeCategories } from '@/features/chat/WelcomeCategories';
+import { PostChatFeedbackCard } from '@/features/chat/PostChatFeedbackCard';
 import { liveChatApi } from '@/features/specialist-chat/api';
 import { chatApi } from '@/lib/api';
 import { restoreChatSession, saveChatSession } from '@/lib/chat-session-sync';
@@ -206,6 +207,8 @@ export function SupportChatPage() {
   const [teamsNotified, setTeamsNotified] = useState(
     () => restored?.teamsNotified ?? false,
   );
+  const [sessionResolved, setSessionResolved] = useState(false);
+  const [feedbackDismissed, setFeedbackDismissed] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   // Show category tiles only on the welcome screen (no real conversation yet)
@@ -352,6 +355,7 @@ export function SupportChatPage() {
         issue_category?: string;
         confidence_score?: number;
         quick_replies?: QuickReplyOption[];
+        resolved?: boolean;
         detail?: string | { msg?: string; loc?: unknown[] }[];
       } = {};
 
@@ -375,6 +379,7 @@ export function SupportChatPage() {
       }
 
       if (data.session_id) setSessionId(data.session_id);
+      if (data.resolved) setSessionResolved(true);
 
       const assistantMsg: ChatMessage = {
         id: data.message_id ?? `ai-${Date.now()}`,
@@ -777,6 +782,18 @@ export function SupportChatPage() {
           <div ref={bottomRef} />
         </div>
       </div>
+
+      {/* Post-resolution feedback survey */}
+      {sessionResolved && sessionId && !feedbackDismissed && !waitingForSpecialist && (
+        <div className="border-t border-gray-200 bg-gray-50 px-4 py-4 sm:px-6">
+          <div className="mx-auto max-w-3xl">
+            <PostChatFeedbackCard
+              sessionId={sessionId}
+              onDismiss={() => setFeedbackDismissed(true)}
+            />
+          </div>
+        </div>
+      )}
 
       {/* ── Input bar ───────────────────────────────────────────── */}
       <div className="border-t border-gray-200 bg-white px-4 py-4 sm:px-6">

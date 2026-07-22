@@ -39,6 +39,11 @@ _Last synced from repo: 2026-07-02 PM (production-hardening iteration —
 - Analytics API, audit logging, background scheduler (idle + remote-session sweepers),
   Docker Compose, Alembic migrations 002–009, admin console.
 - Post-chat feedback system.
+- **Durable AI chat sessions (2026-07-22)**: migration ``012`` creates
+  ``support_sessions``/``messages`` (tables were referenced by feedback/specialist
+  FKs but never migrated). ``SupportSessionService`` mirrors each successful chat
+  turn; ``GET /chat/sessions*`` implemented; tickets link via ``session_id``;
+  ``PostChatFeedbackCard`` wired in employee chat on resolution.
 - **Deploy mechanics (2026-07)**: prod compose `migrate` one-shot service gates backend
   start; **alembic.ini `version_locations` fix** (upgrade head previously applied NOTHING);
   Redis password required (`:?` interpolation); release workflow publishes tagged images
@@ -75,7 +80,11 @@ Prereqs: vector retrieval needs an embedding provider configured + `scripts/back
   SAML SSO, refresh-reuse detection, notification channels beyond in-app (email/push)
   for remote-support consent.
 
-## Seeded dev users (`scripts/seed_enterprise.py`)
-`employee@aditi.com`/`employee123`, `agent@aditi.com`/`agent123`,
-`lead@aditi.com`/`lead123`, `admin@aditi.com`/`admin123`, `auditor@aditi.com`/`auditor123`.
-Re-run `seed_enterprise` after permission changes (e.g. new `integration:*` perms).
+## Seeded team users (`scripts/seed_enterprise.py`, auto on startup)
+`hareesh@aditiconsulting.com`/`Hareesh@2026` (it_admin),
+`sagar@aditiconsulting.com`/`Sagar@2026` (it_lead),
+`madhukar@aditiconsulting.com`/`Madhukar@2026` (it_lead),
+`siddhartha@aditiconsulting.com`/`Siddhartha@2026` (employee),
+`naresh@aditiconsulting.com`/`Naresh@2026` (employee).
+Re-run `seed_enterprise` (or restart backend with `SEED_ON_STARTUP=true`) after
+permission changes.

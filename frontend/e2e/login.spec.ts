@@ -11,7 +11,7 @@ test.describe('Login page', () => {
     await page.goto('/login');
 
     await expect(page.getByRole('heading', { name: 'Aditi IT Assist' })).toBeVisible();
-    await expect(page.getByPlaceholder('you@aditi.com')).toBeVisible();
+    await expect(page.getByPlaceholder('you@aditiconsulting.com')).toBeVisible();
     await expect(page.getByPlaceholder('••••••••')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Sign In' })).toBeVisible();
   });
@@ -19,7 +19,7 @@ test.describe('Login page', () => {
   test('shows an error for invalid credentials', async ({ page }) => {
     await page.goto('/login');
 
-    await page.getByPlaceholder('you@aditi.com').fill('nobody@aditi.com');
+    await page.getByPlaceholder('you@aditiconsulting.com').fill('nobody@aditi.com');
     await page.getByPlaceholder('••••••••').fill('wrong-password');
     await page.getByRole('button', { name: 'Sign In' }).click();
 

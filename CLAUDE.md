@@ -378,11 +378,14 @@ make lint               # Linting (both)
 ### 🔑 Seeded Dev Users (see `scripts/seed_enterprise.py`)
 | Email | Password | Role |
 |-------|----------|------|
-| `employee@aditi.com` | `employee123` | employee |
-| `agent@aditi.com` | `agent123` | it_agent |
-| `lead@aditi.com` | `lead123` | it_lead |
-| `admin@aditi.com` | `admin123` | it_admin |
-| `auditor@aditi.com` | `auditor123` | security_auditor |
+| `hareesh@aditiconsulting.com` | `Hareesh@2026` | it_admin |
+| `sagar@aditiconsulting.com` | `Sagar@2026` | it_lead |
+| `madhukar@aditiconsulting.com` | `Madhukar@2026` | it_lead |
+| `siddhartha@aditiconsulting.com` | `Siddhartha@2026` | employee |
+| `naresh@aditiconsulting.com` | `Naresh@2026` | employee |
+
+> Auto-seeded on backend startup when `SEED_ON_STARTUP=true` (default in
+> development). Never auto-seeds in production.
 
 ---
 | Pydantic schemas | `backend/app/schemas/` |
@@ -483,14 +486,14 @@ docker compose ps
 | API Docs (ReDoc) | http://localhost:8000/redoc |
 | Health check | http://localhost:8000/api/v1/health |
 
-**Dev users (seeded by `seed_enterprise.py`):**
+**Dev users (seeded by `seed_enterprise.py` / auto on startup):**
 | Email | Password | Role |
 |-------|----------|------|
-| `employee@aditi.com` | `employee123` | employee |
-| `agent@aditi.com` | `agent123` | it_agent |
-| `lead@aditi.com` | `lead123` | it_lead |
-| `admin@aditi.com` | `admin123` | it_admin |
-| `auditor@aditi.com` | `auditor123` | security_auditor |
+| `hareesh@aditiconsulting.com` | `Hareesh@2026` | it_admin |
+| `sagar@aditiconsulting.com` | `Sagar@2026` | it_lead |
+| `madhukar@aditiconsulting.com` | `Madhukar@2026` | it_lead |
+| `siddhartha@aditiconsulting.com` | `Siddhartha@2026` | employee |
+| `naresh@aditiconsulting.com` | `Naresh@2026` | employee |
 
 **Key `.env` notes for local container setup:**
 - `LLM_API_KEY` can be left empty — the app falls back to keyword-based triage/resolution

@@ -72,6 +72,10 @@ class Settings(BaseSettings):
     # fails if this is on while AUTH_PROVIDER is a real SSO provider (see
     # validate_production). Gates both /auth/register and /auth/login.
     LOCAL_AUTH_ENABLED: bool = True
+    # Auto-seed roles/users/KB on startup. Default on for local/dev so
+    # `docker compose up` / `make dev-backend` leaves a usable roster without a
+    # manual seed step. Always forced off in production (see lifespan).
+    SEED_ON_STARTUP: bool = True
     # Token revocation (logout / refresh rotation) uses a Redis jti denylist.
     # False = fail-open when Redis is down (tokens age out via exp; warning
     # logged). True = fail-closed (401 until Redis is back). See token_store.py.
