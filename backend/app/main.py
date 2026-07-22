@@ -39,7 +39,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     setup_telemetry()
 
     # Import all models so their metadata is registered with Base
-    import app.models  # noqa: F401
+    import app.models as _models  # noqa: F401
 
     if settings.APP_ENV == "development":
         # Auto-create all tables on startup in development mode.
