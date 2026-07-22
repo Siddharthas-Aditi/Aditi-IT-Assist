@@ -54,14 +54,17 @@ async def _real_user(role_name: str) -> User:
 
 @pytest.fixture
 async def real_agent_client():
-    """A client authenticated as a real (DB-persisted) it_agent user.
+    """A client authenticated as a real (DB-persisted) specialist user.
 
-    Needed for reopen tests that actually write a `TicketEvent` — the shared
-    `agent_client` fixture's mock user has no row in `users`, which is fine
-    for read-only/gating assertions but violates the `actor_id` FK once the
-    endpoint under test performs a write.
+    Prefer ``it_agent`` when present; fall back to ``it_lead`` (team roster
+    may seed leads without a dedicated agent account). Needed for reopen
+    tests that write a ``TicketEvent`` — the shared mock ``agent_client``
+    has no row in ``users``.
     """
-    user = await _real_user("it_agent")
+    try:
+        user = await _real_user("it_agent")
+    except AssertionError:
+        user = await _real_user("it_lead")
     app.dependency_overrides[get_current_active_user] = lambda: user
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:

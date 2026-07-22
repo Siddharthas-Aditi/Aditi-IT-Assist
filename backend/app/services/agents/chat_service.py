@@ -952,13 +952,26 @@ class ChatService:
         """Return durable session summaries for the authenticated user."""
         if self.support_session_service is None:
             return []
-        return await self.support_session_service.list_sessions(user_id, limit=limit)
+        try:
+            return await self.support_session_service.list_sessions(user_id, limit=limit)
+        except Exception as exc:  # noqa: BLE001 — never break the list endpoint
+            logger.warning("list_sessions_failed", user_id=user_id, error=str(exc))
+            return []
 
     async def get_session_detail(self, session_id: str, user_id: str) -> "SessionDetail | None":
         """Return session detail with message history for the owner."""
         if self.support_session_service is None:
             return None
-        return await self.support_session_service.get_session(session_id, user_id)
+        try:
+            return await self.support_session_service.get_session(session_id, user_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "get_session_detail_failed",
+                session_id=session_id,
+                user_id=user_id,
+                error=str(exc),
+            )
+            return None
 
     def _error_response(self, session_id: str) -> ChatMessageResponse:
         """Generate error response when workflow fails."""

@@ -46,7 +46,10 @@ async def _real_user(role_name: str) -> User:
 @pytest.mark.asyncio
 async def test_reopen_increments_specialist_report_reopened_count():
     requester = await _real_user("employee")
-    agent = await _real_user("it_agent")
+    try:
+        agent = await _real_user("it_agent")
+    except AssertionError:
+        agent = await _real_user("it_lead")
 
     async with async_session_factory() as session:
         service = TicketService(session)

@@ -145,7 +145,7 @@ class SupportSessionService:
             message_type="text",
         )
         assistant_msg = Message(
-            id=_parse_session_id(assistant_message_id) or uuid.uuid4(),
+            id=_parse_session_id(assistant_message_id or "") or uuid.uuid4(),
             session_id=parsed_id,
             sender_id=None,
             role="assistant",
