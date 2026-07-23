@@ -13,7 +13,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
-import { type QueueEntry, liveChatApi, queueApi } from '@/features/specialist-chat/api';
+import { AvailabilityToggle } from '@/features/specialist-chat/AvailabilityToggle';
+import { type Offer, type QueueEntry, liveChatApi, queueApi } from '@/features/specialist-chat/api';
 import { ApiError } from '@/lib/api';
 import {
   notifyDesktop,
@@ -27,10 +28,12 @@ export function LiveQueuePage() {
   const navigate = useNavigate();
   const [filter, setFilter] = useState<Filter>('all');
   const [entries, setEntries] = useState<QueueEntry[]>([]);
+  const [offers, setOffers] = useState<Offer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [claimingId, setClaimingId] = useState<string | null>(null);
+  const [acceptingId, setAcceptingId] = useState<string | null>(null);
   const [soundOn, setSoundOn] = useState(true);
   // Unclaimed ticket IDs we've already seen — so the chime fires once per new
   // handoff, not on every 15s poll. `null` until the first load so we don't
@@ -43,11 +46,19 @@ export function LiveQueuePage() {
     setLoading(true);
     setError(null);
     try {
-      const resp = await queueApi.list({
-        onlyUnclaimed: filter === 'unclaimed',
-        includeMine: filter !== 'unclaimed',
-        limit: 100,
-      });
+      const [resp] = await Promise.all([
+        queueApi.list({
+          onlyUnclaimed: filter === 'unclaimed',
+          includeMine: filter !== 'unclaimed',
+          limit: 100,
+        }),
+        queueApi
+          .myOffers()
+          .then(setOffers)
+          .catch(() => {
+            /* non-critical — offers strip just stays empty until next poll */
+          }),
+      ]);
       setEntries(resp.entries);
 
       // Detect newly-arrived *fresh* handoffs (employee still waiting) and
@@ -122,6 +133,33 @@ export function LiveQueuePage() {
     }
   };
 
+  const onAcceptOffer = async (offer: Offer) => {
+    setAcceptingId(offer.ticket_id);
+    setError(null);
+    setInfo(null);
+    try {
+      await queueApi.acceptOffer(offer.ticket_id);
+      const live = await liveChatApi.start(offer.ticket_id);
+      navigate(`/operations/live-chat/${live.id}`, {
+        state: { ticketNumber: offer.ticket_number },
+      });
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 409) {
+        setError(`${offer.ticket_number} was already claimed — refreshing.`);
+        setOffers((prev) => prev.filter((o) => o.ticket_id !== offer.ticket_id));
+        await load();
+      } else {
+        setError(e instanceof Error ? e.message : 'Accept failed');
+      }
+    } finally {
+      setAcceptingId(null);
+    }
+  };
+
+  const onPassOffer = (offer: Offer) => {
+    setOffers((prev) => prev.filter((o) => o.ticket_id !== offer.ticket_id));
+  };
+
   const unclaimed = entries.filter((e) => !e.claimed_at).length;
   const inProgress = entries.filter((e) => e.status === 'in_progress').length;
 
@@ -135,6 +173,7 @@ export function LiveQueuePage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <AvailabilityToggle />
           <button
             onClick={() => {
               const next = !soundOn;
@@ -184,6 +223,38 @@ export function LiveQueuePage() {
       {info && (
         <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
           {info}
+        </div>
+      )}
+
+      {offers.length > 0 && (
+        <div className="mb-6 space-y-2">
+          {offers.map((o) => (
+            <div
+              key={o.ticket_id}
+              className="p-3 bg-indigo-50 border border-indigo-200 rounded-lg flex items-center justify-between"
+            >
+              <div className="text-sm text-indigo-900">
+                <span className="font-medium">Offered to you:</span> {o.ticket_number} —{' '}
+                {o.summary.issue_one_liner}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => void onAcceptOffer(o)}
+                  disabled={acceptingId === o.ticket_id}
+                  className="px-3 py-1 text-xs rounded-md bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  {acceptingId === o.ticket_id ? 'Accepting…' : 'Accept'}
+                </button>
+                <button
+                  onClick={() => onPassOffer(o)}
+                  disabled={acceptingId === o.ticket_id}
+                  className="px-3 py-1 text-xs rounded-md border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  Pass
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 

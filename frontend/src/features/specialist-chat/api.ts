@@ -78,6 +78,28 @@ export interface QueueListResponse {
   entries: QueueEntry[];
 }
 
+/** Specialist self-reported availability. Mirrors backend `PresenceOut`. */
+export interface Presence {
+  user_id: string;
+  status: 'available' | 'away';
+  last_heartbeat_at: string | null;
+  is_available: boolean;
+}
+
+/**
+ * A queue entry proactively offered to this specialist (round-robin /
+ * broadcast assignment). Mirrors backend `OfferOut`.
+ */
+export interface Offer {
+  ticket_id: string;
+  ticket_number: string;
+  offered_at: string;
+  expires_at: string;
+  round_index: number;
+  state: string;
+  summary: HandoffSummary;
+}
+
 export interface MyAssignedItem {
   ticket_id: string;
   ticket_number: string;
@@ -267,6 +289,21 @@ export const queueApi = {
     }),
 
   myAssigned: () => apiRequest<MyAssignedResponse>('/specialist-queue/mine'),
+
+  getAvailability: () => apiRequest<Presence>('/specialist-queue/availability'),
+
+  setAvailability: (status: 'available' | 'away') =>
+    apiRequest<Presence>('/specialist-queue/availability', { method: 'PUT', body: { status } }),
+
+  heartbeat: () =>
+    apiRequest<Presence>('/specialist-queue/availability/heartbeat', { method: 'POST' }),
+
+  /** Offers proactively routed to this specialist (accept before they expire). */
+  myOffers: () => apiRequest<Offer[]>('/specialist-queue/offers/mine'),
+
+  /** Same `ClaimResponse` shape as `claim` — accepting an offer claims the ticket. */
+  acceptOffer: (ticketId: string) =>
+    apiRequest<ClaimResponse>(`/specialist-queue/offers/${ticketId}/accept`, { method: 'POST' }),
 
   getHandoffPackage: (ticketId: string) =>
     apiRequest<HandoffPackage>(`/specialist-queue/${ticketId}`),
