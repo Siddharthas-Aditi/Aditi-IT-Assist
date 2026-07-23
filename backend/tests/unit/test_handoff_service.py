@@ -109,3 +109,77 @@ class TestAdvanceOnce:
             assert counts["fallback"] >= 1
             offer = await HandoffService(db).active_offer_for(ticket.id)
             assert offer is None  # moved to terminal 'fallback'
+
+    async def test_expired_offer_reoffers_to_another_available_specialist(self):
+        async with async_session_factory() as db:
+            requester = await _make_user(db, "emp")
+            first = await _make_user(db, "spec-first")
+            second = await _make_user(db, "spec-second")
+            await PresenceService(db).set_status(second.id, "available")
+            ticket = await _make_chat_ticket(db, requester)
+            expired = datetime.now(UTC) - timedelta(seconds=40)  # past 30s TTL
+            offer = LiveHandoffOffer(
+                ticket_id=ticket.id,
+                offered_to=first.id,
+                offered_at=expired,
+                expires_at=expired + timedelta(seconds=30),
+                round_index=0,
+                state="offered",
+            )
+            db.add(offer)
+            await db.flush()
+
+            counts = await HandoffService(db).advance_once()
+
+            assert counts["reoffered"] >= 1
+            assert offer.offered_to == second.id
+            assert offer.round_index == 1
+            assert offer.state == "offered"
+
+
+class TestAccept:
+    async def test_accept_happy_path(self):
+        async with async_session_factory() as db:
+            spec = await _make_user(db, "spec")
+            requester = await _make_user(db, "emp")
+            await PresenceService(db).set_status(spec.id, "available")
+            ticket = await _make_chat_ticket(db, requester)
+            offer = await HandoffService(db).create_offer(ticket)
+            assert offer is not None
+
+            accepted = await HandoffService(db).accept(ticket.id, specialist=spec)
+
+            assert accepted.state == "accepted"
+            assert accepted.offered_to == spec.id
+
+    async def test_accept_is_idempotent_for_same_specialist(self):
+        async with async_session_factory() as db:
+            spec = await _make_user(db, "spec")
+            requester = await _make_user(db, "emp")
+            await PresenceService(db).set_status(spec.id, "available")
+            ticket = await _make_chat_ticket(db, requester)
+            offer = await HandoffService(db).create_offer(ticket)
+            assert offer is not None
+            service = HandoffService(db)
+
+            first = await service.accept(ticket.id, specialist=spec)
+            second = await service.accept(ticket.id, specialist=spec)
+
+            assert first.id == second.id
+            assert second.state == "accepted"
+            assert second.offered_to == spec.id
+
+    async def test_accept_conflicts_when_different_specialist_already_accepted(self):
+        async with async_session_factory() as db:
+            spec_a = await _make_user(db, "spec-a")
+            spec_b = await _make_user(db, "spec-b")
+            requester = await _make_user(db, "emp")
+            await PresenceService(db).set_status(spec_a.id, "available")
+            ticket = await _make_chat_ticket(db, requester)
+            offer = await HandoffService(db).create_offer(ticket)
+            assert offer is not None
+            service = HandoffService(db)
+            await service.accept(ticket.id, specialist=spec_a)
+
+            with pytest.raises(PermissionError):
+                await service.accept(ticket.id, specialist=spec_b)

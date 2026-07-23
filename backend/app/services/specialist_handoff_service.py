@@ -166,15 +166,32 @@ class HandoffService:
         logger.info("handoff_offer_created", ticket_id=str(ticket.id), offered_to=str(ranked[0]))
         return offer
 
+    async def _latest_offer_for(self, ticket_id: uuid.UUID) -> LiveHandoffOffer | None:
+        stmt = (
+            select(LiveHandoffOffer)
+            .where(LiveHandoffOffer.ticket_id == ticket_id)
+            .order_by(LiveHandoffOffer.offered_at.desc())
+            .limit(1)
+        )
+        return (await self.db.execute(stmt)).scalar_one_or_none()
+
     async def accept(self, ticket_id: uuid.UUID, *, specialist) -> LiveHandoffOffer:
         offer = await self.active_offer_for(ticket_id)
-        if offer is None:
-            # No active offer (already accepted/broadened-claimed). Idempotent no-op record.
-            raise PermissionError("No active handoff offer for this ticket")
-        offer.state = "accepted"
-        offer.offered_to = specialist.id
-        await self.db.flush()
-        return offer
+        if offer is not None:
+            offer.state = "accepted"
+            offer.offered_to = specialist.id
+            await self.db.flush()
+            return offer
+        # No active offer — check whether this is a repeat call by the specialist
+        # who already accepted (idempotent), vs. a genuine conflict/missing offer.
+        latest = await self._latest_offer_for(ticket_id)
+        if (
+            latest is not None
+            and latest.state == "accepted"
+            and latest.offered_to == specialist.id
+        ):
+            return latest
+        raise PermissionError("No active handoff offer for this ticket")
 
     async def advance_once(self, *, now: datetime | None = None) -> dict[str, int]:
         ts = now or datetime.now(UTC)
