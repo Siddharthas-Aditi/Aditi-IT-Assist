@@ -14,10 +14,11 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from sqlalchemy import update
 
 from app.core.database import async_session_factory, engine
 from app.models.auth import User
-from app.models.live_handoff import LiveHandoffOffer
+from app.models.live_handoff import LiveHandoffOffer, SpecialistAvailability
 from app.models.ticket import Ticket
 from app.services.specialist_handoff_service import HandoffService
 from app.services.specialist_presence_service import PresenceService
@@ -30,6 +31,25 @@ async def _dispose_engine_after_test():
     """Avoid cross-event-loop asyncpg errors (see test_specialist_report_api.py)."""
     yield
     await engine.dispose()
+
+
+@pytest.fixture(autouse=True)
+async def _isolate_global_availability():
+    """Force every pre-existing ``specialist_availability`` row to 'away'.
+
+    ``HandoffService._ranked_available`` deliberately reads ALL rows in the
+    table (real routing needs global state, not per-test scoping). But that
+    means a row left ``available`` by another, committing test file (or dev
+    seed data) makes ``create_offer``/``advance_once`` target a stranger
+    instead of the specialist this test just created — flaky only under the
+    full suite. Runs in its own session/commit BEFORE the test body opens its
+    own (uncommitted, rolled-back-on-close) session, so each test starts from
+    a known-clean slate and only the rows it explicitly sets Available exist.
+    """
+    async with async_session_factory() as db:
+        await db.execute(update(SpecialistAvailability).values(status="away"))
+        await db.commit()
+    yield
 
 
 async def _make_user(db, tag: str) -> User:

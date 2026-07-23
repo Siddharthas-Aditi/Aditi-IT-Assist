@@ -92,11 +92,13 @@ async def _claim_response(
     claim via ``SpecialistQueueService.claim`` and must return an identical
     shape. Extracted here so the two routes can't silently drift.
     """
-    from app.services.agents import chat_service as cs_mod
     from app.services.specialist_queue_service import waiting_info
 
-    session_state = cs_mod._sessions.get(str(ticket.session_id)) if ticket.session_id else None
-    package = await service.build_handoff_package(ticket, session_state=session_state)
+    # `build_handoff_package` prefers the persisted escalation context (and
+    # falls back to ticket-only fields) — no live in-memory session lookup is
+    # needed or available since the SessionStore refactor removed the
+    # process-local `chat_service._sessions` dict.
+    package = await service.build_handoff_package(ticket)
 
     # Freshness at claim time: was the employee still inside the wait window
     # when this claim landed? Tells the client whether to open a live chat

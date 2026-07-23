@@ -804,7 +804,13 @@ class ChatService:
                 await svc.db.commit()
         except Exception:
             logger.warning("handoff_offer_create_failed", ticket_id=ticket_id, exc_info=True)
-            await svc.db.rollback()
+            try:
+                await svc.db.rollback()
+            except Exception:
+                # Best-effort by contract: a rollback failure (e.g. a mocked
+                # or already-closed session in tests) must never mask the
+                # original warning or escape this helper.
+                logger.warning("handoff_offer_rollback_failed", ticket_id=ticket_id, exc_info=True)
 
     async def _maybe_run_web_research(self, session_id: str, state: dict | None) -> None:
         """Best-effort governed web research at a KB-insufficient escalation.

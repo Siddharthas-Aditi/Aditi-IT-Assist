@@ -24,7 +24,11 @@ from app.core.database import async_session_factory, engine
 from app.main import app
 from app.models.auth import Role, User, UserRoleAssignment
 from app.models.live_handoff import SpecialistAvailability
+from app.models.support import SupportSession
+from app.models.ticket import Ticket
 from app.services.auth.dependencies import get_current_active_user
+from app.services.specialist_handoff_service import HandoffService
+from app.services.specialist_presence_service import PresenceService
 
 pytestmark = pytest.mark.asyncio
 
@@ -54,6 +58,22 @@ async def _real_specialist() -> User:
                 _ = user.primary_role  # materialize before session closes
                 return user
         raise AssertionError("expected a seeded it_agent or it_lead user in the test DB")
+
+
+async def _real_employee() -> User:
+    """Fetch a real, DB-persisted seeded employee to act as ticket requester."""
+    async with async_session_factory() as session:
+        stmt = (
+            select(User)
+            .join(UserRoleAssignment, UserRoleAssignment.user_id == User.id)
+            .join(Role, Role.id == UserRoleAssignment.role_id)
+            .where(Role.name == "employee")
+            .limit(1)
+        )
+        user = (await session.execute(stmt)).scalars().first()
+        assert user is not None, "expected a seeded employee user in the test DB"
+        _ = user.primary_role
+        return user
 
 
 @pytest.fixture
@@ -166,3 +186,66 @@ class TestAcceptOfferGating:
         ac, _user = real_specialist_client
         resp = await ac.post(f"/api/v1/specialist-queue/offers/{uuid.uuid4()}/accept")
         assert resp.status_code == 404
+
+
+class TestAcceptOfferHappyPath:
+    """Regression coverage for the dead ``chat_service._sessions`` lookup.
+
+    ``_claim_response`` used to do
+    ``cs_mod._sessions.get(str(ticket.session_id))`` — but ``_sessions`` was
+    removed by the SessionStore refactor, so ANY claimable chat ticket with a
+    non-null ``session_id`` (i.e. every real chat escalation) 500'd with
+    ``AttributeError: module 'app.services.agents.chat_service' has no
+    attribute '_sessions'``. This drives the real accept-offer endpoint
+    end-to-end against a real, DB-persisted chat ticket that has a non-null
+    ``session_id`` — the exact shape that used to blow up — and asserts a
+    clean 200 + a well-formed ``ClaimResponse``.
+    """
+
+    async def test_accept_offer_builds_handoff_package_for_real_chat_ticket(
+        self, real_specialist_client
+    ):
+        ac, specialist = real_specialist_client
+        requester = await _real_employee()
+
+        async with async_session_factory() as session:
+            # `Ticket.session_id` FKs to `support_sessions.id` — a real chat
+            # escalation always has a backing session row, so the regression
+            # test must too (an arbitrary UUID trips the FK constraint).
+            support_session = SupportSession(user_id=requester.id, session_type="ai_chat")
+            session.add(support_session)
+            await session.flush()
+
+            ticket = Ticket(
+                ticket_number=f"ITA-TEST-{uuid.uuid4().hex[:8]}",
+                title="Live chat escalation",
+                description="Regression ticket for accept-offer handoff package build",
+                requester_id=requester.id,
+                source="chat",
+                status="triaged",
+                priority="medium",
+                category="email/outlook",
+                session_id=support_session.id,
+            )
+            session.add(ticket)
+            await session.flush()
+            await PresenceService(session).set_status(specialist.id, "available")
+            offer = await HandoffService(session).create_offer(ticket)
+            assert offer is not None
+            assert offer.offered_to == specialist.id
+            await session.commit()
+            ticket_id = ticket.id
+
+        resp = await ac.post(f"/api/v1/specialist-queue/offers/{ticket_id}/accept")
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["ticket_id"] == str(ticket_id)
+        assert body["claimed_by_user_id"] == str(specialist.id)
+        assert body["handoff_package"]["session_id"] != ""
+
+        async with async_session_factory() as session:
+            refreshed = await session.get(Ticket, ticket_id)
+            assert refreshed is not None
+            assert refreshed.assigned_to == specialist.id
+            assert refreshed.status == "in_progress"
