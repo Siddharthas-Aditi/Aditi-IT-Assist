@@ -27,6 +27,7 @@ from app.models.knowledge import (
     KnowledgeTaxonomyTerm,
 )
 from app.models.knowledge_candidate import KnowledgeCandidate
+from app.models.live_handoff import LiveHandoffOffer, SpecialistAvailability
 from app.models.remote_support import RemoteSessionEvent, RemoteSupportConsent, RemoteSupportSession
 from app.models.reporting import ScheduledReportRun
 from app.models.specialist_chat import SpecialistChatMessage, SpecialistChatSession
@@ -81,6 +82,9 @@ __all__ = [
     "RemoteSupportSession",
     "RemoteSupportConsent",
     "RemoteSessionEvent",
+    # Live Handoff
+    "SpecialistAvailability",
+    "LiveHandoffOffer",
     # Scheduled reporting
     "ScheduledReportRun",
     # Audit & Analytics
