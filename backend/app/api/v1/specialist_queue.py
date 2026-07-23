@@ -13,11 +13,13 @@ All routes require ``ticket:claim_chat`` (typically held by ``it_agent``,
 """
 
 import uuid
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.permissions import P
 from app.models.auth import User
@@ -26,6 +28,7 @@ from app.schemas.escalation import (
     ResolutionComparisonIn,
     SpecialistHandoffView,
 )
+from app.schemas.specialist_handoff import OfferOut, PresenceOut, PresenceUpdate
 from app.schemas.specialist_queue import (
     ClaimRequest,
     ClaimResponse,
@@ -36,6 +39,8 @@ from app.schemas.specialist_queue import (
 )
 from app.services.auth.dependencies import require_permissions
 from app.services.escalation_service import EscalationService
+from app.services.specialist_handoff_service import HandoffService
+from app.services.specialist_presence_service import PresenceService, is_available
 from app.services.specialist_queue_service import SpecialistQueueService
 
 router = APIRouter()
@@ -55,6 +60,162 @@ QueueDep = Annotated[SpecialistQueueService, Depends(_queue_service)]
 ClaimerDep = Annotated[User, Depends(require_permissions(P.SPECIALIST_QUEUE_CLAIM))]
 ResolverDep = Annotated[User, Depends(require_permissions(P.SPECIALIST_QUEUE_RESOLVE))]
 QueueViewerDep = Annotated[User, Depends(require_permissions(P.SPECIALIST_QUEUE_VIEW))]
+
+
+def _presence_out(row) -> PresenceOut:
+    """Build the response DTO, computing freshness at request time.
+
+    ``is_available`` is derived rather than stored so a stale heartbeat
+    always reads as unavailable, even if the row itself hasn't changed.
+    """
+    now = datetime.now(UTC)
+    return PresenceOut(
+        user_id=row.user_id,
+        status=row.status,
+        last_heartbeat_at=row.last_heartbeat_at,
+        is_available=is_available(
+            row.status, row.last_heartbeat_at, now, settings.SPECIALIST_PRESENCE_TTL_SECONDS
+        ),
+    )
+
+
+async def _claim_response(
+    service: SpecialistQueueService,
+    ticket,
+    current_user: User,
+    db: DBDep,
+) -> ClaimResponse:
+    """Build the ``ClaimResponse`` returned after a successful claim.
+
+    Shared by ``claim_ticket`` (POST /claim) and ``accept_offer``
+    (POST /offers/{ticket_id}/accept) — both perform the exact same atomic
+    claim via ``SpecialistQueueService.claim`` and must return an identical
+    shape. Extracted here so the two routes can't silently drift.
+    """
+    from app.services.agents import chat_service as cs_mod
+    from app.services.specialist_queue_service import waiting_info
+
+    session_state = cs_mod._sessions.get(str(ticket.session_id)) if ticket.session_id else None
+    package = await service.build_handoff_package(ticket, session_state=session_state)
+
+    # Freshness at claim time: was the employee still inside the wait window
+    # when this claim landed? Tells the client whether to open a live chat
+    # ("waiting") or route to the ticket workspace ("likely_left").
+    state, waited = waiting_info(ticket.created_at, None)
+
+    return ClaimResponse(
+        ticket_id=ticket.id,
+        ticket_number=ticket.ticket_number,
+        claimed_by_user_id=current_user.id,
+        claimed_at=ticket.first_response_at or ticket.updated_at,
+        waiting_state=state,  # type: ignore[arg-type]
+        waited_seconds=waited,
+        handoff_package=package,
+    )
+
+
+@router.put("/availability", response_model=PresenceOut)
+async def set_availability(body: PresenceUpdate, user: QueueViewerDep, db: DBDep) -> PresenceOut:
+    """Explicitly set this specialist's presence to Available or Away."""
+    row = await PresenceService(db).set_status(user.id, body.status)
+    await db.commit()
+    return _presence_out(row)
+
+
+@router.post("/availability/heartbeat", response_model=PresenceOut)
+async def heartbeat(user: QueueViewerDep, db: DBDep) -> PresenceOut:
+    """Keep an Available status fresh without changing it."""
+    row = await PresenceService(db).heartbeat(user.id)
+    await db.commit()
+    return _presence_out(row)
+
+
+@router.get("/availability", response_model=PresenceOut)
+async def get_availability(user: QueueViewerDep, db: DBDep) -> PresenceOut:
+    """Return this specialist's current presence.
+
+    No row yet (never set presence) defaults to Away / unavailable rather
+    than 404ing — a specialist who hasn't opted in is simply not available.
+    """
+    row = await PresenceService(db).get(user.id)
+    if row is None:
+        return PresenceOut(
+            user_id=user.id, status="away", last_heartbeat_at=None, is_available=False
+        )
+    return _presence_out(row)
+
+
+@router.get("/offers/mine", response_model=list[OfferOut])
+async def my_offers(user: QueueViewerDep, service: QueueDep, db: DBDep) -> list[OfferOut]:
+    """Active live-handoff offers currently targeted to the caller."""
+    from sqlalchemy import select
+
+    from app.models.live_handoff import LiveHandoffOffer
+    from app.models.ticket import Ticket
+
+    stmt = (
+        select(LiveHandoffOffer, Ticket)
+        .join(Ticket, Ticket.id == LiveHandoffOffer.ticket_id)
+        .where(
+            LiveHandoffOffer.state == "offered",
+            LiveHandoffOffer.offered_to == user.id,
+        )
+        .order_by(LiveHandoffOffer.offered_at.asc())
+    )
+    rows = (await db.execute(stmt)).all()
+    out: list[OfferOut] = []
+    for offer, ticket in rows:
+        entry = service._to_queue_entry(ticket)  # reuse existing summary builder
+        out.append(
+            OfferOut(
+                ticket_id=ticket.id,
+                ticket_number=ticket.ticket_number,
+                offered_at=offer.offered_at,
+                expires_at=offer.expires_at,
+                round_index=offer.round_index,
+                state=offer.state,
+                summary=entry.summary,
+            )
+        )
+    return out
+
+
+@router.post("/offers/{ticket_id}/accept", response_model=ClaimResponse)
+async def accept_offer(
+    ticket_id: uuid.UUID,
+    service: QueueDep,
+    current_user: ClaimerDep,
+    db: DBDep,
+) -> ClaimResponse:
+    """Accept a targeted live-handoff offer.
+
+    Mirrors ``claim_ticket``: the actual guarantee against two specialists
+    picking up the same chat is the atomic DB-level claim, not the offer
+    row — so this reuses ``SpecialistQueueService.claim`` verbatim (same
+    404/409 mapping) and returns the same ``ClaimResponse`` shape. It does
+    NOT start a live-chat session; the frontend calls the live-chat
+    ``start`` endpoint separately once the claim succeeds.
+
+    Marking the offer record itself accepted is best-effort bookkeeping —
+    the claim has already succeeded by the time we touch it, so a stale/
+    already-terminal offer must never fail the request.
+    """
+    try:
+        ticket = await service.claim(ticket_id, claimer=current_user)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    await db.commit()
+
+    try:
+        await HandoffService(db).accept(ticket_id, specialist=current_user)
+        await db.commit()
+    except PermissionError:
+        pass  # claim already succeeded — offer bookkeeping is non-critical
+
+    return await _claim_response(service, ticket, current_user, db)
 
 
 @router.get("", response_model=QueueListResponse)
@@ -176,27 +337,7 @@ async def claim_ticket(
 
     await db.commit()
 
-    from app.services.agents import chat_service as cs_mod
-
-    session_state = cs_mod._sessions.get(str(ticket.session_id)) if ticket.session_id else None
-    package = await service.build_handoff_package(ticket, session_state=session_state)
-
-    # Freshness at claim time: was the employee still inside the wait window
-    # when this claim landed? Tells the client whether to open a live chat
-    # ("waiting") or route to the ticket workspace ("likely_left").
-    from app.services.specialist_queue_service import waiting_info
-
-    state, waited = waiting_info(ticket.created_at, None)
-
-    return ClaimResponse(
-        ticket_id=ticket.id,
-        ticket_number=ticket.ticket_number,
-        claimed_by_user_id=current_user.id,
-        claimed_at=ticket.first_response_at or ticket.updated_at,
-        waiting_state=state,  # type: ignore[arg-type]
-        waited_seconds=waited,
-        handoff_package=package,
-    )
+    return await _claim_response(service, ticket, current_user, db)
 
 
 @router.post("/release")
