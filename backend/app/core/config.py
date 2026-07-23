@@ -221,6 +221,13 @@ class Settings(BaseSettings):
     # queue's typed waiting_state ("waiting" vs "likely_left"), so the two
     # sides can never disagree about what "stale" means.
     LIVE_WAIT_TIMEOUT_SECONDS: int = 900  # 15 minutes
+    # ── Live handoff: offer lifecycle + specialist presence ────────────────
+    LIVE_OFFER_TTL_SECONDS: int = 30  # how long a targeted offer stays with one specialist
+    LIVE_OFFER_MAX_ROUNDS: int = 2  # targeted re-offers before broadening to all Available
+    LIVE_HANDOFF_FALLBACK_SECONDS: int = 120  # overall cap before graceful fallback
+    SPECIALIST_PRESENCE_TTL_SECONDS: int = 60  # heartbeat freshness for "Available"
+    HANDOFF_SWEEPER_ENABLED: bool = True
+    HANDOFF_SWEEPER_INTERVAL_SECONDS: int = 10  # tighter than idle sweeper — offers expire in 30s
 
     # ── Scheduled report email (C2) ──────────────────────────────────
     # Reuses the SMTP_* settings above for transport; off by default.
