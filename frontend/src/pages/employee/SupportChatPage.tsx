@@ -8,7 +8,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { AlertTriangle, Bot, CheckCircle2, ChevronRight, Headset, Send, Ticket, User, X } from 'lucide-react';
+import { AlertTriangle, Bot, CheckCircle2, ChevronRight, Headset, Send, Ticket, User } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { WelcomeCategories } from '@/features/chat/WelcomeCategories';
 import { PostChatFeedbackCard } from '@/features/chat/PostChatFeedbackCard';
@@ -16,6 +16,7 @@ import { liveChatApi } from '@/features/specialist-chat/api';
 import { chatApi } from '@/lib/api';
 import { restoreChatSession, saveChatSession } from '@/lib/chat-session-sync';
 import type { QuickReplyOption } from '@/types';
+import { WaitingBanner, type HandoffState } from './WaitingBanner';
 
 // Teams Webhook
 // Set VITE_TEAMS_WEBHOOK_URL in your .env to enable Teams notifications on
@@ -198,8 +199,10 @@ export function SupportChatPage() {
   const [waitingForSpecialist, setWaitingForSpecialist] = useState(
     () => restored?.waitingForSpecialist ?? false,
   );
-  // Specialist-unavailable fallback: shown after 15 minutes of waiting
-  const [specialistUnavailable, setSpecialistUnavailable] = useState(false);
+  // Drives the waiting-banner copy: 'connecting' → 'busy' → 'connected' (handled
+  // by the emerald join banner above) or terminal 'fallback' (specialist
+  // unavailable, ticket already logged).
+  const [handoffState, setHandoffState] = useState<HandoffState>('connecting');
   const [cancellingWait, setCancellingWait] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(
     () => restored?.sessionId ?? null,
@@ -294,8 +297,9 @@ export function SupportChatPage() {
     const poll = async () => {
       try {
         const status = await chatApi.getWaitingStatus(sessionId);
-        if (active && !status.specialist_available) {
-          setSpecialistUnavailable(true);
+        if (!active) return;
+        setHandoffState(status.handoff_state ?? 'connecting');
+        if (!status.specialist_available) {
           if (status.fallback_message) {
             setMessages((prev) => {
               // Prevent duplicate fallback messages
@@ -468,7 +472,10 @@ export function SupportChatPage() {
       // ticket === undefined means the no-direct-connect policy asked for a
       // problem description first — surface the message, do NOT enter waiting.
       const handedOff = Boolean(data.ticket);
-      if (handedOff) setWaitingForSpecialist(true);
+      if (handedOff) {
+        setWaitingForSpecialist(true);
+        setHandoffState('connecting');
+      }
       const waitLine = handedOff
         ? '\n\nPlease wait while I connect you to a live IT specialist. ' +
           "I'll bring them into this chat as soon as one is available — you can keep this window open."
@@ -500,6 +507,30 @@ export function SupportChatPage() {
       ]);
     } finally {
       setConnecting(false);
+    }
+  };
+
+  /** Cancel an in-progress live-agent handoff — used by `WaitingBanner`. */
+  const cancelWaiting = async () => {
+    if (!sessionId || cancellingWait) return;
+    setCancellingWait(true);
+    try {
+      const res = await chatApi.cancelWaiting(sessionId);
+      setWaitingForSpecialist(false);
+      setHandoffState('connecting');
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `cancel-${Date.now()}`,
+          role: 'assistant',
+          content: res.message,
+          timestamp: new Date(),
+        },
+      ]);
+    } catch {
+      /* non-critical */
+    } finally {
+      setCancellingWait(false);
     }
   };
 
@@ -544,41 +575,8 @@ export function SupportChatPage() {
 
       {/* ── Waiting-for-specialist banner ───────────────────────── */}
       {waitingForSpecialist && !liveSession && (
-        <div className="flex items-center justify-between gap-3 border-b border-amber-200 bg-amber-50 px-6 py-3">
-          <div className="flex items-center gap-3">
-            <span className="h-4 w-4 animate-spin rounded-full border-2 border-amber-400 border-t-transparent" />
-            <span className="text-sm font-medium text-amber-800">
-              {specialistUnavailable
-                ? 'No specialist is available right now. Your ticket is still active and the team will follow up via email.'
-                : 'Please wait while I connect you to a live IT specialist. You\'re in the queue — keep this window open.'}
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={async () => {
-              if (!sessionId || cancellingWait) return;
-              setCancellingWait(true);
-              try {
-                const res = await chatApi.cancelWaiting(sessionId);
-                setWaitingForSpecialist(false);
-                setSpecialistUnavailable(false);
-                setMessages((prev) => [
-                  ...prev,
-                  {
-                    id: `cancel-${Date.now()}`,
-                    role: 'assistant',
-                    content: res.message,
-                    timestamp: new Date(),
-                  },
-                ]);
-              } catch { /* non-critical */ }
-              finally { setCancellingWait(false); }
-            }}
-            disabled={cancellingWait}
-            className="shrink-0 flex items-center gap-1 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-100 disabled:opacity-50"
-          >
-            <X size={12} /> Cancel
-          </button>
+        <div className="border-b border-gray-200 bg-white px-6 py-3">
+          <WaitingBanner handoffState={handoffState} onCancel={() => void cancelWaiting()} />
         </div>
       )}
 

@@ -352,6 +352,7 @@ export const chatApi = {
       waited_seconds: number;
       specialist_available: boolean;
       fallback_message: string | null;
+      handoff_state?: 'connecting' | 'busy' | 'connected' | 'fallback';
     }>(`/chat/waiting-status/${sessionId}`),
 };
 
