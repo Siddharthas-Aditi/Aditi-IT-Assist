@@ -1,5 +1,7 @@
 """Chat-related request/response schemas."""
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -131,6 +133,12 @@ class WaitingStatusResponse(BaseModel):
     waited_seconds: int = 0
     specialist_available: bool = True
     fallback_message: str | None = None
+    # Fine-grained handoff-offer state (Task 9): "connecting" (targeted offer
+    # outstanding), "busy" (offer broadened to all Available specialists, or
+    # none available yet), "connected" (a live specialist chat session is
+    # active), "fallback" (wait timeout exceeded). `specialist_available`
+    # stays for backward-compat with existing UI.
+    handoff_state: Literal["connecting", "busy", "connected", "fallback"] = "connecting"
 
 
 class SessionSummary(BaseModel):

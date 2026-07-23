@@ -2,7 +2,7 @@
 
 import uuid
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 from uuid import uuid4
 
 from langchain_core.messages import AIMessage, HumanMessage
@@ -557,6 +557,7 @@ class ChatService:
         ref = await self._persist_and_queue(
             session_id, session, draft, requester, state=state or None
         )
+        await self._create_handoff_offer(ref.ticket_id)
 
         # Record the waiting start time for timeout tracking, then persist.
         session.waiting_since = datetime.now(UTC)
@@ -635,6 +636,10 @@ class ChatService:
                 "try again later or continue troubleshooting with me."
             )
 
+        handoff_state = await self._derive_handoff_state(
+            ticket_cache, requester, specialist_available
+        )
+
         return WaitingStatusResponse(
             session_id=session_id,
             waiting=True,
@@ -642,7 +647,49 @@ class ChatService:
             waited_seconds=waited_seconds,
             specialist_available=specialist_available,
             fallback_message=fallback_message,
+            handoff_state=handoff_state,
         )
+
+    async def _derive_handoff_state(
+        self, ticket_cache: dict, requester: User, specialist_available: bool
+    ) -> Literal["connecting", "busy", "connected", "fallback"]:
+        """Fine-grained handoff-offer state for the waiting-status poll.
+
+        "connected" once a live specialist-chat session exists; otherwise
+        derived from the active :class:`LiveHandoffOffer` (Task 6): no offer
+        yet → "fallback" past the wait timeout else "busy"; "broadened"
+        (offer opened to all Available specialists) → "busy"; a live targeted
+        offer → "connecting". Best-effort: a DB/lookup failure degrades to the
+        safe "connecting" default rather than breaking the waiting-status poll.
+        """
+        if self.ticket_service is None:
+            return "connecting"
+        try:
+            ticket_uuid = uuid.UUID(ticket_cache["ticket_id"])
+        except (KeyError, ValueError, TypeError):
+            return "connecting"
+
+        try:
+            from app.services.specialist_chat_service import SpecialistChatService
+            from app.services.specialist_handoff_service import HandoffService
+
+            db = self.ticket_service.db
+            live = await SpecialistChatService(db).get_active_for_participant(requester.id)
+            if live is not None:
+                return "connected"
+            offer = await HandoffService(db).active_offer_for(ticket_uuid)
+            if offer is None:
+                return "fallback" if not specialist_available else "busy"
+            if offer.state == "broadened":
+                return "busy"
+            return "connecting"
+        except Exception:
+            logger.warning(
+                "handoff_state_derivation_failed",
+                ticket_id=str(ticket_uuid),
+                exc_info=True,
+            )
+            return "connecting"
 
     @staticmethod
     def _handoff_allowed(state: dict) -> bool:
@@ -736,6 +783,27 @@ class ChatService:
             ticket_number=ticket.ticket_number,
         )
         return TicketRef(**ref)
+
+    async def _create_handoff_offer(self, ticket_id: str) -> None:
+        """Route the freshly-queued ticket to an Available specialist.
+
+        Best-effort: this is offer-lifecycle bookkeeping (see
+        ``specialist_handoff_service.HandoffService``), not the queue itself —
+        a failure here must never block the handoff. If routing is
+        unavailable the ticket still sits in the claimable queue and the
+        periodic sweeper drives re-offer/broaden/fallback from a cold start.
+        """
+        svc = self.ticket_service
+        assert svc is not None  # guarded by callers
+        try:
+            from app.services.specialist_handoff_service import HandoffService
+
+            ticket_obj = await svc._get_ticket(uuid.UUID(ticket_id))
+            if ticket_obj is not None:
+                await HandoffService(svc.db).create_offer(ticket_obj)
+                await svc.db.commit()
+        except Exception:
+            logger.warning("handoff_offer_create_failed", ticket_id=ticket_id, exc_info=True)
 
     async def _maybe_run_web_research(self, session_id: str, state: dict | None) -> None:
         """Best-effort governed web research at a KB-insufficient escalation.
