@@ -79,6 +79,12 @@ function mockTicketDetailFetch(status: string): ReturnType<typeof vi.fn> {
         }),
       );
     }
+    // The workspace also renders <HandoffContextPanel/>, which fetches the
+    // handoff view. This ticket has no structured escalation context, so the
+    // endpoint yields null → the panel shows its "unavailable" state.
+    if (url.includes('/handoff-view')) {
+      return Promise.resolve(jsonResponse(null));
+    }
     return Promise.resolve(jsonResponse({}));
   });
   vi.stubGlobal('fetch', fetchMock);

@@ -87,6 +87,14 @@ export function HandoffContextPanel({ ticketId }: Props) {
     );
   }
 
+  // The API contract types these as required arrays, but a partial/degraded
+  // response (or a ticket without structured context) can omit them — never let
+  // a missing array white-screen the specialist's workspace.
+  const stepsAttempted: SpecialistHandoffView['steps_attempted'] = view.steps_attempted ?? [];
+  const kbGapTags: SpecialistHandoffView['kb_gap_tags'] = view.kb_gap_tags ?? [];
+  const kbArticlesReferenced: SpecialistHandoffView['kb_articles_referenced'] =
+    view.kb_articles_referenced ?? [];
+
   return (
     <Card className="mb-4 p-0 overflow-hidden">
       {/* ── Overview ─────────────────────────────────────────────── */}
@@ -151,15 +159,15 @@ export function HandoffContextPanel({ ticketId }: Props) {
         <section>
           <SectionLabel
             icon={<Wrench size={14} />}
-            text={`Troubleshooting already attempted (${view.steps_attempted.length})`}
+            text={`Troubleshooting already attempted (${stepsAttempted.length})`}
           />
-          {view.steps_attempted.length === 0 ? (
+          {stepsAttempted.length === 0 ? (
             <p className="mt-1 text-sm text-muted-foreground">
               No AI troubleshooting steps were recorded.
             </p>
           ) : (
             <ul className="mt-2 space-y-1.5">
-              {view.steps_attempted.map((s, i) => (
+              {stepsAttempted.map((s, i) => (
                 <StepRow key={i} step={s} />
               ))}
             </ul>
@@ -173,18 +181,18 @@ export function HandoffContextPanel({ ticketId }: Props) {
             text="KB signals & knowledge gaps"
           />
           <div className="mt-2 space-y-2">
-            {view.kb_gap_tags.length > 0 && (
+            {kbGapTags.length > 0 && (
               <div className="flex flex-wrap gap-2">
-                {view.kb_gap_tags.map((t) => (
+                {kbGapTags.map((t) => (
                   <Badge key={t} variant="warning">
                     {KB_GAP_LABELS[t] ?? t}
                   </Badge>
                 ))}
               </div>
             )}
-            {view.kb_articles_referenced.length > 0 ? (
+            {kbArticlesReferenced.length > 0 ? (
               <ul className="space-y-1 text-sm text-foreground">
-                {view.kb_articles_referenced.map((a, i) => (
+                {kbArticlesReferenced.map((a, i) => (
                   <li key={i} className="flex items-center gap-2">
                     <span className="text-muted-foreground">•</span>
                     <span>{a.title}</span>
@@ -197,7 +205,7 @@ export function HandoffContextPanel({ ticketId }: Props) {
                 ))}
               </ul>
             ) : (
-              view.kb_gap_tags.length === 0 && (
+              kbGapTags.length === 0 && (
                 <p className="text-sm text-muted-foreground">No KB signals recorded.</p>
               )
             )}
