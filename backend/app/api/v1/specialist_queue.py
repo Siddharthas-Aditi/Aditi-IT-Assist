@@ -250,11 +250,11 @@ async def get_handoff_package(
     ticket = await db.get(Ticket, ticket_id)
     if ticket is None:
         raise HTTPException(status_code=404, detail="Ticket not found")
-    # Pull session state if the chat service still holds it.
-    from app.services.agents import chat_service as cs_mod
-
-    session_state = cs_mod._sessions.get(str(ticket.session_id)) if ticket.session_id else None
-    return await service.build_handoff_package(ticket, session_state=session_state)
+    # Build from the persisted escalation context (session_state defaults to None).
+    # The old process-local `chat_service._sessions` dict was removed in the
+    # SessionStore refactor; referencing it 500'd for any chat ticket with a
+    # session_id. `build_handoff_package` reads the persisted context first.
+    return await service.build_handoff_package(ticket)
 
 
 @router.get("/{ticket_id}/handoff-view", response_model=SpecialistHandoffView)
