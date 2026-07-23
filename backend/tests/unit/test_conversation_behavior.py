@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 
+from app.core.config import settings
 from app.services.agents.diagnostic_state import DiagnosticContext
 from app.workflows.nodes.triage import triage_node
 
@@ -207,3 +208,46 @@ class TestTopicShift:
         assert diag["understanding_confirmed"] is False
         # Vague Outlook → should ask what's happening, not answer.
         assert result["needs_clarification"] is True
+
+
+class TestFluidChatSkipsConfirm:
+    @pytest.mark.asyncio
+    async def test_confident_issue_skips_confirm_when_fluid(self, monkeypatch):
+        monkeypatch.setattr(settings, "FEATURE_FLUID_CHAT", True)
+        # A confidently-classified issue (subtype set, high confidence).
+        ctx = DiagnosticContext(
+            issue_category="email/outlook",
+            issue_subtype="mailbox-full",
+            subtype_confidence=0.9,
+            symptom="mailbox full",
+            normalized_system="outlook",
+            entity_confidence=0.9,
+            affected_system="Microsoft Outlook",
+        )
+        with _no_llm():
+            result = await triage_node(
+                {
+                    "messages": [HumanMessage(content="my outlook mailbox is full")],
+                    "session_id": "fc1",
+                    "issue_category": "email/outlook",
+                    "diagnostic_context": ctx.to_dict(),
+                }
+            )
+        # No forced confirm turn: it proceeds to diagnosing, not a "confirm" clarify.
+        assert result.get("conversation_phase") == "diagnosing"
+        assert result.get("needs_clarification") in (False, None)
+
+    @pytest.mark.asyncio
+    async def test_ambiguous_issue_still_confirms_when_fluid(self, monkeypatch):
+        monkeypatch.setattr(settings, "FEATURE_FLUID_CHAT", True)
+        ctx = DiagnosticContext(issue_category="software", subtype_confidence=0.2)
+        with _no_llm():
+            result = await triage_node(
+                {
+                    "messages": [HumanMessage(content="something is wrong")],
+                    "session_id": "fc2",
+                    "issue_category": "software",
+                    "diagnostic_context": ctx.to_dict(),
+                }
+            )
+        assert result.get("needs_clarification") is True

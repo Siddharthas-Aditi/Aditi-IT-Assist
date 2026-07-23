@@ -440,6 +440,17 @@ def _is_denial(text: str) -> bool:
     return any(p in t for p in _DENY_PHRASES)
 
 
+def _confident_understanding(diag_ctx: DiagnosticContext) -> bool:
+    """True when the issue is classified confidently enough to skip the
+    forced "restate understanding, wait for yes/no" confirm gate and go
+    straight to helping (fluid chat, flag-gated by the caller)."""
+    return bool(
+        diag_ctx.issue_category
+        and diag_ctx.issue_subtype
+        and diag_ctx.subtype_confidence >= settings.FLUID_CHAT_MIN_SUBTYPE_CONFIDENCE
+    )
+
+
 ISSUE_CATEGORIES = [
     "email/outlook",
     "video-conferencing/zoom",
@@ -841,7 +852,15 @@ async def triage_node(state: WorkflowState) -> dict:
     # We have enough context. Like a real analyst, restate what we think the
     # problem is and wait for the user to confirm before giving a solution.
     # Skipped once confirmed, and skipped while advancing after a failed step.
-    if not diag_ctx.understanding_confirmed and not diag_ctx.last_resolution_failed:
+    # Fluid chat (flag-gated): when the issue is confidently classified, skip
+    # this forced confirm turn entirely and go straight to helping — the
+    # confirm gate only earns its keep when we're not sure we understood.
+    skip_confirm = settings.FEATURE_FLUID_CHAT and _confident_understanding(diag_ctx)
+    if (
+        not skip_confirm
+        and not diag_ctx.understanding_confirmed
+        and not diag_ctx.last_resolution_failed
+    ):
         diag_ctx.awaiting_confirmation = True
         diag_ctx.last_response_type = "confirm"
         diag_ctx.phase = DiagnosticPhase.CLARIFYING
