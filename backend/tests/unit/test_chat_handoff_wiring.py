@@ -39,6 +39,7 @@ def _ticket_service() -> MagicMock:
     svc = MagicMock()
     svc.db = MagicMock()
     svc.db.commit = AsyncMock()
+    svc.db.rollback = AsyncMock()
     svc._get_ticket = AsyncMock(return_value=None)
     return svc
 
@@ -109,6 +110,32 @@ class TestHandoffOfferCreationIsBestEffort:
 
         handoff_instance.create_offer.assert_awaited_once_with(ticket_obj)
         svc.db.commit.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_offer_creation_failure_rolls_back_shared_session(self) -> None:
+        """If HandoffService.create_offer raises, the shared session must be
+        rolled back so the subsequent envelope sync (same `svc.db`) isn't
+        poisoned by a pending-rollback transaction state."""
+        svc = _ticket_service()
+        ticket_obj = MagicMock(id=uuid.uuid4())
+        svc._get_ticket = AsyncMock(return_value=ticket_obj)
+        chat = ChatService(svc)
+
+        with pytest.MonkeyPatch.context() as mp:
+            handoff_cls = MagicMock()
+            handoff_instance = MagicMock()
+            handoff_instance.create_offer = AsyncMock(side_effect=RuntimeError("offer boom"))
+            handoff_cls.return_value = handoff_instance
+            mp.setattr(
+                "app.services.specialist_handoff_service.HandoffService",
+                handoff_cls,
+            )
+
+            # Must not raise.
+            await chat._create_handoff_offer(str(ticket_obj.id))
+
+        svc.db.commit.assert_not_called()
+        svc.db.rollback.assert_awaited_once()
 
 
 # ── get_waiting_status: handoff_state derivation ───────────────────────

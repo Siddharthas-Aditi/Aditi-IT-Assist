@@ -804,6 +804,7 @@ class ChatService:
                 await svc.db.commit()
         except Exception:
             logger.warning("handoff_offer_create_failed", ticket_id=ticket_id, exc_info=True)
+            await svc.db.rollback()
 
     async def _maybe_run_web_research(self, session_id: str, state: dict | None) -> None:
         """Best-effort governed web research at a KB-insufficient escalation.
