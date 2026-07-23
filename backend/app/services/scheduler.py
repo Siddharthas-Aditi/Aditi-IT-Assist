@@ -36,6 +36,7 @@ from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
 
 from app.core.logging import get_logger
+from app.services.specialist_handoff_service import HandoffService
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Awaitable, Callable
@@ -96,6 +97,22 @@ async def _sweep_remote_sessions_once() -> dict[str, int]:
             return {"expired": 0, "max_duration_terminated": 0}
 
 
+async def _advance_handoff_offers_once() -> None:
+    """One pass advancing live-handoff offers (re-offer/broaden/fallback)."""
+    from app.core.database import async_session_factory
+
+    async with async_session_factory() as db:
+        try:
+            counts = await HandoffService(db).advance_once()
+            if any(v for k, v in counts.items() if k != "held"):
+                await db.commit()
+            else:
+                await db.rollback()
+        except Exception:  # noqa: BLE001 — never let a bad pass kill the loop
+            await db.rollback()
+            logger.exception("handoff_advance_failed")
+
+
 async def _run_scheduled_report_once() -> str:
     """One pass of the monthly scheduled-report job.
 
@@ -150,6 +167,8 @@ async def start_background_jobs(
     remote_sweeper_interval_seconds: int = 60,
     scheduled_reports_enabled: bool = False,
     scheduled_report_interval_seconds: int = 86400,
+    handoff_sweeper_enabled: bool = True,
+    handoff_sweeper_interval_seconds: int = 10,
 ) -> AsyncIterator[None]:
     """Async context manager — start jobs on enter, cancel on exit.
 
@@ -197,6 +216,18 @@ async def start_background_jobs(
                     scheduled_report_interval_seconds,
                 ),
                 name="reporting.scheduled_report",
+            )
+        )
+
+    if handoff_sweeper_enabled:
+        tasks.append(
+            asyncio.create_task(
+                _run_loop(
+                    "handoff.advance_offers",
+                    _advance_handoff_offers_once,
+                    handoff_sweeper_interval_seconds,
+                ),
+                name="handoff.advance_offers",
             )
         )
 

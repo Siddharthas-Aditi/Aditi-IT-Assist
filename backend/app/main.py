@@ -88,6 +88,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         remote_sweeper_interval_seconds=settings.REMOTE_SESSION_SWEEPER_INTERVAL_SECONDS,
         scheduled_reports_enabled=settings.FEATURE_SCHEDULED_REPORTS,
         scheduled_report_interval_seconds=settings.SCHEDULED_REPORT_CHECK_INTERVAL_SECONDS,
+        handoff_sweeper_enabled=settings.HANDOFF_SWEEPER_ENABLED,
+        handoff_sweeper_interval_seconds=settings.HANDOFF_SWEEPER_INTERVAL_SECONDS,
     ):
         yield
 
