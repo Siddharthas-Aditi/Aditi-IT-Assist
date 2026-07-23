@@ -305,6 +305,37 @@ async def resolution_node(state: WorkflowState) -> dict:
         batch = remaining[: max(1, settings.RESOLUTION_STEP_BATCH_SIZE)]
     confidence_bd = _score_confidence(state, diag_ctx, trace)
 
+    # ── Honest hand-off on weak grounding (anti-fabrication) ──────────
+    # Fluid chat only: if the composite confidence for this batch is too low
+    # to stand behind, don't present the (weak/generic) steps as if they were
+    # a real fix — hand off honestly instead. This is what stops the "generic
+    # steps confidently presented for an unmatched issue" fabrication case.
+    min_confidence = settings.FLUID_CHAT_MIN_CONFIDENCE_TO_ADVISE
+    if settings.FEATURE_FLUID_CHAT and confidence_bd.final < min_confidence:
+        diag_ctx.phase = DiagnosticPhase.ESCALATING
+        diag_ctx.escalation_reason = "no confident grounded guidance"
+        logger.info(
+            "resolution_low_confidence_honest_handoff",
+            confidence=confidence_bd.final,
+            threshold=settings.FLUID_CHAT_MIN_CONFIDENCE_TO_ADVISE,
+        )
+        return {
+            "current_node": "resolve",
+            "resolution_steps": [],
+            "resolution_confidence": confidence_bd.final,
+            "confidence_breakdown": confidence_bd.to_dict(),
+            "diagnostic_context": diag_ctx.to_dict(),
+            "conversation_phase": diag_ctx.phase.value,
+            "escalation_reason": diag_ctx.escalation_reason,
+            "audit_trail": [
+                {
+                    "event": "resolution.honest_handoff_low_confidence",
+                    "confidence": confidence_bd.final,
+                    "threshold": settings.FLUID_CHAT_MIN_CONFIDENCE_TO_ADVISE,
+                }
+            ],
+        }
+
     recent_history = _recent_history_snippet(messages) if settings.FEATURE_FLUID_CHAT else None
 
     resolution = await _render_resolution(

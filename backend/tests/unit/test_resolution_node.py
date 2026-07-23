@@ -37,6 +37,38 @@ def _state_with_article(subtype: str, steps: list[str]) -> dict:
     }
 
 
+def _state_with_generic_article(category: str, subtype: str, steps: list[str]) -> dict:
+    """Build a state whose composite confidence lands well below 0.35.
+
+    Low `knowledge_confidence` (retrieval_relevance) plus no `retrieval_trace`
+    (so `has_subtype_article` is False) caps grounding at 0.3 in
+    `compute_resolution_confidence`, which — combined with default-zero
+    system/subtype match — keeps the composite `final` under the 0.35
+    fluid-chat advise threshold.
+    """
+    diag_ctx = DiagnosticContext(
+        issue_category=category,
+        issue_subtype=subtype,
+        symptom=subtype,
+    )
+    return {
+        "session_id": "test-fluid-weak",
+        "issue_category": category,
+        "messages": [HumanMessage(content="my app keeps crashing, not sure why")],
+        "knowledge_results": [
+            {
+                "id": "art-generic",
+                "title": "General Troubleshooting",
+                "category": category,
+                "subcategory": subtype,
+                "steps": [{"instruction": s, "details": None} for s in steps],
+            }
+        ],
+        "knowledge_confidence": 0.1,
+        "diagnostic_context": diag_ctx.to_dict(),
+    }
+
+
 class TestResolutionNode:
     """Tests for resolution_node function."""
 
@@ -232,3 +264,74 @@ class TestFluidChatStepGrouping:
             out = await resolution_node(state)
 
         assert len(out["resolution_steps"]) == 1
+
+
+class TestHonestHandoffOnWeakGrounding:
+    """FEATURE_FLUID_CHAT: don't fabricate confidence on weak/generic grounding."""
+
+    @pytest.mark.asyncio
+    async def test_fluid_weak_match_hands_off_not_fabricates(self, monkeypatch):
+        """Flag-on + low composite confidence -> honest hand-off, no steps shown."""
+        from app.core.config import settings
+
+        monkeypatch.setattr(settings, "FEATURE_FLUID_CHAT", True)
+        state = _state_with_generic_article(
+            category="software",
+            subtype="other",
+            steps=["Restart the app", "Run as administrator"],
+        )
+
+        with patch("app.workflows.nodes.resolution.get_llm_service") as mock_get_llm:
+            mock_llm = AsyncMock()
+            mock_llm.is_available = False
+            mock_get_llm.return_value = mock_llm
+
+            out = await resolution_node(state)
+
+        assert out["resolution_steps"] == []
+        assert out["conversation_phase"] == "escalating"
+        assert out["escalation_reason"] == "no confident grounded guidance"
+        assert out["diagnostic_context"]["phase"] == "escalating"
+
+    @pytest.mark.asyncio
+    async def test_fluid_confident_match_still_returns_steps(self, monkeypatch):
+        """Flag-on control: a confident subtype match still returns steps."""
+        from app.core.config import settings
+
+        monkeypatch.setattr(settings, "FEATURE_FLUID_CHAT", True)
+        state = _state_with_article(
+            subtype="mailbox-full",
+            steps=["Check mailbox size", "Empty Deleted Items"],
+        )
+
+        with patch("app.workflows.nodes.resolution.get_llm_service") as mock_get_llm:
+            mock_llm = AsyncMock()
+            mock_llm.is_available = False
+            mock_get_llm.return_value = mock_llm
+
+            out = await resolution_node(state)
+
+        assert len(out["resolution_steps"]) > 0
+        assert out["conversation_phase"] != "escalating"
+
+    @pytest.mark.asyncio
+    async def test_flag_off_weak_match_still_presents_steps(self, monkeypatch):
+        """Flag-off: unchanged — even weak-confidence steps are presented as today."""
+        from app.core.config import settings
+
+        monkeypatch.setattr(settings, "FEATURE_FLUID_CHAT", False)
+        state = _state_with_generic_article(
+            category="software",
+            subtype="other",
+            steps=["Restart the app", "Run as administrator"],
+        )
+
+        with patch("app.workflows.nodes.resolution.get_llm_service") as mock_get_llm:
+            mock_llm = AsyncMock()
+            mock_llm.is_available = False
+            mock_get_llm.return_value = mock_llm
+
+            out = await resolution_node(state)
+
+        assert out["resolution_steps"] != []
+        assert out["conversation_phase"] != "escalating"
