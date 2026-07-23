@@ -40,6 +40,35 @@ RESOLUTION_SYSTEM_PROMPT = (
     "  If confused, simplify and clarify."
 )
 
+# Fluid-chat variant (FEATURE_FLUID_CHAT on): same voice and the same hard
+# grounding constraint, but the agent presents the whole remaining, relevant
+# batch together (like a real specialist walking through the fix) instead of
+# one step at a time, and is told to acknowledge the recent conversation.
+RESOLUTION_SYSTEM_PROMPT_FLUID = (
+    "You are a friendly, human IT Support Specialist at Aditi Consulting's internal help desk. "
+    "You talk to employees in natural, warm, conversational language — like a helpful "
+    "colleague sitting next to them, NOT a manual or a numbered checklist.\n\n"
+    "IMPORTANT RULES:\n"
+    "- Write a short, natural paragraph or a tight list. Do NOT output a rigid, robotic "
+    "numbered checklist.\n"
+    "- READ the approved steps and EXPLAIN what to do in your own words, conversationally.\n"
+    "- You may only act on the approved steps provided — never invent new fixes or mention\n"
+    "  anything not in them (no passwords, Windows Update, etc. unless listed).\n"
+    "- Briefly acknowledge the problem in plain language (no internal codes/slugs).\n"
+    "- End by asking, warmly, whether that helped.\n"
+    "- If unsure, say so and offer to bring in the IT team.\n"
+    "- Include the concrete actions (e.g. the exact menu path like Settings > "
+    "Accessibility > Keyboard) naturally inside your sentences — the user does NOT "
+    "see a separate steps list, so the how-to must live in your reply.\n"
+    "- Give the relevant steps together, in a short, natural paragraph or tight list — "
+    "the employee should get everything they need to try right now, not a drip-fed single step.\n"
+    "- Acknowledge what the employee already told you earlier in the conversation, so it "
+    "reads as a continuous chat and not a fresh, forgetful reply.\n"
+    "- TONE ADAPTATION: If the user is frustrated, lead with empathy. "
+    "If urgent, prioritize speed over detail.\n"
+    "  If confused, simplify and clarify."
+)
+
 RESOLUTION_PROMPT = """An employee needs help. \
 Reply to them directly in natural, conversational language.
 
@@ -265,12 +294,21 @@ async def resolution_node(state: WorkflowState) -> dict:
         }
 
     # ── Present the next batch of NEW steps ──────────────────────
-    batch_size = max(1, settings.RESOLUTION_STEP_BATCH_SIZE)
-    batch = remaining[:batch_size]
+    # Fluid chat (flag-on): present ALL currently-remaining grounded steps for
+    # the matched subtype together (capped, so we never wall-of-text the
+    # user). Flag-off: unchanged, one RESOLUTION_STEP_BATCH_SIZE batch at a
+    # time. Either way every presented step is still recorded in
+    # suggested_steps, so a later "still not working" advances correctly.
+    if settings.FEATURE_FLUID_CHAT:
+        batch = remaining[: max(1, settings.RESOLUTION_FLUID_STEP_CAP)]
+    else:
+        batch = remaining[: max(1, settings.RESOLUTION_STEP_BATCH_SIZE)]
     confidence_bd = _score_confidence(state, diag_ctx, trace)
 
+    recent_history = _recent_history_snippet(messages) if settings.FEATURE_FLUID_CHAT else None
+
     resolution = await _render_resolution(
-        batch, knowledge_results, state, diag_ctx, confidence_bd.final
+        batch, knowledge_results, state, diag_ctx, confidence_bd.final, recent_history
     )
 
     # Remember what we presented so the next turn advances past it.
@@ -333,18 +371,39 @@ def _score_confidence(state: WorkflowState, diag_ctx: DiagnosticContext, trace: 
     )
 
 
+def _recent_history_snippet(messages: list, max_turns: int = 4) -> str | None:
+    """Format the last few conversation turns for the fluid-chat humanizer prompt.
+
+    Minimal context carry-over: just enough for the LLM to reference what the
+    employee already said, so replies read as a continuous chat instead of a
+    fresh, forgetful one. Not used for grounding — the approved-steps
+    constraint is unaffected.
+    """
+    if not messages:
+        return None
+    recent = messages[-max_turns:]
+    lines: list[str] = []
+    for msg in recent:
+        role = "Employee" if getattr(msg, "type", "") == "human" else "You"
+        content = getattr(msg, "content", "")
+        if content:
+            lines.append(f"{role}: {content}")
+    return "\n".join(lines) if lines else None
+
+
 async def _render_resolution(
     batch: list[dict],
     knowledge_results: list[dict],
     state: WorkflowState,
     diag_ctx: DiagnosticContext,
     confidence: float,
+    recent_history: str | None = None,
 ) -> dict:
     """Render a response from the pre-selected, grounded step batch."""
     llm = get_llm_service()
     if llm.is_available:
         try:
-            return await _llm_resolution(batch, state, diag_ctx, llm, confidence)
+            return await _llm_resolution(batch, state, diag_ctx, llm, confidence, recent_history)
         except Exception as e:
             logger.warning("resolution_llm_fallback", error=str(e))
 
@@ -363,6 +422,7 @@ async def _llm_resolution(
     diag_ctx: DiagnosticContext,
     llm: object,
     confidence: float,
+    recent_history: str | None = None,
 ) -> dict:
     """Use the LLM to phrase the response, grounded ONLY in the selected batch."""
     from app.services.llm_service import LLMService
@@ -403,6 +463,11 @@ async def _llm_resolution(
     if diag_ctx.business_impact:
         additional.append(f"- Business impact: {diag_ctx.business_impact}")
 
+    # Fluid chat: minimal context carry-over so the reply references what was
+    # just said instead of reading like a fresh, forgetful turn.
+    if settings.FEATURE_FLUID_CHAT and recent_history:
+        additional.append(f"- Recent conversation:\n{recent_history}")
+
     additional_text = "\n".join(additional) if additional else "None"
 
     prompt = RESOLUTION_PROMPT.format(
@@ -413,7 +478,10 @@ async def _llm_resolution(
         knowledge_articles=articles_text,
     )
 
-    content = await llm.complete(prompt, system_prompt=RESOLUTION_SYSTEM_PROMPT)
+    system = (
+        RESOLUTION_SYSTEM_PROMPT_FLUID if settings.FEATURE_FLUID_CHAT else RESOLUTION_SYSTEM_PROMPT
+    )
+    content = await llm.complete(prompt, system_prompt=system)
 
     steps = [
         {"step_number": i, "instruction": s["instruction"], "details": s.get("details")}

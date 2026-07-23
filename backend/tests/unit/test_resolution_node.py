@@ -12,6 +12,31 @@ from app.workflows.nodes.resolution import (
 )
 
 
+def _state_with_article(subtype: str, steps: list[str]) -> dict:
+    """Build a minimal resolution_node state for a subtype-matching article."""
+    diag_ctx = DiagnosticContext(
+        issue_category="email/outlook",
+        issue_subtype=subtype,
+        symptom=subtype,
+    )
+    return {
+        "session_id": "test-fluid",
+        "issue_category": "email/outlook",
+        "messages": [HumanMessage(content="my mailbox is full")],
+        "knowledge_results": [
+            {
+                "id": "art-1",
+                "title": "Fix Mailbox Full",
+                "category": "email/outlook",
+                "subcategory": subtype,
+                "steps": [{"instruction": s, "details": None} for s in steps],
+            }
+        ],
+        "knowledge_confidence": 0.8,
+        "diagnostic_context": diag_ctx.to_dict(),
+    }
+
+
 class TestResolutionNode:
     """Tests for resolution_node function."""
 
@@ -163,3 +188,47 @@ class TestDirectResolution:
         state = {"knowledge_confidence": 0.8}
         result = _direct_resolution(knowledge, state, self._make_diag_ctx())
         assert len(result["steps"]) == 3
+
+
+class TestFluidChatStepGrouping:
+    """FEATURE_FLUID_CHAT: present all remaining grounded steps together."""
+
+    @pytest.mark.asyncio
+    async def test_fluid_groups_multiple_steps(self, monkeypatch):
+        """Flag-on: a subtype-matching article with 3 steps groups them together."""
+        from app.core.config import settings
+
+        monkeypatch.setattr(settings, "FEATURE_FLUID_CHAT", True)
+        state = _state_with_article(
+            subtype="mailbox-full",
+            steps=["Check mailbox size", "Empty Deleted Items", "Archive old mail"],
+        )
+
+        with patch("app.workflows.nodes.resolution.get_llm_service") as mock_get_llm:
+            mock_llm = AsyncMock()
+            mock_llm.is_available = False
+            mock_get_llm.return_value = mock_llm
+
+            out = await resolution_node(state)
+
+        assert len(out["resolution_steps"]) >= 3
+
+    @pytest.mark.asyncio
+    async def test_flag_off_still_batches_one_step(self, monkeypatch):
+        """Flag-off: behavior is unchanged — one step per turn."""
+        from app.core.config import settings
+
+        monkeypatch.setattr(settings, "FEATURE_FLUID_CHAT", False)
+        state = _state_with_article(
+            subtype="mailbox-full",
+            steps=["Check mailbox size", "Empty Deleted Items", "Archive old mail"],
+        )
+
+        with patch("app.workflows.nodes.resolution.get_llm_service") as mock_get_llm:
+            mock_llm = AsyncMock()
+            mock_llm.is_available = False
+            mock_get_llm.return_value = mock_llm
+
+            out = await resolution_node(state)
+
+        assert len(out["resolution_steps"]) == 1

@@ -246,6 +246,10 @@ class Settings(BaseSettings):
     # Proactively offer a live specialist after this many consecutive steps
     # fail to resolve the issue (instead of walking every remaining step).
     RESOLUTION_MISS_ESCALATE_THRESHOLD: int = 3
+    # Fluid chat (FEATURE_FLUID_CHAT on): cap on how many currently-remaining
+    # grounded steps for the matched subtype are presented together in one
+    # reply (instead of RESOLUTION_STEP_BATCH_SIZE, one at a time).
+    RESOLUTION_FLUID_STEP_CAP: int = 5
 
     # Fluid, grounded chat — natural IT-specialist conversation flow
     # (sub-project A). Off = today's scripted flow (confirm gate + one step
