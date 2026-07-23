@@ -107,6 +107,8 @@ class DiagnosticContext:
     resolved_steps: list[str] = field(default_factory=list)
     # Article ids/titles already used as a source (avoid re-grounding on the same chunk).
     retrieval_sources_used: list[str] = field(default_factory=list)
+    # Normalized clarifying-question texts already asked this session (avoid repeats).
+    asked_questions: list[str] = field(default_factory=list)
     # "clarify" | "confirm" | "resolve" | "escalate" | "resolved"
     last_response_type: str | None = None
     # Increments when a round produces no NEW grounded step (stuck-state signal).
@@ -211,6 +213,7 @@ class DiagnosticContext:
         self.failed_steps = []
         self.resolved_steps = []
         self.retrieval_sources_used = []
+        self.asked_questions = []
         self.loop_counter = 0
         self.resolution_attempts = 0
         self.clarification_count = 0
@@ -252,6 +255,16 @@ class DiagnosticContext:
         seen = {self._norm_step(s) for s in self.suggested_steps}
         seen |= {self._norm_step(s) for s in self.failed_steps}
         return key in seen
+
+    def record_asked_question(self, question: str) -> None:
+        """Remember a clarifying question we have already asked this session."""
+        norm = self._norm_step(question)
+        if norm and norm not in self.asked_questions:
+            self.asked_questions.append(norm)
+
+    def was_question_asked(self, question: str) -> bool:
+        """Whether a (normalized) clarifying question has already been asked."""
+        return self._norm_step(question) in self.asked_questions
 
     def get_retrieval_query(self) -> str:
         """Build a focused retrieval query from accumulated context."""
@@ -357,6 +370,7 @@ class DiagnosticContext:
             "failed_steps": self.failed_steps,
             "resolved_steps": self.resolved_steps,
             "retrieval_sources_used": self.retrieval_sources_used,
+            "asked_questions": self.asked_questions,
             "last_response_type": self.last_response_type,
             "loop_counter": self.loop_counter,
             "last_resolution_failed": self.last_resolution_failed,

@@ -113,6 +113,19 @@ class TestDiagnosticContext:
         assert restored.phase == DiagnosticPhase.CLARIFYING
         assert restored.clarification_count == 2
 
+    def test_asked_questions_record_and_seen(self):
+        ctx = DiagnosticContext()
+        assert ctx.was_question_asked("What's happening with the application?") is False
+        ctx.record_asked_question("What's happening with the application?")
+        # normalized (case/whitespace-insensitive) match
+        assert ctx.was_question_asked("what's happening   with the application?") is True
+        # survives serialization
+        ctx2 = DiagnosticContext.from_dict(ctx.to_dict())
+        assert ctx2.was_question_asked("What's happening with the application?") is True
+        # cleared on reset
+        ctx2.reset_issue_context()
+        assert ctx2.was_question_asked("What's happening with the application?") is False
+
 
 # ══════════════════════════════════════════════════════════════════════
 #  CLARIFY-OR-ANSWER POLICY TESTS
