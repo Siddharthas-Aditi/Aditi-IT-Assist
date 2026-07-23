@@ -10,6 +10,7 @@ It decides:
 
 from __future__ import annotations
 
+from app.core.config import settings
 from app.core.logging import get_logger
 from app.services.agents.diagnostic_state import DiagnosticContext, DiagnosticPhase
 from app.services.agents.playbooks import ClarificationOption, get_playbook
@@ -227,10 +228,14 @@ def evaluate_clarify_or_answer(context: DiagnosticContext) -> ClarifyOrAnswerDec
         )
 
     # Context is insufficient — get next question from playbook
-    next_q = playbook.get_next_question(filled, context.clarification_count)
+    asked: set[str] | None = None
+    if settings.FEATURE_FLUID_CHAT:
+        asked = {" ".join(q.lower().split()) for q in context.asked_questions}
+    next_q = playbook.get_next_question(filled, context.clarification_count, asked=asked)
 
     if next_q is None:
-        # No more questions to ask — proceed anyway
+        # No more questions to ask (or, flag-on, all remaining candidates were
+        # already asked this session) — proceed anyway rather than repeating.
         return ClarifyOrAnswerDecision(
             should_clarify=False,
             reason="no_more_questions",

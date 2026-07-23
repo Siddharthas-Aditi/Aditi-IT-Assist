@@ -353,3 +353,16 @@ class TestConversationFlows:
         decision = evaluate_clarify_or_answer(ctx)
         assert not decision.should_clarify
         assert ctx.has_enough_context()
+
+    def test_clarify_does_not_repeat_asked_question(self, monkeypatch):
+        """Behind FEATURE_FLUID_CHAT, the same clarifying question must never repeat."""
+        from app.core.config import settings
+
+        monkeypatch.setattr(settings, "FEATURE_FLUID_CHAT", True)
+        ctx = DiagnosticContext(issue_category="software")
+        first = evaluate_clarify_or_answer(ctx)
+        assert first.should_clarify and first.question
+        ctx.record_asked_question(first.question)
+        # Same unchanged context: must NOT return the identical question again.
+        second = evaluate_clarify_or_answer(ctx)
+        assert not (second.should_clarify and second.question == first.question)

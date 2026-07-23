@@ -10,6 +10,7 @@ This upgraded triage node:
 
 from langchain_core.messages import AIMessage
 
+from app.core.config import settings
 from app.core.logging import get_logger
 from app.services.agents.conversation_messages import (
     generate_confirmation,
@@ -802,6 +803,8 @@ async def triage_node(state: WorkflowState) -> dict:
     if decision.should_clarify and not diag_ctx.last_resolution_failed:
         diag_ctx.clarification_count += 1
         diag_ctx.phase = DiagnosticPhase.CLARIFYING
+        if settings.FEATURE_FLUID_CHAT and decision.question:
+            diag_ctx.record_asked_question(decision.question)
 
         quick_replies = (
             [{"label": opt.label, "value": opt.value} for opt in decision.options]
@@ -843,6 +846,8 @@ async def triage_node(state: WorkflowState) -> dict:
         diag_ctx.last_response_type = "confirm"
         diag_ctx.phase = DiagnosticPhase.CLARIFYING
         question = await generate_confirmation(diag_ctx)
+        if settings.FEATURE_FLUID_CHAT:
+            diag_ctx.record_asked_question(question)
         return {
             "current_node": "triage",
             "issue_category": diag_ctx.issue_category,

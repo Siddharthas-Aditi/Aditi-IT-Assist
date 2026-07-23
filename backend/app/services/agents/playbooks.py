@@ -71,12 +71,19 @@ class IssuePlaybook:
     subtypes: list[str] = field(default_factory=list)
 
     def get_next_question(
-        self, filled_slots: dict[str, str], asked_count: int
+        self,
+        filled_slots: dict[str, str],
+        asked_count: int,
+        *,
+        asked: set[str] | None = None,
     ) -> PlaybookQuestion | None:
         """Get the next most important question to ask.
 
-        Returns None if all required context is gathered.
+        Returns None if all required context is gathered, or (when `asked` is
+        given) if every remaining candidate question has already been asked
+        this session.
         """
+        asked = asked or set()
         for q in sorted(self.questions, key=lambda x: x.priority):
             # Skip if the target slot is already filled
             if q.slot in filled_slots and filled_slots[q.slot]:
@@ -86,6 +93,10 @@ class IssuePlaybook:
                 continue
             # Skip if dependent slots are already filled (making this redundant)
             if q.skip_if and any(s in filled_slots for s in q.skip_if):
+                continue
+            # Skip if this exact question text was already asked this session
+            norm = " ".join((q.question or "").lower().split())
+            if norm in asked:
                 continue
             return q
         return None
