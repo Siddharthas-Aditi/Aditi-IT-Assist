@@ -28,7 +28,14 @@ pytestmark = pytest.mark.asyncio
 
 @pytest.fixture(autouse=True)
 async def _dispose_engine_after_test():
-    """Avoid cross-event-loop asyncpg errors (see test_specialist_report_api.py)."""
+    """Avoid cross-event-loop asyncpg errors (see test_specialist_report_api.py).
+
+    Dispose the shared engine *before* as well as after each test: in the full
+    suite a preceding (non-disposing) test file can leave the asyncpg pool bound
+    to a closed event loop, which otherwise errors at this file's setup fixtures
+    (which do DB I/O) rather than in the test body.
+    """
+    await engine.dispose()
     yield
     await engine.dispose()
 
