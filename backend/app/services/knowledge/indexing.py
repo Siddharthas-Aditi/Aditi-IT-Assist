@@ -110,10 +110,63 @@ class AzureOpenAIEmbeddingClient(EmbeddingClient):
             return None
 
 
+class OpenAIEmbeddingClient(EmbeddingClient):
+    """Production embedding client using OpenAI text-embedding-3-large via LiteLLM.
+
+    Activated when LLM_PROVIDER != azure and LLM_API_KEY is set. Uses the same
+    model + dimensionality as the Azure client (3072) so vectors are compatible
+    with the ``vector(3072)`` pgvector column regardless of provider.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(store_type=settings.VECTOR_STORE_TYPE)
+        self.model = settings.effective_embedding_model  # e.g. "text-embedding-3-large"
+        self.api_key = settings.LLM_API_KEY
+        self.dimensions = settings.EMBEDDING_DIMENSIONS
+        # AZURE_OPENAI_VERIFY_SSL doubles as the global "verify TLS for LiteLLM
+        # calls" switch — disable it here too when behind an SSL-inspecting proxy.
+        self.ssl_verify = settings.AZURE_OPENAI_VERIFY_SSL
+        self.available = bool(self.api_key)
+        if not self.ssl_verify:
+            import litellm as _litellm  # noqa: PLC0415
+
+            _litellm.ssl_verify = False
+
+    async def embed(self, texts: list[str]) -> list[list[float]] | None:
+        """Embed a batch of texts using OpenAI text-embedding-3-large."""
+        if not self.available:
+            return None
+        if not texts:
+            return []
+
+        try:
+            import litellm
+
+            response = await litellm.aembedding(
+                model=self.model,
+                input=texts,
+                api_key=self.api_key,
+                dimensions=self.dimensions,
+            )
+            vectors = [item["embedding"] for item in response.data]
+            logger.info(
+                "embeddings_generated",
+                model=self.model,
+                count=len(vectors),
+                dimensions=self.dimensions,
+            )
+            return vectors
+        except Exception as exc:
+            logger.error("embedding_failed", model=self.model, error=str(exc))
+            return None
+
+
 def get_embedding_client() -> EmbeddingClient:
     """Return the appropriate embedding client based on configured provider."""
     if settings.is_azure and settings.AZURE_OPENAI_API_KEY and settings.AZURE_OPENAI_ENDPOINT:
         return AzureOpenAIEmbeddingClient()
+    if not settings.is_azure and settings.LLM_API_KEY:
+        return OpenAIEmbeddingClient()
     return EmbeddingClient(settings.VECTOR_STORE_TYPE)
 
 

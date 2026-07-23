@@ -33,8 +33,9 @@ async def _run(batch_size: int) -> dict:
         service = KnowledgeIndexingService(repo)
         if not service.embedder.available:
             print(
-                "No embedding provider configured "
-                "(set LLM_PROVIDER=azure + AZURE_OPENAI_* ). Nothing to backfill."
+                "No embedding provider configured. Set either LLM_PROVIDER=openai "
+                "+ LLM_API_KEY, or LLM_PROVIDER=azure + AZURE_OPENAI_*. "
+                "Nothing to backfill."
             )
             return {"embedded": 0, "skipped_no_provider": True}
 

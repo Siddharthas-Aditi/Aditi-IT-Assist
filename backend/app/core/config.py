@@ -103,6 +103,10 @@ class Settings(BaseSettings):
     LLM_PROVIDER: str = "openai"  # "openai" | "azure" | "anthropic"
     LLM_MODEL: str = "gpt-4o"  # used when LLM_PROVIDER != "azure"
     LLM_API_KEY: str = ""  # OpenAI key (ignored when LLM_PROVIDER=azure)
+    # OpenAI embedding model used when LLM_PROVIDER != "azure". Defaults to
+    # text-embedding-3-large so output dimensionality matches the vector(3072)
+    # pgvector column (3-small only reaches 1536).
+    OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-large"
     LLM_TEMPERATURE: float = 0.3
     LLM_MAX_TOKENS: int = 4096
 
@@ -137,7 +141,7 @@ class Settings(BaseSettings):
     def effective_embedding_model(self) -> str:
         if self.is_azure:
             return f"azure/{self.AZURE_OPENAI_EMBEDDING_DEPLOYMENT}"
-        return "text-embedding-3-small"  # fallback for non-azure
+        return self.OPENAI_EMBEDDING_MODEL
 
     @property
     def llm_is_configured(self) -> bool:
