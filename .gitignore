@@ -84,3 +84,4 @@ data/exports/*
 !data/uploads/.gitkeep
 !data/exports/.gitkeep
 .fuse_hidden*
+.playwright-mcp/
