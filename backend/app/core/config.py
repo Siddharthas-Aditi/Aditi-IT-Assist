@@ -247,6 +247,18 @@ class Settings(BaseSettings):
     # fail to resolve the issue (instead of walking every remaining step).
     RESOLUTION_MISS_ESCALATE_THRESHOLD: int = 3
 
+    # Fluid, grounded chat — natural IT-specialist conversation flow
+    # (sub-project A). Off = today's scripted flow (confirm gate + one step
+    # at a time). See docs/superpowers/specs/2026-07-23-fluid-grounded-chat
+    # -design.md.
+    FEATURE_FLUID_CHAT: bool = False
+    # Skip the "confirm understanding" gate only when the subtype is at least
+    # this confident; below it, still ask to confirm (genuine ambiguity).
+    FLUID_CHAT_MIN_SUBTYPE_CONFIDENCE: float = 0.6
+    # Below this composite resolution confidence, hand off honestly instead of
+    # presenting (likely-generic) steps — the anti-fabrication guard.
+    FLUID_CHAT_MIN_CONFIDENCE_TO_ADVISE: float = 0.35
+
     # ── Web research (B2) ────────────────────────────────────────────
     FEATURE_WEB_RESEARCH: bool = False
     # Which provider backs governed web research: "google" | "tavily".
