@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import uuid
+    from datetime import datetime
 
 
 @dataclass(frozen=True)
@@ -33,3 +34,35 @@ def rank_candidates(
         return (s.active_load, boosted, str(s.user_id))
 
     return [s.user_id for s in sorted(available, key=sort_key)]
+
+
+@dataclass(frozen=True)
+class HandoffDecision:
+    action: str  # "hold" | "reoffer" | "broaden" | "fallback"
+    next_specialist_id: uuid.UUID | None = None
+
+
+def decide_next(
+    *,
+    offered_at: datetime,
+    request_started_at: datetime,
+    round_index: int,
+    candidates_remaining: list[uuid.UUID],
+    any_available: bool,
+    now: datetime,
+    offer_ttl_seconds: int,
+    max_rounds: int,
+    fallback_seconds: int,
+) -> HandoffDecision:
+    """Decide how to advance a live-handoff offer. Pure."""
+    if (now - request_started_at).total_seconds() >= fallback_seconds:
+        return HandoffDecision("fallback")
+    if (now - offered_at).total_seconds() < offer_ttl_seconds:
+        return HandoffDecision("hold")
+    # Offer expired. Try another targeted round unless we've hit the cap.
+    if round_index + 1 < max_rounds and candidates_remaining:
+        return HandoffDecision("reoffer", candidates_remaining[0])
+    # Cap reached or no targeted candidate left → broaden if anyone is Available.
+    if any_available:
+        return HandoffDecision("broaden")
+    return HandoffDecision("fallback")
