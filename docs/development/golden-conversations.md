@@ -369,3 +369,86 @@ SessionMetrics.loop_signals = 2
 Expected: supervisor → ESCALATE, reason "loop detected"
 ```
 Automated in `tests/unit/test_supervisor.py::TestGuardrails`.
+
+---
+
+## Scenario 21: Confident issue — no forced confirm turn (fluid chat)
+
+**Flag**: `FEATURE_FLUID_CHAT=true`.
+
+**Expected behavior**: A well-specified issue (subtype confidence ≥
+`FLUID_CHAT_MIN_SUBTYPE_CONFIDENCE`) goes straight to grounded resolution on
+the first turn — no forced "is that what you're experiencing?" round-trip.
+
+```
+Turn 1: User: "my outlook mailbox is full"
+        Expected: subtype=mailbox-full detected immediately; the FIRST reply
+                  already contains help (mentions mailbox/storage/space)
+        Must NOT: reply with a bare confirm-only question ("is that right?",
+                  "did I get that right?", "is that what you're experiencing?")
+```
+Automated in `backend/tests/unit/test_chat_golden_conversations.py::
+TestFluidChat::test_confident_issue_no_confirm_turn`.
+
+---
+
+## Scenario 22: No repeated question across turns (fluid chat)
+
+**Flag**: `FEATURE_FLUID_CHAT=true`.
+
+**Expected behavior**: Across a multi-turn conversation the bot never
+re-emits the exact same question verbatim — each clarification narrows in on
+new information instead of looping.
+
+```
+Turn 1: User: "I need software installed"
+Turn 2: User: "docker desktop"
+Turn 3: User: "for development"
+Expected: every turn whose reply is a question (follow_up_question set, or
+          the content contains "?") is textually distinct from every
+          question asked earlier in the same session
+```
+Automated in `backend/tests/unit/test_chat_golden_conversations.py::
+TestFluidChat::test_no_repeated_question`.
+
+---
+
+## Scenario 23: Unknown install request — honest hand-off, no fabricated steps (fluid chat)
+
+**Flag**: `FEATURE_FLUID_CHAT=true`.
+
+**Expected behavior**: When the KB has no article for the actual request
+(e.g. installing Docker Desktop — a same-family "software" request but with
+no subtype-matched article), the agent must not dress up a generic,
+unrelated troubleshooting ladder as if it were a real fix. It must instead
+hand off honestly (offer a specialist / ticket).
+
+```
+Turn 1: User: "I need to install docker desktop"
+Turn 2: User: "to develop my application"
+Turn 3: User: "yes"
+Turn 4: User: "no specific error, it's just not installed yet"
+Turn 5: User: "yes"
+Expected: final reply does NOT contain "run as administrator" or
+          "restart your computer" (or any other fabricated generic step);
+          the reply offers a specialist / sets requires_escalation or
+          escalation_offered
+```
+
+This is the probe for the Task-6 weak-match honest-handoff gate: a
+same-family, wrong-subtype, high-relevance generic article could otherwise
+score high enough (e.g. ~0.55) to slip past a naive `confidence < 0.35`
+check and still be presented as a resolution. In this codebase the gate in
+`backend/app/workflows/nodes/resolution.py` (`_score_confidence` /
+`compute_resolution_confidence`) already folds `has_subtype_article` into
+the composite confidence, so a subtype-less match is pulled below
+`FLUID_CHAT_MIN_CONFIDENCE_TO_ADVISE` (0.35) before the honest-handoff check
+runs — no additional change to `resolution.py` was needed to pass this
+scenario (verified: the gap did not manifest here; see
+`task-7-report.md`). A confident, subtype-matched issue (Scenario 21) still
+returns steps unaffected — see
+`backend/tests/unit/test_resolution_node.py::
+test_fluid_confident_match_still_returns_steps`.
+
+Automated in `backend/tests/unit/test_chat_golden_conversations.py::
+TestFluidChat::test_docker_install_no_fabricated_generic_steps`.

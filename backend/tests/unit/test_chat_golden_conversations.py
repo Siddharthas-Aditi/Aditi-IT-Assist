@@ -22,6 +22,8 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from langchain_core.messages import HumanMessage
 
+from app.core.config import settings
+from app.core.database import engine as _db_engine
 from app.services.agents.chat_service import ChatService
 from app.services.agents.intent_classifier import (
     ConversationIntent,
@@ -542,3 +544,158 @@ class TestGratitudeClosesWithoutTicket:
 
         assert response.ticket is None
         svc.create_ticket.assert_not_called()
+
+
+# ── Fluid chat (flag-on): confident-issue, no-repeat, no-fabrication ──────
+
+
+class TestFluidChat:
+    """End-to-end golden conversations for the fluid-grounded-chat feature
+    (flag-gated by ``FEATURE_FLUID_CHAT``).
+
+    These exercise the whole pipeline (triage → retrieval → resolution →
+    escalation) via the in-memory ``ChatService`` — no DB writes, but a real
+    LLM call when ``LLM_API_KEY`` is configured (as it is in this dev
+    container), since the fluid-chat behavior (skip-confirm, no-repeat
+    question tracking, honest hand-off) is wired through triage/resolution
+    regardless of which classification path produced the category/subtype.
+
+    The third scenario ("install docker desktop") was probed manually first
+    (see task-7-report.md) to confirm the actual turn-by-turn behavior in
+    this environment before locking in the exact message sequence — the
+    brief's illustrative 3-turn transcript reaches only the 3rd clarifying
+    question in this LLM-backed environment (not a terminal state), so the
+    test below extends it to the point where the pipeline actually resolves
+    or escalates, preserving the brief's intent (no fabricated generic
+    steps for an issue the KB has no article for).
+    """
+
+    @pytest.fixture(autouse=True)
+    async def _fresh_db_pool(self):
+        """Dispose the shared async engine's connection pool before each test.
+
+        pytest-asyncio gives every test function its own event loop. The
+        SQLAlchemy engine (and its asyncpg connection pool) is a
+        process-wide singleton (``app.core.database.engine``) created once
+        at import time and bound to whichever loop was running then. When
+        several DB-touching test *functions* run back to back in one
+        process, a pooled connection created under an earlier (now-closed)
+        loop can be handed to a later test and fail with "attached to a
+        different loop" the moment retrieval issues a real query — this is
+        pre-existing test-infra behavior, not something specific to the
+        fluid-chat pipeline (retrieval_node genuinely hits the DB for KB
+        articles). Disposing the pool here forces fresh connections bound
+        to *this* test's loop, without touching any other test file.
+        """
+        await _db_engine.dispose()
+        yield
+
+    @pytest.mark.asyncio
+    async def test_confident_issue_no_confirm_turn(self, monkeypatch) -> None:
+        """A well-specified issue gets help immediately — no bare confirm turn.
+
+        "my outlook mailbox is full" is specific enough (subtype=mailbox-full,
+        confidence >= FLUID_CHAT_MIN_SUBTYPE_CONFIDENCE) that the fluid-chat
+        skip-confirm path in triage_node should go straight to grounded
+        resolution instead of a forced "is that right?" round-trip.
+        """
+        monkeypatch.setattr(settings, "FEATURE_FLUID_CHAT", True)
+        _clear_state()
+        svc = _mock_ticket_service()
+        chat = ChatService(svc)
+        requester = _requester()
+
+        r1 = await chat.process_message(
+            session_id="fluid-confident",
+            user_message="my outlook mailbox is full",
+            user_id="u-1",
+            user_name=requester.full_name,
+            user_email=requester.email,
+            requester=requester,
+        )
+
+        content = r1.content.lower()
+        # Not a bare "is that what you're experiencing?" confirm-only turn.
+        assert "is that what you're experiencing" not in content
+        assert "is that right" not in content
+        assert "did i get that right" not in content
+        # It already helps — mentions the mailbox/storage problem directly.
+        assert "mailbox" in content or "storage" in content or "space" in content
+
+    @pytest.mark.asyncio
+    async def test_no_repeated_question(self, monkeypatch) -> None:
+        """Across a multi-turn conversation, the bot never re-asks the exact
+        same question verbatim (the ``asked_questions`` de-dup wired into the
+        playbook clarification path and the confirm-understanding step)."""
+        monkeypatch.setattr(settings, "FEATURE_FLUID_CHAT", True)
+        _clear_state()
+        svc = _mock_ticket_service()
+        chat = ChatService(svc)
+        requester = _requester()
+
+        sid = "fluid-norepeat"
+        seen: list[str] = []
+        for msg in ["I need software installed", "docker desktop", "for development"]:
+            r = await chat.process_message(
+                session_id=sid,
+                user_message=msg,
+                user_id="u-1",
+                user_name=requester.full_name,
+                user_email=requester.email,
+                requester=requester,
+            )
+            sid = r.session_id
+            if r.follow_up_question or "?" in r.content:
+                q = r.content.strip().lower()
+                assert q not in seen, f"repeated question: {q}"
+                seen.append(q)
+
+    @pytest.mark.asyncio
+    async def test_docker_install_no_fabricated_generic_steps(self, monkeypatch) -> None:
+        """An install request the KB has no specific article for must NOT be
+        answered with fabricated, generic troubleshooting steps.
+
+        Probed manually first: with this environment's real LLM-backed
+        classification, "I need to install docker desktop" / "to develop my
+        application" / "yes" lands in category=software/other with no
+        subtype match after 3 turns (still mid-clarification, not yet a
+        terminal state). Two more turns (a concrete "not installed yet"
+        symptom + a final "yes" confirming understanding) drive it through to
+        resolution, where the honest-handoff gate (Task 6,
+        ``FLUID_CHAT_MIN_CONFIDENCE_TO_ADVISE``) fires because there is no
+        confident, grounded, subtype-matched article for a Docker install —
+        it hands off to a specialist instead of dispensing generic
+        "run as administrator" / "restart your computer" style steps.
+        """
+        monkeypatch.setattr(settings, "FEATURE_FLUID_CHAT", True)
+        _clear_state()
+        svc = _mock_ticket_service()
+        chat = ChatService(svc)
+        requester = _requester()
+
+        sid = "fluid-docker"
+        r = None
+        for msg in [
+            "I need to install docker desktop",
+            "to develop my application",
+            "yes",
+            "no specific error, it's just not installed yet",
+            "yes",
+        ]:
+            r = await chat.process_message(
+                session_id=sid,
+                user_message=msg,
+                user_id="u-1",
+                user_name=requester.full_name,
+                user_email=requester.email,
+                requester=requester,
+            )
+            sid = r.session_id
+
+        assert r is not None
+        text = r.content.lower()
+        # Must NOT dispense fabricated generic troubleshooting.
+        assert "run as administrator" not in text
+        assert "restart your computer" not in text
+        # Must honestly hand off instead — offers a specialist / ticket.
+        assert r.requires_escalation or r.escalation_offered or "specialist" in text
