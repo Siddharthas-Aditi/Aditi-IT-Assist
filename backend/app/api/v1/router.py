@@ -40,13 +40,18 @@ api_router.include_router(admin_router, prefix="/admin", tags=["admin"])
 api_router.include_router(feedback_router, prefix="/feedback", tags=["feedback"])
 # Live IT-specialist features — queue (claim/release/resolve), 'My Assigned',
 # and the human-to-human chat itself. See docs/architecture/live-specialist-chat.md
+# ORDER MATTERS: the extras router owns the literal GET /specialist-queue/mine.
+# It MUST be included before specialist_queue_router, whose GET /{ticket_id}
+# would otherwise match "/mine" first and 422 on UUID parsing (the 'My Assigned'
+# page bug). Regression: tests/api/test_specialist_queue_handoff.py
+# ::TestMyAssignedRouteNotShadowed.
 api_router.include_router(
-    specialist_queue_router,
+    specialist_queue_extras_router,
     prefix="/specialist-queue",
     tags=["specialist-queue"],
 )
 api_router.include_router(
-    specialist_queue_extras_router,
+    specialist_queue_router,
     prefix="/specialist-queue",
     tags=["specialist-queue"],
 )

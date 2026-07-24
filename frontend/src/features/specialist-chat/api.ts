@@ -279,11 +279,17 @@ export interface SpecialistChatSessionOut {
 // ── Calls ────────────────────────────────────────────────────────────
 
 export const queueApi = {
-  list: (opts?: { onlyUnclaimed?: boolean; includeMine?: boolean; limit?: number }) =>
+  list: (opts?: {
+    onlyUnclaimed?: boolean;
+    includeMine?: boolean;
+    mineOnly?: boolean;
+    limit?: number;
+  }) =>
     apiRequest<QueueListResponse>('/specialist-queue', {
       query: {
         only_unclaimed: opts?.onlyUnclaimed,
         include_mine: opts?.includeMine,
+        mine_only: opts?.mineOnly,
         limit: opts?.limit,
       },
     }),

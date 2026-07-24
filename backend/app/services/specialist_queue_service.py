@@ -111,6 +111,7 @@ class SpecialistQueueService:
         *,
         only_unclaimed: bool = False,
         for_user_id: uuid.UUID | None = None,
+        mine_only: bool = False,
         limit: int = 50,
     ) -> list[QueueEntry]:
         """Return queue entries with structured summaries.
@@ -119,12 +120,17 @@ class SpecialistQueueService:
             only_unclaimed: If True, exclude rows already claimed by anyone.
             for_user_id: If set, ALSO include rows assigned to this specialist
                 so they can see what they're already working on.
+            mine_only: If True (requires ``for_user_id``), return ONLY rows
+                assigned to this specialist — the "Mine" filter. Takes
+                precedence over ``only_unclaimed``.
         """
         clauses = [
             Ticket.source == "chat",
             Ticket.status.in_(_QUEUE_STATUSES),
         ]
-        if only_unclaimed:
+        if mine_only and for_user_id is not None:
+            clauses.append(Ticket.assigned_to == for_user_id)
+        elif only_unclaimed:
             if for_user_id is not None:
                 clauses.append(or_(Ticket.assigned_to.is_(None), Ticket.assigned_to == for_user_id))
             else:

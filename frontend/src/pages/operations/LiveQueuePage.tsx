@@ -50,6 +50,7 @@ export function LiveQueuePage() {
         queueApi.list({
           onlyUnclaimed: filter === 'unclaimed',
           includeMine: filter !== 'unclaimed',
+          mineOnly: filter === 'mine',
           limit: 100,
         }),
         queueApi

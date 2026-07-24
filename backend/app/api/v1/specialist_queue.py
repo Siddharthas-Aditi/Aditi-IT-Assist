@@ -226,12 +226,14 @@ async def list_queue(
     current_user: QueueViewerDep,
     only_unclaimed: bool = Query(False, description="Hide tickets already claimed by anyone."),
     include_mine: bool = Query(True, description="Include tickets already assigned to me."),
+    mine_only: bool = Query(False, description="Return ONLY tickets assigned to me (Mine filter)."),
     limit: int = Query(50, ge=1, le=200),
 ) -> QueueListResponse:
     """List queue entries, ordered by priority then age (FIFO within tier)."""
     entries = await service.list_queue(
         only_unclaimed=only_unclaimed,
-        for_user_id=current_user.id if include_mine else None,
+        for_user_id=current_user.id if (include_mine or mine_only) else None,
+        mine_only=mine_only,
         limit=limit,
     )
     return QueueListResponse(total=len(entries), entries=entries)

@@ -178,3 +178,21 @@ class TestHandoffPackageWebResearch:
         package = svc._package_from_context(ticket, ctx)
 
         assert package.web_research_findings == []
+
+
+class TestMyAssignedRouteNotShadowed:
+    """Regression: GET /specialist-queue/mine must reach `my_assigned`, not be
+    swallowed by the parameterized GET /specialist-queue/{ticket_id} route.
+
+    The 'My Assigned' router (with the literal /mine) is a separate router
+    mounted under the same /specialist-queue prefix as the router that owns
+    /{ticket_id}; if the parameterized router is included first, /mine is parsed
+    as a ticket_id and 422s ('invalid UUID: found m at 1'). This is the bug that
+    made the specialist 'My Assigned' page fail to load.
+    """
+
+    async def test_mine_is_not_parsed_as_ticket_id(self, agent_client: AsyncClient):
+        resp = await agent_client.get("/api/v1/specialist-queue/mine")
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert "items" in body
