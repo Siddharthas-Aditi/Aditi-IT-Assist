@@ -429,26 +429,30 @@ Turn 2: User: "to develop my application"
 Turn 3: User: "yes"
 Turn 4: User: "no specific error, it's just not installed yet"
 Turn 5: User: "yes"
-Expected: final reply does NOT contain "run as administrator" or
-          "restart your computer" (or any other fabricated generic step);
-          the reply offers a specialist / sets requires_escalation or
-          escalation_offered
+Expected: NO turn contains "run as administrator" / "restart your computer"
+          (or any other fabricated generic step); the flow stays honest —
+          it keeps clarifying or hands off, and never dispenses grounded
+          resolution steps for this unmatched issue.
 ```
 
-This is the probe for the Task-6 weak-match honest-handoff gate: a
-same-family, wrong-subtype, high-relevance generic article could otherwise
-score high enough (e.g. ~0.55) to slip past a naive `confidence < 0.35`
-check and still be presented as a resolution. In this codebase the gate in
-`backend/app/workflows/nodes/resolution.py` (`_score_confidence` /
-`compute_resolution_confidence`) already folds `has_subtype_article` into
-the composite confidence, so a subtype-less match is pulled below
-`FLUID_CHAT_MIN_CONFIDENCE_TO_ADVISE` (0.35) before the honest-handoff check
-runs — no additional change to `resolution.py` was needed to pass this
-scenario (verified: the gap did not manifest here; see
-`task-7-report.md`). A confident, subtype-matched issue (Scenario 21) still
-returns steps unaffected — see
-`backend/tests/unit/test_resolution_node.py::
-test_fluid_confident_match_still_returns_steps`.
+This is the probe for the Task-6 weak-match honest-handoff gate. A
+same-family, wrong-subtype, high-relevance generic article can score high
+enough (~0.55) to slip past a naive `confidence < 0.35` check, AND
+`_build_progression` falls back to non-subtype articles (`source_articles =
+matched if matched else knowledge_results`) — so a generic article's steps
+*could* be presented for an unmatched issue. The gate in
+`backend/app/workflows/nodes/resolution.py` was therefore **strengthened** to
+hand off when `confidence < FLUID_CHAT_MIN_CONFIDENCE_TO_ADVISE` **or** the
+grounding trace has no subtype match (`not trace.get("has_subtype_match")`) —
+so a subtype-less match never presents generic steps regardless of relevance.
+A confident, subtype-matched issue (Scenario 21) still returns steps
+unaffected.
 
-Automated in `backend/tests/unit/test_chat_golden_conversations.py::
+The gate is proven directly (deterministic) by
+`backend/tests/unit/test_resolution_node.py::
+test_fluid_no_subtype_match_hands_off_even_when_relevant` (high-relevance,
+no-subtype-match → hand-off) and
+`test_fluid_confident_match_still_returns_steps` (subtype match → steps). The
+end-to-end conversation is covered (hermetically, LLM stubbed) by
+`backend/tests/unit/test_chat_golden_conversations.py::
 TestFluidChat::test_docker_install_no_fabricated_generic_steps`.

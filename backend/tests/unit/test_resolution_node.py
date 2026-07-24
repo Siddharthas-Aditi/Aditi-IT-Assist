@@ -33,18 +33,22 @@ def _state_with_article(subtype: str, steps: list[str]) -> dict:
             }
         ],
         "knowledge_confidence": 0.8,
+        # A real subtype match, as retrieval_node would report it.
+        "retrieval_trace": {"has_subtype_match": True},
         "diagnostic_context": diag_ctx.to_dict(),
     }
 
 
-def _state_with_generic_article(category: str, subtype: str, steps: list[str]) -> dict:
-    """Build a state whose composite confidence lands well below 0.35.
+def _state_with_generic_article(
+    category: str, subtype: str, steps: list[str], *, knowledge_confidence: float = 0.1
+) -> dict:
+    """Build a state for a generic article that does NOT match the subtype.
 
-    Low `knowledge_confidence` (retrieval_relevance) plus no `retrieval_trace`
-    (so `has_subtype_article` is False) caps grounding at 0.3 in
-    `compute_resolution_confidence`, which — combined with default-zero
-    system/subtype match — keeps the composite `final` under the 0.35
-    fluid-chat advise threshold.
+    ``retrieval_trace.has_subtype_match`` is False (as retrieval_node would
+    report for a same-family/generic fallback). With the default low
+    ``knowledge_confidence`` the composite ``final`` also lands under the 0.35
+    advise threshold; pass a high ``knowledge_confidence`` to isolate the
+    no-subtype-match signal alone (final can then exceed 0.35).
     """
     diag_ctx = DiagnosticContext(
         issue_category=category,
@@ -64,7 +68,8 @@ def _state_with_generic_article(category: str, subtype: str, steps: list[str]) -
                 "steps": [{"instruction": s, "details": None} for s in steps],
             }
         ],
-        "knowledge_confidence": 0.1,
+        "knowledge_confidence": knowledge_confidence,
+        "retrieval_trace": {"has_subtype_match": False},
         "diagnostic_context": diag_ctx.to_dict(),
     }
 
@@ -292,6 +297,35 @@ class TestHonestHandoffOnWeakGrounding:
         assert out["conversation_phase"] == "escalating"
         assert out["escalation_reason"] == "no confident grounded guidance"
         assert out["diagnostic_context"]["phase"] == "escalating"
+
+    @pytest.mark.asyncio
+    async def test_fluid_no_subtype_match_hands_off_even_when_relevant(self, monkeypatch):
+        """Flag-on: a same-family generic article that does NOT match the subtype
+        must hand off honestly EVEN when its relevance is high enough that the
+        composite confidence clears 0.35 — this is the fabrication case (generic
+        steps for an unmatched issue) the confidence floor alone would miss.
+        """
+        from app.core.config import settings
+
+        monkeypatch.setattr(settings, "FEATURE_FLUID_CHAT", True)
+        # High knowledge_confidence → composite final can exceed 0.35, so the
+        # ONLY signal forcing a hand-off is has_subtype_match=False.
+        state = _state_with_generic_article(
+            category="software",
+            subtype="other",
+            steps=["Restart the app", "Run as administrator"],
+            knowledge_confidence=0.9,
+        )
+
+        with patch("app.workflows.nodes.resolution.get_llm_service") as mock_get_llm:
+            mock_llm = AsyncMock()
+            mock_llm.is_available = False
+            mock_get_llm.return_value = mock_llm
+
+            out = await resolution_node(state)
+
+        assert out["resolution_steps"] == []
+        assert out["conversation_phase"] == "escalating"
 
     @pytest.mark.asyncio
     async def test_fluid_confident_match_still_returns_steps(self, monkeypatch):

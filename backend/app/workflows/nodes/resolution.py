@@ -310,14 +310,23 @@ async def resolution_node(state: WorkflowState) -> dict:
     # to stand behind, don't present the (weak/generic) steps as if they were
     # a real fix — hand off honestly instead. This is what stops the "generic
     # steps confidently presented for an unmatched issue" fabrication case.
+    # Two independent weak-grounding signals, either of which triggers an honest
+    # hand-off: (a) composite confidence too low to stand behind; (b) no article
+    # actually matched the issue's subtype — meaning any steps would come from the
+    # generic same-family fallback in _build_progression (source_articles =
+    # knowledge_results), i.e. the "generic steps for an unmatched issue"
+    # fabrication case that a same-family/high-relevance article can otherwise
+    # sneak past the confidence floor with.
     min_confidence = settings.FLUID_CHAT_MIN_CONFIDENCE_TO_ADVISE
-    if settings.FEATURE_FLUID_CHAT and confidence_bd.final < min_confidence:
+    no_subtype_match = not trace.get("has_subtype_match")
+    if settings.FEATURE_FLUID_CHAT and (confidence_bd.final < min_confidence or no_subtype_match):
         diag_ctx.phase = DiagnosticPhase.ESCALATING
         diag_ctx.escalation_reason = "no confident grounded guidance"
         logger.info(
             "resolution_low_confidence_honest_handoff",
             confidence=confidence_bd.final,
             threshold=settings.FLUID_CHAT_MIN_CONFIDENCE_TO_ADVISE,
+            no_subtype_match=no_subtype_match,
         )
         return {
             "current_node": "resolve",
