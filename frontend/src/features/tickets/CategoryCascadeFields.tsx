@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { ticketCategoriesApi, type TicketCategoryNode } from '@/lib/api';
 
+import { filterActiveTree } from './categoryTreeUtils';
+
 const SELECT_CLASS =
   'w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-500';
 
@@ -45,7 +47,7 @@ export function CategoryCascadeFields({
     ticketCategoriesApi
       .tree()
       .then(({ categories }) => {
-        if (!cancelled) setRoots(categories);
+        if (!cancelled) setRoots(filterActiveTree(categories));
       })
       .catch((e: unknown) => {
         if (!cancelled) {
