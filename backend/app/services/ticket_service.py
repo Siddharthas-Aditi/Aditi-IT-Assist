@@ -9,6 +9,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.auth import User
 from app.models.ticket import Ticket, TicketComment, TicketEvent
+from app.services.ticket_category_validation import (
+    CategoryCascadeError,
+    validate_category_cascade,
+)
 
 logger = structlog.get_logger()
 
@@ -19,6 +23,8 @@ SLA_RESOLUTION_HOURS = {"critical": 4, "high": 12, "medium": 48, "low": 120}
 
 class TicketService:
     """Manages enterprise ticket lifecycle with SLA tracking."""
+
+    _STAFF = frozenset({"it_agent", "it_lead", "it_admin"})
 
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
@@ -126,6 +132,9 @@ class TicketService:
         if not ticket:
             raise ValueError("Ticket not found")
 
+        if new_status == "closed":
+            raise ValueError("Use POST /tickets/{id}/close")
+
         old_status = ticket.status
         ticket.status = new_status
 
@@ -133,8 +142,6 @@ class TicketService:
         now = datetime.now(UTC)
         if new_status == "resolved":
             ticket.resolved_at = now
-        elif new_status == "closed":
-            ticket.closed_at = now
 
         await self._add_event(
             ticket_id,
@@ -147,6 +154,133 @@ class TicketService:
 
         if comment:
             await self.add_comment(ticket_id, actor, comment, is_internal=True)
+
+        return ticket
+
+    async def close_ticket(
+        self,
+        ticket_id: uuid.UUID,
+        actor: User,
+        *,
+        resolution_notes: str,
+        category: str,
+        subcategory: str,
+        item: str,
+        close_notes: str | None = None,
+    ) -> Ticket:
+        """Close a ticket — IT staff only; mandatory notes + full category cascade."""
+        roles = set(getattr(actor, "role_names", None) or [])
+        if not roles & self._STAFF:
+            raise PermissionError("Only IT staff can close tickets")
+
+        ticket = await self._get_ticket(ticket_id)
+        if not ticket:
+            raise ValueError("Ticket not found")
+        if ticket.status == "closed":
+            raise ValueError("Ticket is already closed")
+
+        notes = (resolution_notes or "").strip()
+        if not notes:
+            raise ValueError("resolution_notes is required")
+
+        try:
+            await validate_category_cascade(self.db, category, subcategory, item)
+        except CategoryCascadeError:
+            raise
+
+        old_status = ticket.status
+        now = datetime.now(UTC)
+        ticket.status = "closed"
+        ticket.closed_at = now
+        ticket.closed_by = actor.id
+        ticket.resolution_notes = notes
+        ticket.close_notes = (close_notes or "").strip() or None
+        ticket.category = category.strip()
+        ticket.subcategory = subcategory.strip()
+        ticket.item = item.strip()
+        if not ticket.resolved_at:
+            ticket.resolved_at = now
+
+        await self._add_event(
+            ticket_id,
+            actor.id,
+            "status_changed",
+            f"Status changed from {old_status} to closed",
+            old_value=old_status,
+            new_value="closed",
+        )
+        return ticket
+
+    async def update_ticket_properties(
+        self,
+        ticket_id: uuid.UUID,
+        actor: User,
+        *,
+        priority: str | None = None,
+        urgency: str | None = None,
+        impact: str | None = None,
+        ticket_type: str | None = None,
+        category: str | None = None,
+        subcategory: str | None = None,
+        item: str | None = None,
+        status: str | None = None,
+        resolution_notes: str | None = None,
+    ) -> Ticket:
+        """Partial property update for IT staff. Cannot set status=closed."""
+        roles = set(getattr(actor, "role_names", None) or [])
+        if not roles & self._STAFF:
+            raise PermissionError("Only IT staff can update ticket properties")
+
+        ticket = await self._get_ticket(ticket_id)
+        if not ticket:
+            raise ValueError("Ticket not found")
+
+        if status == "closed":
+            raise ValueError("Use POST /tickets/{id}/close")
+
+        if status is not None:
+            if status not in (
+                "new",
+                "triaged",
+                "in_progress",
+                "waiting_for_user",
+                "escalated",
+                "resolved",
+            ):
+                raise ValueError(f"Invalid status '{status}'")
+            old = ticket.status
+            ticket.status = status
+            if status == "resolved" and not ticket.resolved_at:
+                ticket.resolved_at = datetime.now(UTC)
+            await self._add_event(
+                ticket_id,
+                actor.id,
+                "status_changed",
+                f"Status changed from {old} to {status}",
+                old_value=old,
+                new_value=status,
+            )
+
+        if priority is not None:
+            ticket.priority = priority
+        if urgency is not None:
+            ticket.urgency = urgency
+        if impact is not None:
+            ticket.impact = impact
+        if ticket_type is not None:
+            ticket.ticket_type = ticket_type
+        if resolution_notes is not None:
+            ticket.resolution_notes = resolution_notes
+
+        # Classification: if any of the three provided, require full valid cascade
+        if category is not None or subcategory is not None or item is not None:
+            cat = category if category is not None else ticket.category
+            sub = subcategory if subcategory is not None else ticket.subcategory
+            itm = item if item is not None else ticket.item
+            await validate_category_cascade(self.db, cat or "", sub or "", itm or "")
+            ticket.category = (cat or "").strip()
+            ticket.subcategory = (sub or "").strip()
+            ticket.item = (itm or "").strip()
 
         return ticket
 
