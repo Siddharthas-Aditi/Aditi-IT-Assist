@@ -9,10 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.auth import User
 from app.models.ticket import Ticket, TicketComment, TicketEvent
-from app.services.ticket_category_validation import (
-    CategoryCascadeError,
-    validate_category_cascade,
-)
+from app.services.ticket_category_validation import validate_category_cascade
 
 logger = structlog.get_logger()
 
@@ -183,10 +180,7 @@ class TicketService:
         if not notes:
             raise ValueError("resolution_notes is required")
 
-        try:
-            await validate_category_cascade(self.db, category, subcategory, item)
-        except CategoryCascadeError:
-            raise
+        await validate_category_cascade(self.db, category, subcategory, item)
 
         old_status = ticket.status
         now = datetime.now(UTC)

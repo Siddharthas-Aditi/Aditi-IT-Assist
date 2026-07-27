@@ -76,6 +76,45 @@ async def test_close_employee_forbidden():
 
 
 @pytest.mark.asyncio
+async def test_update_properties_rejects_closed_status():
+    db = AsyncMock()
+    svc = TicketService(db)
+    ticket = _ticket()
+    with patch.object(svc, "_get_ticket", AsyncMock(return_value=ticket)):
+        with pytest.raises(ValueError, match="Use POST"):
+            await svc.update_ticket_properties(ticket.id, _user(), status="closed")
+
+
+@pytest.mark.asyncio
+async def test_update_properties_employee_forbidden():
+    db = AsyncMock()
+    svc = TicketService(db)
+    ticket = _ticket()
+    with patch.object(svc, "_get_ticket", AsyncMock(return_value=ticket)):
+        with pytest.raises(PermissionError):
+            await svc.update_ticket_properties(
+                ticket.id, _user("employee"), priority="high"
+            )
+
+
+@pytest.mark.asyncio
+async def test_close_already_closed_raises():
+    db = AsyncMock()
+    svc = TicketService(db)
+    ticket = _ticket(status="closed")
+    with patch.object(svc, "_get_ticket", AsyncMock(return_value=ticket)):
+        with pytest.raises(ValueError, match="already closed"):
+            await svc.close_ticket(
+                ticket.id,
+                _user(),
+                resolution_notes="Notes",
+                category="Incident",
+                subcategory="Network",
+                item="VPN",
+            )
+
+
+@pytest.mark.asyncio
 async def test_close_happy_path_sets_fields():
     db = AsyncMock()
     db.add = MagicMock()
