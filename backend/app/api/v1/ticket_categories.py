@@ -1,9 +1,10 @@
 """Ticket categories API — admin-managed 3-level hierarchy.
 
 Routes (all require IT staff access; write routes require it_admin):
-  GET    /ticket-categories          — full tree (IT staff read)
-  GET    /ticket-categories/flat     — flat list, filterable by level/parent
+  GET    /ticket-categories/tree     — full tree (IT staff read)
+  GET    /ticket-categories          — flat list, filterable by level/parent
   POST   /ticket-categories          — create node (admin only)
+  POST   /ticket-categories/reorder  — batch sort_order update (admin only)
   PATCH  /ticket-categories/{id}     — update node (admin only)
   DELETE /ticket-categories/{id}     — delete leaf node (admin only)
 """
@@ -81,6 +82,13 @@ def _out(cat) -> CategoryOut:
     )
 
 
+def _category_error_status(exc: TicketCategoryError) -> int:
+    """Map service errors to HTTP status — 404 for missing, 409 for conflicts."""
+    if str(exc) == "Category not found":
+        return 404
+    return 409
+
+
 # ── Routes ─────────────────────────────────────────────────────────────────
 
 
@@ -135,6 +143,18 @@ async def create_category(
     return _out(cat)
 
 
+@router.post("/reorder", status_code=204)
+async def reorder_categories(
+    data: CategoryReorderRequest,
+    _actor: AdminOnlyDep,
+    db: DBDep,
+) -> None:
+    """Batch update sort_order (position = index). Admin only."""
+    svc = _svc(db)
+    await svc.reorder([uuid.UUID(i) for i in data.ordered_ids])
+    await db.commit()
+
+
 @router.patch("/{category_id}", response_model=CategoryOut)
 async def update_category(
     category_id: uuid.UUID,
@@ -153,7 +173,7 @@ async def update_category(
         )
         await db.commit()
     except TicketCategoryError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise HTTPException(status_code=_category_error_status(exc), detail=str(exc)) from exc
     return _out(cat)
 
 
@@ -173,16 +193,4 @@ async def delete_category(
         await svc.delete(category_id)
         await db.commit()
     except TicketCategoryError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-
-
-@router.post("/reorder", status_code=204)
-async def reorder_categories(
-    data: CategoryReorderRequest,
-    _actor: AdminOnlyDep,
-    db: DBDep,
-) -> None:
-    """Batch update sort_order (position = index). Admin only."""
-    svc = _svc(db)
-    await svc.reorder([uuid.UUID(i) for i in data.ordered_ids])
-    await db.commit()
+        raise HTTPException(status_code=_category_error_status(exc), detail=str(exc)) from exc

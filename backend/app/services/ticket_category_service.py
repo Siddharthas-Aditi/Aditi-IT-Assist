@@ -54,7 +54,11 @@ class TicketCategoryService:
     async def list_by_level(
         self, level: int, *, parent_id: uuid.UUID | None = None, active_only: bool = True
     ) -> list[TicketCategory]:
-        """Return categories at a specific level, optionally filtered by parent."""
+        """Return categories at a specific level, optionally filtered by parent.
+
+        When ``parent_id`` is omitted, returns all categories at that level
+        (no parent filter). Pass ``parent_id`` to scope level-2/3 dropdowns.
+        """
         stmt = (
             select(TicketCategory)
             .where(TicketCategory.level == level)
@@ -64,8 +68,6 @@ class TicketCategoryService:
             stmt = stmt.where(TicketCategory.is_active.is_(True))
         if parent_id is not None:
             stmt = stmt.where(TicketCategory.parent_id == parent_id)
-        elif level > 1:
-            stmt = stmt.where(TicketCategory.parent_id.is_(None))
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
 
