@@ -71,6 +71,15 @@ const CATEGORY_TREE = {
             },
           ],
         },
+        {
+          id: 'l2-empty',
+          name: 'Unconfigured Area',
+          level: 2,
+          parent_id: 'l1-a',
+          is_active: true,
+          sort_order: 2,
+          children: [],
+        },
       ],
     },
     {
@@ -165,6 +174,82 @@ describe('CloseTicketModal', () => {
     await waitFor(() => {
       expect(screen.getByLabelText(/Sub-Category/i)).toHaveValue('');
       expect(screen.getByLabelText(/^Item/i)).toHaveValue('');
+    });
+  });
+
+  it('shows empty-items helper and keeps Confirm disabled when subcategory has no items', async () => {
+    renderModal();
+    await screen.findByLabelText(/^Category/i);
+
+    fireEvent.change(screen.getByLabelText(/^Category/i), {
+      target: { value: 'Incident' },
+    });
+    fireEvent.change(screen.getByLabelText(/Sub-Category/i), {
+      target: { value: 'Unconfigured Area' },
+    });
+
+    expect(
+      screen.getByText(/No items configured — ask an IT admin to add items before closing/i),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Confirm close/i })).toBeDisabled();
+  });
+
+  it('changing subcategory clears item selection', async () => {
+    renderModal();
+    await screen.findByLabelText(/^Category/i);
+
+    fireEvent.change(screen.getByLabelText(/^Category/i), {
+      target: { value: 'Incident' },
+    });
+    fireEvent.change(screen.getByLabelText(/Sub-Category/i), {
+      target: { value: 'Network Connectivity' },
+    });
+    fireEvent.change(screen.getByLabelText(/^Item/i), {
+      target: { value: 'VPN' },
+    });
+
+    expect(screen.getByLabelText(/^Item/i)).toHaveValue('VPN');
+
+    fireEvent.change(screen.getByLabelText(/Sub-Category/i), {
+      target: { value: 'System Login Issue' },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/^Item/i)).toHaveValue('');
+    });
+  });
+
+  it('enables Confirm when all required fields are filled and submits on confirm', async () => {
+    const { onClosed } = renderModal();
+    await screen.findByLabelText(/^Category/i);
+
+    fireEvent.change(screen.getByLabelText(/Resolution notes/i), {
+      target: { value: 'Reset VPN profile and verified connectivity.' },
+    });
+    fireEvent.change(screen.getByLabelText(/^Category/i), {
+      target: { value: 'Incident' },
+    });
+    fireEvent.change(screen.getByLabelText(/Sub-Category/i), {
+      target: { value: 'Network Connectivity' },
+    });
+    fireEvent.change(screen.getByLabelText(/^Item/i), {
+      target: { value: 'VPN' },
+    });
+
+    const confirm = screen.getByRole('button', { name: /Confirm close/i });
+    expect(confirm).toBeEnabled();
+
+    fireEvent.click(confirm);
+
+    await waitFor(() => {
+      expect(mockClose).toHaveBeenCalledWith('tkt-1', {
+        resolution_notes: 'Reset VPN profile and verified connectivity.',
+        category: 'Incident',
+        subcategory: 'Network Connectivity',
+        item: 'VPN',
+        close_notes: undefined,
+      });
+      expect(onClosed).toHaveBeenCalled();
     });
   });
 });
