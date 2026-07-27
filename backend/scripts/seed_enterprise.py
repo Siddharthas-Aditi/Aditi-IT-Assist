@@ -229,6 +229,15 @@ async def run_seed() -> None:
         kb_count = await seed_knowledge(db, users)
         print(f"    ✓ {kb_count} knowledge articles seeded (published + indexed)")
 
+        print("  → Ticket categories (L1/L2/L3 tree)...")
+        from scripts.seed_ticket_categories import seed_ticket_categories
+
+        cat_count = await seed_ticket_categories(db)
+        if cat_count:
+            print(f"    ✓ {cat_count} ticket categories seeded")
+        else:
+            print("    ✓ ticket categories already present (skipped)")
+
         await db.commit()
         print("\n✅ Enterprise seed complete!")
         print("\n📋 Seeded users (local dev — rotate before any real deployment):")
