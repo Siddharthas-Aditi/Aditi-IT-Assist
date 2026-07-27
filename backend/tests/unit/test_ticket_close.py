@@ -36,9 +36,11 @@ async def test_update_status_rejects_closed():
     db = AsyncMock()
     svc = TicketService(db)
     ticket = _ticket()
-    with patch.object(svc, "_get_ticket", AsyncMock(return_value=ticket)):
-        with pytest.raises(ValueError, match="close"):
-            await svc.update_status(ticket.id, "closed", _user())
+    with (
+        patch.object(svc, "_get_ticket", AsyncMock(return_value=ticket)),
+        pytest.raises(ValueError, match="close"),
+    ):
+        await svc.update_status(ticket.id, "closed", _user())
 
 
 @pytest.mark.asyncio
@@ -46,16 +48,18 @@ async def test_close_requires_resolution_notes():
     db = AsyncMock()
     svc = TicketService(db)
     ticket = _ticket()
-    with patch.object(svc, "_get_ticket", AsyncMock(return_value=ticket)):
-        with pytest.raises(ValueError, match="resolution"):
-            await svc.close_ticket(
-                ticket.id,
-                _user(),
-                resolution_notes="  ",
-                category="Incident",
-                subcategory="Network Connectivity",
-                item="VPN",
-            )
+    with (
+        patch.object(svc, "_get_ticket", AsyncMock(return_value=ticket)),
+        pytest.raises(ValueError, match="resolution"),
+    ):
+        await svc.close_ticket(
+            ticket.id,
+            _user(),
+            resolution_notes="  ",
+            category="Incident",
+            subcategory="Network Connectivity",
+            item="VPN",
+        )
 
 
 @pytest.mark.asyncio
@@ -63,16 +67,18 @@ async def test_close_employee_forbidden():
     db = AsyncMock()
     svc = TicketService(db)
     ticket = _ticket()
-    with patch.object(svc, "_get_ticket", AsyncMock(return_value=ticket)):
-        with pytest.raises(PermissionError):
-            await svc.close_ticket(
-                ticket.id,
-                _user("employee"),
-                resolution_notes="Fixed VPN",
-                category="Incident",
-                subcategory="Network Connectivity",
-                item="VPN",
-            )
+    with (
+        patch.object(svc, "_get_ticket", AsyncMock(return_value=ticket)),
+        pytest.raises(PermissionError),
+    ):
+        await svc.close_ticket(
+            ticket.id,
+            _user("employee"),
+            resolution_notes="Fixed VPN",
+            category="Incident",
+            subcategory="Network Connectivity",
+            item="VPN",
+        )
 
 
 @pytest.mark.asyncio
@@ -80,9 +86,11 @@ async def test_update_properties_rejects_closed_status():
     db = AsyncMock()
     svc = TicketService(db)
     ticket = _ticket()
-    with patch.object(svc, "_get_ticket", AsyncMock(return_value=ticket)):
-        with pytest.raises(ValueError, match="Use POST"):
-            await svc.update_ticket_properties(ticket.id, _user(), status="closed")
+    with (
+        patch.object(svc, "_get_ticket", AsyncMock(return_value=ticket)),
+        pytest.raises(ValueError, match="Use POST"),
+    ):
+        await svc.update_ticket_properties(ticket.id, _user(), status="closed")
 
 
 @pytest.mark.asyncio
@@ -90,11 +98,13 @@ async def test_update_properties_employee_forbidden():
     db = AsyncMock()
     svc = TicketService(db)
     ticket = _ticket()
-    with patch.object(svc, "_get_ticket", AsyncMock(return_value=ticket)):
-        with pytest.raises(PermissionError):
-            await svc.update_ticket_properties(
-                ticket.id, _user("employee"), priority="high"
-            )
+    with (
+        patch.object(svc, "_get_ticket", AsyncMock(return_value=ticket)),
+        pytest.raises(PermissionError),
+    ):
+        await svc.update_ticket_properties(
+            ticket.id, _user("employee"), priority="high"
+        )
 
 
 @pytest.mark.asyncio
@@ -102,16 +112,18 @@ async def test_close_already_closed_raises():
     db = AsyncMock()
     svc = TicketService(db)
     ticket = _ticket(status="closed")
-    with patch.object(svc, "_get_ticket", AsyncMock(return_value=ticket)):
-        with pytest.raises(ValueError, match="already closed"):
-            await svc.close_ticket(
-                ticket.id,
-                _user(),
-                resolution_notes="Notes",
-                category="Incident",
-                subcategory="Network",
-                item="VPN",
-            )
+    with (
+        patch.object(svc, "_get_ticket", AsyncMock(return_value=ticket)),
+        pytest.raises(ValueError, match="already closed"),
+    ):
+        await svc.close_ticket(
+            ticket.id,
+            _user(),
+            resolution_notes="Notes",
+            category="Incident",
+            subcategory="Network",
+            item="VPN",
+        )
 
 
 @pytest.mark.asyncio

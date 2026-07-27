@@ -20,6 +20,21 @@ here → update this file + the relevant `docs/architecture/*.md` in the same PR
 - **Ticket** (`ticket.py`, `support.py`) — lifecycle + SLA, assignment, events.
   Invariants: persisted **only on explicit user confirmation**; **idempotent per
   chat session**; employees see only their own; internal notes hidden from employees.
+  **Close invariants** (migration `014_ticket_categories_and_close_fields`):
+  - **IT staff only** (`it_agent`, `it_lead`, `it_admin`) — employees cannot close.
+  - Close via `POST /tickets/{id}/close` only; **status bypass forbidden** —
+    `update_ticket_properties` rejects `status=closed` (must use the close endpoint).
+  - Mandatory on close: `resolution_notes`, full L1/L2/L3 cascade (`category`,
+    `subcategory`, `item`); `item` always required; empty L2 blocks close.
+  - Close fields: `close_notes` (optional), `closed_by` (actor FK), `closed_at`.
+  - `ticket_type` (Incident / Service Request / Problem / Change / Other) is
+    editable on the workspace properties panel but is **not** set by close.
+- **TicketCategory** (`ticket.py`, migration `014`) — admin-managed 3-level hierarchy:
+  L1 Category → L2 Sub-Category → L3 Item. Self-referential `parent_id` with
+  **FK ON DELETE RESTRICT** (parent cannot be deleted while children exist; service
+  layer also guards delete-with-children). Admin CRUD via `ticket_categories` API;
+  IT staff read for close/properties dropdowns. `validate_category_cascade()` enforces
+  active parent→child chain at close and on partial classification updates.
 - **Chat session / messages** (`agents/conversation_messages.py`, chat service) —
   `DiagnosticContext` carries `issue_subtype`, normalized system, intent flags,
   `suggested_steps` / `failed_steps`; persisted across turns (not reset mid-conversation).
@@ -71,5 +86,7 @@ here → update this file + the relevant `docs/architecture/*.md` in the same PR
 
 `002_enterprise_upgrade` → `003_knowledge_management` → `004_document_ingestion` →
 `005_feedback` → `006_add_knowledge_chunks_embedding` → `007_knowledge_candidates` →
-`008_specialist_chat` → `009_chat_escalation_artifacts`. Next revision = `010_*`.
+`008_specialist_chat` → `009_chat_escalation_artifacts` → `010_web_research_findings` →
+`011_scheduled_report_runs` → `012_support_sessions` → `013_live_handoff` →
+`014_ticket_categories_and_close_fields`. Next revision = `015_*`.
 See skill `skills/playbooks/database-migrations.md`.
