@@ -9,11 +9,14 @@ import {
   RefreshCw,
   RotateCcw,
   UserCheck,
+  XCircle,
 } from 'lucide-react';
 
 import { PageHeader } from '@/components/admin';
 import { Card } from '@/components/ui';
 import { HandoffContextPanel } from '@/features/specialist-chat/HandoffContextPanel';
+import { CloseTicketModal } from '@/features/tickets/CloseTicketModal';
+import { TicketPropertiesPanel } from '@/features/tickets/TicketPropertiesPanel';
 import { apiRequest, ticketsApi } from '@/lib/api';
 import { isITStaff } from '@/lib/permissions';
 import { useAuthStore } from '@/stores/auth-store';
@@ -30,6 +33,12 @@ interface TicketDetail {
   status: string;
   priority: string;
   category: string | null;
+  subcategory: string | null;
+  item: string | null;
+  ticket_type: string | null;
+  urgency: string | null;
+  impact: string | null;
+  source: string | null;
   requester_id: string;
   assigned_to: string | null;
   created_at: string;
@@ -57,16 +66,6 @@ interface TicketDetailResponse {
   comments: Comment[];
   events: TicketEvent[];
 }
-
-const STATUS_OPTIONS = [
-  'new',
-  'triaged',
-  'in_progress',
-  'waiting_for_user',
-  'escalated',
-  'resolved',
-  'closed',
-];
 
 const STATUS_COLORS: Record<string, string> = {
   new: 'bg-blue-100 text-blue-800',
@@ -101,6 +100,7 @@ export function TicketWorkspacePage() {
   const [busy, setBusy] = useState(false);
   const [comment, setComment] = useState('');
   const [internal, setInternal] = useState(true);
+  const [closeModalOpen, setCloseModalOpen] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -136,11 +136,13 @@ export function TicketWorkspacePage() {
   const isMine = Boolean(
     ticket?.assigned_to && currentUser && ticket.assigned_to === currentUser.id,
   );
-  // Mirrors the backend `POST /tickets/{id}/reopen` gate: IT staff only
-  // (it_agent/it_lead/it_admin), and only from a terminal ticket status.
   const canReopen = Boolean(
     ticket && isITStaff(currentUser) && REOPENABLE_STATUSES.has(ticket.status),
   );
+  const canClose = Boolean(
+    ticket && isITStaff(currentUser) && ticket.status !== 'closed',
+  );
+  const agentLabel = isMine ? 'You' : ticket?.assigned_to ? 'Assigned' : 'Unassigned';
 
   const timeline = useMemo(() => {
     if (!data) return [];
@@ -187,7 +189,7 @@ export function TicketWorkspacePage() {
     );
   }
 
-  if (!ticket) return null;
+  if (!ticket || !id) return null;
 
   return (
     <>
@@ -222,13 +224,21 @@ export function TicketWorkspacePage() {
                 <UserCheck size={14} /> Assign to me
               </button>
             )}
+            {canClose && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => setCloseModalOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-600 bg-emerald-50 px-3 py-1.5 text-sm font-medium text-emerald-800 transition-colors hover:bg-emerald-100 disabled:opacity-50"
+              >
+                <XCircle size={14} /> Close
+              </button>
+            )}
             {canReopen && (
               <button
                 type="button"
                 disabled={busy}
-                onClick={() =>
-                  runAction(() => ticketsApi.reopen(id!))
-                }
+                onClick={() => runAction(() => ticketsApi.reopen(id))}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-50"
               >
                 <RotateCcw size={14} /> Reopen ticket
@@ -245,9 +255,8 @@ export function TicketWorkspacePage() {
           </div>
         )}
 
-        {/* Main */}
         <div className="space-y-6 lg:col-span-2">
-          {id && <HandoffContextPanel ticketId={id} />}
+          <HandoffContextPanel ticketId={id} />
 
           <Card>
             <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -279,7 +288,6 @@ export function TicketWorkspacePage() {
             )}
           </Card>
 
-          {/* Timeline */}
           <Card>
             <h2 className="mb-3 text-sm font-semibold text-foreground">Activity</h2>
             {timeline.length === 0 ? (
@@ -310,7 +318,6 @@ export function TicketWorkspacePage() {
               </ol>
             )}
 
-            {/* Add comment */}
             <div className="mt-4 border-t border-border pt-4">
               <textarea
                 value={comment}
@@ -349,60 +356,30 @@ export function TicketWorkspacePage() {
           </Card>
         </div>
 
-        {/* Side panel */}
         <div className="space-y-6">
-          <Card>
-            <h2 className="mb-3 text-sm font-semibold text-foreground">Details</h2>
-            <dl className="space-y-2.5 text-sm">
-              <Row label="Status" value={ticket.status.replace(/_/g, ' ')} />
-              <Row label="Priority" value={ticket.priority} />
-              <Row
-                label="Assignee"
-                value={isMine ? 'You' : ticket.assigned_to ? 'Assigned' : 'Unassigned'}
-              />
-              <Row label="Created" value={fmt(ticket.created_at)} />
-              <Row label="SLA target" value={fmt(ticket.sla_resolution_target)} />
-            </dl>
-          </Card>
-
-          <Card>
-            <h2 className="mb-3 text-sm font-semibold text-foreground">Update status</h2>
-            <div className="flex flex-wrap gap-1.5">
-              {STATUS_OPTIONS.map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  disabled={busy || s === ticket.status}
-                  onClick={() =>
-                    runAction(() =>
-                      apiRequest(`/tickets/${id}/status`, {
-                        method: 'POST',
-                        body: { status: s },
-                      }),
-                    )
-                  }
-                  className={`rounded-lg border px-2.5 py-1 text-xs font-medium capitalize transition-colors ${
-                    s === ticket.status
-                      ? 'border-primary bg-primary/10 text-primary'
-                      : 'border-border text-muted-foreground hover:bg-muted'
-                  }`}
-                >
-                  {s.replace(/_/g, ' ')}
-                </button>
-              ))}
-            </div>
-          </Card>
+          <TicketPropertiesPanel
+            ticketId={id}
+            ticket={ticket}
+            agentLabel={agentLabel}
+            disabled={ticket.status === 'closed'}
+            onUpdated={() => void load()}
+            onError={setError}
+          />
         </div>
       </div>
-    </>
-  );
-}
 
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between gap-2">
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="font-medium capitalize text-foreground">{value}</dd>
-    </div>
+      <CloseTicketModal
+        ticketId={id}
+        open={closeModalOpen}
+        onClose={() => setCloseModalOpen(false)}
+        onClosed={() => {
+          setCloseModalOpen(false);
+          void load();
+        }}
+        initialCategory={ticket.category ?? ''}
+        initialSubcategory={ticket.subcategory ?? ''}
+        initialItem={ticket.item ?? ''}
+      />
+    </>
   );
 }

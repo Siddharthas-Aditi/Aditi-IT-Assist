@@ -1,11 +1,11 @@
-/** Tests for the Reopen button on the IT-staff ticket workspace page.
+/** Tests for the IT-staff ticket workspace page.
  *
- * Gating mirrors the backend `POST /tickets/{id}/reopen` guard: only IT
- * staff (it_agent/it_lead/it_admin) may reopen, and only from a terminal
- * ticket status (`resolved`/`closed`).
+ * Gating mirrors the backend guards: only IT staff (it_agent/it_lead/it_admin)
+ * may reopen or close; reopen only from terminal statuses; Close hidden when
+ * already closed; Properties status dropdown excludes `closed`.
  */
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -32,6 +32,8 @@ const EMPLOYEE: AuthUser = {
   roles: ['employee'],
 };
 
+const EMPTY_CATEGORY_TREE = { categories: [] };
+
 function baseTicket(status: string) {
   return {
     id: TICKET_ID,
@@ -40,7 +42,13 @@ function baseTicket(status: string) {
     description: 'Cannot receive email — mailbox over quota.',
     status,
     priority: 'medium',
-    category: 'outlook',
+    category: 'Incident',
+    subcategory: 'Network Connectivity',
+    item: 'VPN',
+    ticket_type: 'incident',
+    urgency: 'medium',
+    impact: 'individual',
+    source: 'chat',
     requester_id: 'emp-1',
     assigned_to: 'agent-1',
     created_at: new Date().toISOString(),
@@ -79,11 +87,11 @@ function mockTicketDetailFetch(status: string): ReturnType<typeof vi.fn> {
         }),
       );
     }
-    // The workspace also renders <HandoffContextPanel/>, which fetches the
-    // handoff view. This ticket has no structured escalation context, so the
-    // endpoint yields null → the panel shows its "unavailable" state.
     if (url.includes('/handoff-view')) {
       return Promise.resolve(jsonResponse(null));
+    }
+    if (url.includes('/ticket-categories/tree')) {
+      return Promise.resolve(jsonResponse(EMPTY_CATEGORY_TREE));
     }
     return Promise.resolve(jsonResponse({}));
   });
@@ -140,5 +148,48 @@ describe('TicketWorkspacePage — Reopen button', () => {
 
     await screen.findByText('Mailbox full');
     expect(screen.queryByRole('button', { name: /reopen ticket/i })).toBeNull();
+  });
+});
+
+describe('TicketWorkspacePage — Close button', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('renders Close for an in_progress ticket as IT staff', async () => {
+    useAuthStore.setState({ user: IT_AGENT, token: 'test-token', isAuthenticated: true });
+    mockTicketDetailFetch('in_progress');
+    renderPage();
+
+    expect(await screen.findByRole('button', { name: /^Close$/i })).toBeInTheDocument();
+  });
+
+  it('does not render Close for a closed ticket as IT staff', async () => {
+    useAuthStore.setState({ user: IT_AGENT, token: 'test-token', isAuthenticated: true });
+    mockTicketDetailFetch('closed');
+    renderPage();
+
+    await screen.findByText('Mailbox full');
+    expect(screen.queryByRole('button', { name: /^Close$/i })).toBeNull();
+  });
+});
+
+describe('TicketWorkspacePage — Properties status control', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('does not list closed in the Properties status dropdown', async () => {
+    useAuthStore.setState({ user: IT_AGENT, token: 'test-token', isAuthenticated: true });
+    mockTicketDetailFetch('in_progress');
+    renderPage();
+
+    const statusSelect = await screen.findByLabelText(/^Status$/i);
+    const options = within(statusSelect).getAllByRole('option');
+    const values = options.map((o) => o.getAttribute('value'));
+    const labels = options.map((o) => o.textContent?.trim().toLowerCase());
+
+    expect(values).not.toContain('closed');
+    expect(labels).not.toContain('closed');
   });
 });
