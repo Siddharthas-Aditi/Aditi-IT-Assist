@@ -192,4 +192,16 @@ describe('TicketWorkspacePage — Properties status control', () => {
     expect(values).not.toContain('closed');
     expect(labels).not.toContain('closed');
   });
+
+  it('shows closed status as read-only text when ticket is closed', async () => {
+    useAuthStore.setState({ user: IT_AGENT, token: 'test-token', isAuthenticated: true });
+    mockTicketDetailFetch('closed');
+    renderPage();
+
+    await screen.findByText('Mailbox full');
+    expect(screen.queryByLabelText(/^Status$/i)).toBeNull();
+    expect(screen.getByText(/^Status$/i).nextElementSibling?.textContent?.trim()).toBe(
+      'closed',
+    );
+  });
 });

@@ -140,20 +140,24 @@ export function TicketPropertiesPanel({
           </select>
         </Field>
 
-        <Field label="Status" htmlFor="ticket-status">
-          <select
-            id="ticket-status"
-            value={status}
-            disabled={fieldsDisabled}
-            onChange={(e) => setStatus(e.target.value)}
-            className={SELECT_CLASS}
-          >
-            {STATUS_OPTIONS.map((s) => (
-              <option key={s} value={s}>
-                {fmtLabel(s)}
-              </option>
-            ))}
-          </select>
+        <Field label="Status" htmlFor={status === 'closed' ? undefined : 'ticket-status'}>
+          {status === 'closed' ? (
+            <p className="text-sm capitalize text-foreground">{fmtLabel(status)}</p>
+          ) : (
+            <select
+              id="ticket-status"
+              value={status}
+              disabled={fieldsDisabled}
+              onChange={(e) => setStatus(e.target.value)}
+              className={SELECT_CLASS}
+            >
+              {STATUS_OPTIONS.map((s) => (
+                <option key={s} value={s}>
+                  {fmtLabel(s)}
+                </option>
+              ))}
+            </select>
+          )}
         </Field>
 
         <Field label="Source">

@@ -64,12 +64,18 @@ export function CategoryCascadeFields({
     () => findChildByName(roots, category),
     [roots, category],
   );
-  const l2Options = l1Node?.children ?? [];
+  const l2Options = useMemo(
+    () => l1Node?.children ?? [],
+    [l1Node],
+  );
   const l2Node = useMemo(
     () => findChildByName(l2Options, subcategory),
     [l2Options, subcategory],
   );
-  const l3Options = l2Node?.children ?? [];
+  const l3Options = useMemo(
+    () => l2Node?.children ?? [],
+    [l2Node],
+  );
   const showEmptyItemsHint = Boolean(subcategory && l3Options.length === 0);
 
   const fieldsDisabled = disabled || loading;
