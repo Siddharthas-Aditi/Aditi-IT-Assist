@@ -300,4 +300,3 @@ Must add/complete:
 5. Seeded tree allows closing immediately after migrate + seed.
 6. Ticket workspace shows a Properties rail with Update, and a Close button that opens
    the mandatory modal.
-`)
