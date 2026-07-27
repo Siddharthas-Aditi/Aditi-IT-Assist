@@ -62,3 +62,11 @@ export function AuditorRoute({ children }: { children: React.ReactNode }) {
     </RouteGuard>
   );
 }
+
+export function ITAdminRoute({ children }: { children: React.ReactNode }) {
+  return (
+    <RouteGuard allowedRoles={['it_admin']}>
+      {children}
+    </RouteGuard>
+  );
+}

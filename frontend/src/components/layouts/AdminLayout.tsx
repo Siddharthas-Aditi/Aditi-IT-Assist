@@ -21,10 +21,11 @@ import {
   Bot,
   FileBarChart,
   Headset,
+  Tags,
 } from 'lucide-react';
 
 import { useAuthStore } from '@/stores/auth-store';
-import { hasPermission, isLeadOrAbove, P, type UserRole } from '@/lib/permissions';
+import { hasPermission, isAdmin, isLeadOrAbove, P, type UserRole } from '@/lib/permissions';
 import type { AuthUser } from '@/types/auth';
 
 const ROLE_LABELS: Record<UserRole, string> = {
@@ -56,6 +57,12 @@ const NAV: NavItem[] = [
     label: 'User Management',
     icon: UserCog,
     can: (u) => hasPermission(u, P.ADMIN_MANAGE_USERS),
+  },
+  {
+    to: '/dashboard/ticket-categories',
+    label: 'Ticket Categories',
+    icon: Tags,
+    can: (u) => isAdmin(u),
   },
   {
     to: '/audit',
