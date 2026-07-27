@@ -19,6 +19,7 @@ from app.api.v1.specialist_chat import (
 )
 from app.api.v1.specialist_chat import router as specialist_chat_router
 from app.api.v1.specialist_queue import router as specialist_queue_router
+from app.api.v1.ticket_categories import router as ticket_categories_router
 from app.api.v1.tickets import router as tickets_router
 
 api_router = APIRouter()
@@ -27,6 +28,9 @@ api_router.include_router(health_router, prefix="/health", tags=["health"])
 api_router.include_router(auth_router, prefix="/auth", tags=["auth"])
 api_router.include_router(chat_router, prefix="/chat", tags=["chat"])
 api_router.include_router(tickets_router, prefix="/tickets", tags=["tickets"])
+api_router.include_router(
+    ticket_categories_router, prefix="/ticket-categories", tags=["ticket-categories"]
+)
 api_router.include_router(
     knowledge_admin_router, prefix="/knowledge/admin", tags=["knowledge-admin"]
 )

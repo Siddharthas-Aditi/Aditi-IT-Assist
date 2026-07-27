@@ -33,7 +33,7 @@ from app.models.reporting import ScheduledReportRun
 from app.models.specialist_chat import SpecialistChatMessage, SpecialistChatSession
 from app.models.sso import IdentityProviderConfig, IdPGroupRoleMapping, SPCertificate
 from app.models.support import Message, SupportSession
-from app.models.ticket import Ticket, TicketComment, TicketEvent
+from app.models.ticket import Ticket, TicketCategory, TicketComment, TicketEvent
 
 __all__ = [
     "Base",
@@ -58,6 +58,7 @@ __all__ = [
     "Message",
     # Tickets
     "Ticket",
+    "TicketCategory",
     "TicketComment",
     "TicketEvent",
     # Chat-escalation artifacts
