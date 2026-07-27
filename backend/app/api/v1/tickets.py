@@ -1,14 +1,16 @@
 """Ticket management endpoints — enterprise helpdesk lifecycle."""
 
 import uuid
+from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.services.auth.dependencies import CurrentUser, ITAgentUser
+from app.services.ticket_category_validation import CategoryCascadeError
 from app.services.ticket_service import TicketService
 
 router = APIRouter()
@@ -40,6 +42,7 @@ class TicketResponse(BaseModel):
     status: str
     priority: str
     category: str | None = None
+    source: str | None = None
     requester_id: str
     assigned_to: str | None = None
     created_at: str
@@ -47,6 +50,15 @@ class TicketResponse(BaseModel):
     sla_resolution_target: str | None = None
     ai_summary: str | None = None
     resolution_notes: str | None = None
+    subcategory: str | None = None
+    item: str | None = None
+    ticket_type: str | None = None
+    urgency: str | None = None
+    impact: str | None = None
+    close_notes: str | None = None
+    closed_by: str | None = None
+    closed_at: str | None = None
+    resolved_at: str | None = None
 
 
 class TicketListResponse(BaseModel):
@@ -82,6 +94,34 @@ class TicketReopenRequest(BaseModel):
     """Reopen a resolved/closed ticket."""
 
     comment: str | None = None
+
+
+class TicketUpdateRequest(BaseModel):
+    """Partial update of ticket properties (IT staff)."""
+
+    priority: str | None = None
+    urgency: str | None = None
+    impact: str | None = None
+    ticket_type: str | None = None
+    category: str | None = None
+    subcategory: str | None = None
+    item: str | None = None
+    resolution_notes: str | None = None
+    status: str | None = None
+
+
+class TicketCloseRequest(BaseModel):
+    """Close a ticket with a mandatory resolution form (IT staff only).
+
+    Employees cannot close tickets — only IT staff can mark a ticket closed
+    after verifying the issue is resolved.
+    """
+
+    resolution_notes: str
+    category: str
+    subcategory: str
+    item: str
+    close_notes: str | None = None
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -170,27 +210,71 @@ async def get_my_ticket(
 async def get_ticket_queue(
     agent_user: ITAgentUser,
     db: Annotated[AsyncSession, Depends(get_db)],
-    ticket_status: str | None = Query(None, alias="status"),
-    priority: str | None = None,
+    ticket_status: str | None = Query(None, alias="status", description="Comma-separated statuses"),
+    priority: str | None = Query(None, description="Comma-separated priorities"),
+    category: str | None = None,
+    source: str | None = None,
+    search: str | None = None,
+    date_from: datetime | None = Query(None, description="ISO 8601 start date (inclusive)"),
+    date_to: datetime | None = Query(None, description="ISO 8601 end date (inclusive)"),
     assigned_only: bool = False,
-    limit: int = 50,
-    offset: int = 0,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
 ) -> TicketListResponse:
-    """Get ticket queue for IT agents."""
+    """Get ticket queue for IT agents with rich filtering and accurate pagination."""
     service = TicketService(db)
-    tickets = await service.list_tickets_for_agent(
+    tickets, total = await service.list_tickets_for_agent(
         agent=agent_user,
         assigned_only=assigned_only,
         status=ticket_status,
         priority=priority,
+        category=category,
+        source=source,
+        search=search,
+        date_from=date_from,
+        date_to=date_to,
         limit=limit,
         offset=offset,
     )
     return TicketListResponse(
         tickets=[_ticket_to_response(t) for t in tickets],
-        total=len(tickets),
+        total=total,
         limit=limit,
         offset=offset,
+    )
+
+
+@router.get("/export")
+async def export_tickets_csv(
+    agent_user: ITAgentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    ticket_status: str | None = Query(None, alias="status"),
+    priority: str | None = None,
+    category: str | None = None,
+    source: str | None = None,
+    search: str | None = None,
+    date_from: datetime | None = Query(None),
+    date_to: datetime | None = Query(None),
+    assigned_only: bool = False,
+) -> Response:
+    """Download all matching tickets as a CSV file (no pagination limit)."""
+    service = TicketService(db)
+    csv_content = await service.export_tickets_csv(
+        agent=agent_user,
+        assigned_only=assigned_only,
+        status=ticket_status,
+        priority=priority,
+        category=category,
+        source=source,
+        search=search,
+        date_from=date_from,
+        date_to=date_to,
+    )
+    filename = f"tickets_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.csv"
+    return Response(
+        content=csv_content,
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 
@@ -264,12 +348,93 @@ async def update_ticket_status(
 ) -> TicketResponse:
     """Update ticket status."""
     service = TicketService(db)
-    ticket = await service.update_status(
-        uuid.UUID(ticket_id),
-        data.status,
-        agent_user,
-        comment=data.comment,
-    )
+    try:
+        ticket = await service.update_status(
+            uuid.UUID(ticket_id),
+            data.status,
+            agent_user,
+            comment=data.comment,
+        )
+    except ValueError as exc:
+        if "Use POST" in str(exc):
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return _ticket_to_response(ticket)
+
+
+@router.post("/{ticket_id}/close")
+async def close_ticket(
+    ticket_id: str,
+    data: TicketCloseRequest,
+    agent_user: ITAgentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> TicketResponse:
+    """Close ticket with mandatory resolution form (IT staff only)."""
+    service = TicketService(db)
+    try:
+        ticket = await service.close_ticket(
+            uuid.UUID(ticket_id),
+            agent_user,
+            resolution_notes=data.resolution_notes,
+            category=data.category,
+            subcategory=data.subcategory,
+            item=data.item,
+            close_notes=data.close_notes,
+        )
+        await db.commit()
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except CategoryCascadeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ValueError as exc:
+        msg = str(exc)
+        if msg == "Ticket not found":
+            code = 404
+        elif "already closed" in msg or "Use POST" in msg:
+            code = 409
+        else:
+            code = 400
+        raise HTTPException(status_code=code, detail=msg) from exc
+    return _ticket_to_response(ticket)
+
+
+@router.patch("/{ticket_id}")
+async def patch_ticket(
+    ticket_id: str,
+    data: TicketUpdateRequest,
+    agent_user: ITAgentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> TicketResponse:
+    """Partial property update (IT staff). Cannot close via this endpoint."""
+    service = TicketService(db)
+    try:
+        ticket = await service.update_ticket_properties(
+            uuid.UUID(ticket_id),
+            agent_user,
+            priority=data.priority,
+            urgency=data.urgency,
+            impact=data.impact,
+            ticket_type=data.ticket_type,
+            category=data.category,
+            subcategory=data.subcategory,
+            item=data.item,
+            resolution_notes=data.resolution_notes,
+            status=data.status,
+        )
+        await db.commit()
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except CategoryCascadeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ValueError as exc:
+        msg = str(exc)
+        if msg == "Ticket not found":
+            code = 404
+        elif "Use POST" in msg:
+            code = 409
+        else:
+            code = 400
+        raise HTTPException(status_code=code, detail=msg) from exc
     return _ticket_to_response(ticket)
 
 
@@ -339,6 +504,7 @@ def _ticket_to_response(ticket) -> TicketResponse:
         status=ticket.status,
         priority=ticket.priority,
         category=ticket.category,
+        source=getattr(ticket, "source", None),
         requester_id=str(ticket.requester_id),
         assigned_to=str(ticket.assigned_to) if ticket.assigned_to else None,
         created_at=ticket.created_at.isoformat(),
@@ -350,4 +516,13 @@ def _ticket_to_response(ticket) -> TicketResponse:
         else None,
         ai_summary=ticket.ai_summary,
         resolution_notes=ticket.resolution_notes,
+        subcategory=ticket.subcategory,
+        item=ticket.item,
+        ticket_type=ticket.ticket_type,
+        urgency=ticket.urgency,
+        impact=ticket.impact,
+        close_notes=ticket.close_notes,
+        closed_by=str(ticket.closed_by) if ticket.closed_by else None,
+        closed_at=ticket.closed_at.isoformat() if ticket.closed_at else None,
+        resolved_at=ticket.resolved_at.isoformat() if ticket.resolved_at else None,
     )
