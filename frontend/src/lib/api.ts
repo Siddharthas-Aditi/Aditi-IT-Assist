@@ -20,7 +20,7 @@
  * Keeping the event boundary here means api.ts never imports react-router.
  */
 
-import { useAuthStore } from '@/stores/auth-store';
+import { useAuthStore } from "@/stores/auth-store";
 import type {
   ConsentNotification,
   RemoteSessionDetail,
@@ -28,17 +28,17 @@ import type {
   RequestSessionForm,
   SessionEndForm,
   SessionLaunchInfo,
-} from '@/types/remote-support';
+} from "@/types/remote-support";
 
-export const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
+export const API_BASE = import.meta.env.VITE_API_URL || "/api/v1";
 
 /** Custom event the auth store listens to. */
-export const SESSION_EXPIRED_EVENT = 'aditi:session-expired';
+export const SESSION_EXPIRED_EVENT = "aditi:session-expired";
 
 export type SessionExpiredReason =
-  | 'session_expired'
-  | 'auth_required'
-  | 'refresh_failed';
+  | "session_expired"
+  | "auth_required"
+  | "refresh_failed";
 
 export interface SessionExpiredDetail {
   reason: SessionExpiredReason;
@@ -47,7 +47,7 @@ export interface SessionExpiredDetail {
 }
 
 function emitSessionExpired(detail: SessionExpiredDetail): void {
-  if (typeof window === 'undefined') return;
+  if (typeof window === "undefined") return;
   window.dispatchEvent(
     new CustomEvent<SessionExpiredDetail>(SESSION_EXPIRED_EVENT, { detail }),
   );
@@ -61,11 +61,14 @@ export class ApiError extends Error {
     public errorCode?: string,
   ) {
     super(message);
-    this.name = 'ApiError';
+    this.name = "ApiError";
   }
 }
 
-export type Query = Record<string, string | number | boolean | null | undefined>;
+export type Query = Record<
+  string,
+  string | number | boolean | null | undefined
+>;
 
 /**
  * Turn a backend error body into a human-readable message.
@@ -75,30 +78,32 @@ export type Query = Record<string, string | number | boolean | null | undefined>
  * field-aware sentence instead of a generic "Request failed".
  */
 export function extractErrorMessage(data: unknown, status: number): string {
-  const detail = (data as { detail?: unknown; message?: unknown } | null)?.detail;
+  const detail = (data as { detail?: unknown; message?: unknown } | null)
+    ?.detail;
   const message = (data as { message?: unknown } | null)?.message;
 
-  if (typeof detail === 'string') return detail;
-  if (typeof message === 'string') return message;
+  if (typeof detail === "string") return detail;
+  if (typeof message === "string") return message;
 
   // Structured 401 body: `{ detail: { error_code, message } }`.
-  if (detail && typeof detail === 'object' && 'message' in (detail as object)) {
+  if (detail && typeof detail === "object" && "message" in (detail as object)) {
     const m = (detail as { message?: unknown }).message;
-    if (typeof m === 'string') return m;
+    if (typeof m === "string") return m;
   }
 
   if (Array.isArray(detail)) {
     const parts = detail
       .map((d) => {
-        if (typeof d === 'string') return d;
+        if (typeof d === "string") return d;
         const msg = (d as { msg?: string })?.msg;
         const loc = (d as { loc?: unknown[] })?.loc;
-        const field = Array.isArray(loc) && loc.length ? loc[loc.length - 1] : undefined;
+        const field =
+          Array.isArray(loc) && loc.length ? loc[loc.length - 1] : undefined;
         if (!msg) return undefined;
         return field ? `${msg} (${field})` : msg;
       })
       .filter(Boolean);
-    if (parts.length) return parts.join('; ');
+    if (parts.length) return parts.join("; ");
   }
 
   return `Request failed (${status})`;
@@ -107,15 +112,19 @@ export function extractErrorMessage(data: unknown, status: number): string {
 /** Pulls the typed error_code from a structured 401 body, if present. */
 function extractErrorCode(data: unknown): string | undefined {
   const detail = (data as { detail?: unknown } | null)?.detail;
-  if (detail && typeof detail === 'object' && 'error_code' in (detail as object)) {
+  if (
+    detail &&
+    typeof detail === "object" &&
+    "error_code" in (detail as object)
+  ) {
     const code = (detail as { error_code?: unknown }).error_code;
-    if (typeof code === 'string') return code;
+    if (typeof code === "string") return code;
   }
   return undefined;
 }
 
 interface RequestOptions {
-  method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
+  method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
   body?: unknown;
   query?: Query;
 }
@@ -125,7 +134,7 @@ export function buildUrl(path: string, query?: Query): string {
   if (!query) return url;
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(query)) {
-    if (value !== undefined && value !== null && value !== '') {
+    if (value !== undefined && value !== null && value !== "") {
       params.append(key, String(value));
     }
   }
@@ -150,8 +159,8 @@ async function refreshAccessToken(): Promise<string | null> {
     if (!refreshToken) return null;
     try {
       const resp = await fetch(`${API_BASE}/auth/refresh`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ refresh_token: refreshToken }),
       });
       if (!resp.ok) return null;
@@ -178,17 +187,19 @@ export function buildHeaders(body: unknown): Record<string, string> {
   const token = useAuthStore.getState().token;
   const headers: Record<string, string> = {};
   if (token) headers.Authorization = `Bearer ${token}`;
-  const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
-  if (body !== undefined && !isFormData) headers['Content-Type'] = 'application/json';
+  const isFormData =
+    typeof FormData !== "undefined" && body instanceof FormData;
+  if (body !== undefined && !isFormData)
+    headers["Content-Type"] = "application/json";
   return headers;
 }
 
 /** Routes the wrapper should NEVER try to refresh against (avoid loops). */
 function isAuthRoute(path: string): boolean {
   return (
-    path.startsWith('/auth/login') ||
-    path.startsWith('/auth/refresh') ||
-    path.startsWith('/auth/register')
+    path.startsWith("/auth/login") ||
+    path.startsWith("/auth/refresh") ||
+    path.startsWith("/auth/register")
   );
 }
 
@@ -196,14 +207,19 @@ export async function apiRequest<T>(
   path: string,
   options: RequestOptions = {},
 ): Promise<T> {
-  const { method = 'GET', body, query } = options;
-  const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
+  const { method = "GET", body, query } = options;
+  const isFormData =
+    typeof FormData !== "undefined" && body instanceof FormData;
 
   async function performFetch(): Promise<Response> {
     return fetch(buildUrl(path, query), {
       method,
       headers: buildHeaders(body),
-      body: isFormData ? body : body !== undefined ? JSON.stringify(body) : undefined,
+      body: isFormData
+        ? body
+        : body !== undefined
+          ? JSON.stringify(body)
+          : undefined,
     });
   }
 
@@ -217,7 +233,7 @@ export async function apiRequest<T>(
     const peekData = peekText ? safeJson(peekText) : null;
     const code = extractErrorCode(peekData);
 
-    if (code === 'session_expired') {
+    if (code === "session_expired") {
       const newToken = await refreshAccessToken();
       if (newToken) {
         // Single retry with the new token.
@@ -228,17 +244,17 @@ export async function apiRequest<T>(
           // Still 401 after refresh — the refresh succeeded but the call
           // still failed (server-side revocation, permissions change).
           // Treat as terminal.
-          emitSessionExpired({ reason: 'refresh_failed', next: currentPath() });
-          throw new ApiError(401, 'Session expired', code);
+          emitSessionExpired({ reason: "refresh_failed", next: currentPath() });
+          throw new ApiError(401, "Session expired", code);
         }
       } else {
-        emitSessionExpired({ reason: 'session_expired', next: currentPath() });
+        emitSessionExpired({ reason: "session_expired", next: currentPath() });
         throw new ApiError(401, extractErrorMessage(peekData, 401), code);
       }
     } else {
       // auth_required (or unknown 401) — no point refreshing without context.
       emitSessionExpired({
-        reason: (code as SessionExpiredReason | undefined) ?? 'auth_required',
+        reason: (code as SessionExpiredReason | undefined) ?? "auth_required",
         next: currentPath(),
       });
       throw new ApiError(401, extractErrorMessage(peekData, 401), code);
@@ -269,9 +285,9 @@ function safeJson(text: string): unknown {
 }
 
 function currentPath(): string | undefined {
-  if (typeof window === 'undefined') return undefined;
+  if (typeof window === "undefined") return undefined;
   const p = window.location.pathname + window.location.search;
-  return p === '/login' ? undefined : p;
+  return p === "/login" ? undefined : p;
 }
 
 // ── Feature clients ─────────────────────────────────────────────────
@@ -304,7 +320,11 @@ export interface ChatMessageResponse {
   confidence_score: number;
   issue_category: string | null;
   issue_subtype: string | null;
-  resolution_steps: { step_number: number; instruction: string; details?: string }[];
+  resolution_steps: {
+    step_number: number;
+    instruction: string;
+    details?: string;
+  }[];
   requires_escalation: boolean;
   follow_up_question: string | null;
   quick_replies: { label: string; value: string }[] | null;
@@ -327,21 +347,21 @@ export interface LiveAgentResponse {
 
 export const chatApi = {
   sendMessage: (message: string, sessionId?: string) =>
-    apiRequest<ChatMessageResponse>('/chat/message', {
-      method: 'POST',
+    apiRequest<ChatMessageResponse>("/chat/message", {
+      method: "POST",
       body: { message, session_id: sessionId },
     }),
 
   requestLiveAgent: (sessionId: string) =>
-    apiRequest<LiveAgentResponse>('/chat/request-live-agent', {
-      method: 'POST',
+    apiRequest<LiveAgentResponse>("/chat/request-live-agent", {
+      method: "POST",
       body: { session_id: sessionId },
     }),
 
   cancelWaiting: (sessionId: string) =>
     apiRequest<{ session_id: string; message: string; cancelled: boolean }>(
-      '/chat/cancel-waiting',
-      { method: 'POST', body: { session_id: sessionId } },
+      "/chat/cancel-waiting",
+      { method: "POST", body: { session_id: sessionId } },
     ),
 
   getWaitingStatus: (sessionId: string) =>
@@ -352,7 +372,7 @@ export const chatApi = {
       waited_seconds: number;
       specialist_available: boolean;
       fallback_message: string | null;
-      handoff_state?: 'connecting' | 'busy' | 'connected' | 'fallback';
+      handoff_state?: "connecting" | "busy" | "connected" | "fallback";
     }>(`/chat/waiting-status/${sessionId}`),
 };
 
@@ -362,35 +382,226 @@ export interface TicketReopenResult {
   status: string;
 }
 
+export interface TicketListItem {
+  id: string;
+  ticket_number: string;
+  title: string;
+  description: string;
+  status: string;
+  priority: string;
+  category: string | null;
+  subcategory?: string | null;
+  item?: string | null;
+  ticket_type?: string | null;
+  urgency?: string | null;
+  impact?: string | null;
+  close_notes?: string | null;
+  closed_by?: string | null;
+  closed_at?: string | null;
+  resolved_at?: string | null;
+  source?: string | null;
+  requester_id: string;
+  assigned_to: string | null;
+  created_at: string;
+  sla_response_target: string | null;
+  sla_resolution_target: string | null;
+  ai_summary: string | null;
+  resolution_notes: string | null;
+}
+
+export interface TicketListResponse {
+  tickets: TicketListItem[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface TicketFilters {
+  status?: string; // comma-separated, e.g. "new,triaged"
+  priority?: string; // comma-separated
+  category?: string;
+  source?: string;
+  search?: string;
+  date_from?: string; // ISO 8601
+  date_to?: string;
+  assigned_only?: boolean;
+  limit?: number;
+  offset?: number;
+}
+
 export const ticketsApi = {
   /** Reopen a resolved/closed ticket back to active work (IT staff only). */
   reopen: (id: string, comment?: string) =>
     apiRequest<TicketReopenResult>(`/tickets/${id}/reopen`, {
-      method: 'POST',
+      method: "POST",
       body: comment ? { comment } : undefined,
+    }),
+
+  /** Close a ticket with resolution metadata and category hierarchy. */
+  close: (
+    id: string,
+    body: {
+      resolution_notes: string;
+      category: string;
+      subcategory: string;
+      item: string;
+      close_notes?: string;
+    },
+  ) =>
+    apiRequest<TicketListItem>(`/tickets/${id}/close`, {
+      method: "POST",
+      body,
+    }),
+
+  /** Patch ticket fields (priority, urgency, category, status, etc.). */
+  update: (
+    id: string,
+    body: {
+      priority?: string;
+      urgency?: string | null;
+      impact?: string | null;
+      ticket_type?: string | null;
+      category?: string | null;
+      subcategory?: string | null;
+      item?: string | null;
+      status?: string;
+      resolution_notes?: string | null;
+    },
+  ) =>
+    apiRequest<TicketListItem>(`/tickets/${id}`, {
+      method: "PATCH",
+      body,
+    }),
+
+  /** List tickets for IT staff with rich filters and accurate pagination. */
+  list: (filters: TicketFilters = {}) =>
+    apiRequest<TicketListResponse>("/tickets/queue", {
+      query: filters as Record<
+        string,
+        string | number | boolean | null | undefined
+      >,
+    }),
+
+  /** Build a URL to download filtered tickets as CSV (navigated to, not fetched). */
+  exportCsvUrl: (filters: TicketFilters = {}): string => {
+    const base = `${API_BASE}/tickets/export`;
+    const params = new URLSearchParams();
+    Object.entries(filters).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== "") params.set(k, String(v));
+    });
+    const qs = params.toString();
+    return qs ? `${base}?${qs}` : base;
+  },
+
+  /**
+   * Download tickets as a CSV blob via a proper authenticated fetch.
+   * Triggers the browser "Save as" dialog.
+   */
+  exportCsv: async (filters: TicketFilters = {}): Promise<void> => {
+    const url = ticketsApi.exportCsvUrl(filters);
+    const token = useAuthStore.getState().token;
+    const resp = await fetch(url, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!resp.ok) throw new Error(`Export failed: ${resp.status}`);
+    const blob = await resp.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = blobUrl;
+    const cd = resp.headers.get("Content-Disposition") ?? "";
+    const match = cd.match(/filename="?([^"]+)"?/);
+    a.download =
+      match?.[1] ?? `tickets_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(blobUrl);
+  },
+};
+
+export interface TicketCategoryNode {
+  id: string;
+  name: string;
+  level: number;
+  parent_id: string | null;
+  is_active: boolean;
+  sort_order: number;
+  children?: TicketCategoryNode[];
+}
+
+export const ticketCategoriesApi = {
+  tree: () =>
+    apiRequest<{ categories: TicketCategoryNode[] }>(
+      "/ticket-categories/tree",
+    ),
+  list: (params?: {
+    level?: number;
+    parent_id?: string;
+    active_only?: boolean;
+  }) =>
+    apiRequest<TicketCategoryNode[]>("/ticket-categories", { query: params }),
+  create: (body: {
+    name: string;
+    level: number;
+    parent_id?: string | null;
+    sort_order?: number;
+  }) =>
+    apiRequest<TicketCategoryNode>("/ticket-categories", {
+      method: "POST",
+      body,
+    }),
+  update: (
+    id: string,
+    body: { name?: string; is_active?: boolean; sort_order?: number },
+  ) =>
+    apiRequest<TicketCategoryNode>(`/ticket-categories/${id}`, {
+      method: "PATCH",
+      body,
+    }),
+  remove: (id: string) =>
+    apiRequest<void>(`/ticket-categories/${id}`, { method: "DELETE" }),
+  reorder: (ordered_ids: string[]) =>
+    apiRequest<void>("/ticket-categories/reorder", {
+      method: "POST",
+      body: { ordered_ids },
     }),
 };
 
-const REMOTE = '/remote-support';
+const REMOTE = "/remote-support";
 
 export const remoteApi = {
   requestSession: (form: RequestSessionForm) =>
-    apiRequest<{ session_id: string } & Partial<RemoteSessionDetail>>(`${REMOTE}/sessions`, {
-      method: 'POST',
-      body: form,
-    }),
+    apiRequest<{ session_id: string } & Partial<RemoteSessionDetail>>(
+      `${REMOTE}/sessions`,
+      {
+        method: "POST",
+        body: form,
+      },
+    ),
   launchSession: (sessionId: string) =>
-    apiRequest<SessionLaunchInfo>(`${REMOTE}/sessions/${sessionId}/launch`, { method: 'POST' }),
+    apiRequest<SessionLaunchInfo>(`${REMOTE}/sessions/${sessionId}/launch`, {
+      method: "POST",
+    }),
   markConnected: (sessionId: string) =>
-    apiRequest<void>(`${REMOTE}/sessions/${sessionId}/connected`, { method: 'POST' }),
+    apiRequest<void>(`${REMOTE}/sessions/${sessionId}/connected`, {
+      method: "POST",
+    }),
   endSession: (sessionId: string, body: SessionEndForm) =>
-    apiRequest<void>(`${REMOTE}/sessions/${sessionId}/end`, { method: 'POST', body }),
+    apiRequest<void>(`${REMOTE}/sessions/${sessionId}/end`, {
+      method: "POST",
+      body,
+    }),
   updateResolution: (sessionId: string, body: SessionEndForm) =>
-    apiRequest<void>(`${REMOTE}/sessions/${sessionId}/resolution`, { method: 'PUT', body }),
+    apiRequest<void>(`${REMOTE}/sessions/${sessionId}/resolution`, {
+      method: "PUT",
+      body,
+    }),
   getSession: (sessionId: string) =>
     apiRequest<RemoteSessionDetail>(`${REMOTE}/sessions/${sessionId}`),
   listSessions: (params?: { limit?: number }) =>
-    apiRequest<RemoteSessionSummary[]>(`${REMOTE}/sessions`, { query: { limit: params?.limit } }),
+    apiRequest<RemoteSessionSummary[]>(`${REMOTE}/sessions`, {
+      query: { limit: params?.limit },
+    }),
 
   // ── Employee consent flow ────────────────────────────────────────
   /** Poll for a pending consent request targeting the current user. */
@@ -399,15 +610,19 @@ export const remoteApi = {
       `${REMOTE}/consent/pending`,
     ),
   /** Grant or deny a pending consent request. */
-  respondConsent: (sessionId: string, granted: boolean, denialReason?: string) =>
+  respondConsent: (
+    sessionId: string,
+    granted: boolean,
+    denialReason?: string,
+  ) =>
     apiRequest<void>(`${REMOTE}/sessions/${sessionId}/consent`, {
-      method: 'POST',
+      method: "POST",
       body: { granted, denial_reason: denialReason ?? null },
     }),
   /** Revoke consent mid-session — terminates the remote session immediately. */
   revokeConsent: (sessionId: string, reason?: string) =>
     apiRequest<void>(`${REMOTE}/sessions/${sessionId}/revoke`, {
-      method: 'POST',
+      method: "POST",
       body: { reason: reason ?? null },
     }),
 };
