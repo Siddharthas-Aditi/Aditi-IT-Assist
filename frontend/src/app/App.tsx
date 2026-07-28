@@ -27,7 +27,6 @@ import { ProfilePage } from "@/pages/employee/ProfilePage";
 
 // IT Operations pages
 import { LiveQueuePage } from "@/pages/operations/LiveQueuePage";
-import { AllTicketsPage } from "@/pages/operations/AllTicketsPage";
 import { AssignedTicketsPage } from "@/pages/operations/AssignedTicketsPage";
 import { LiveChatPage } from "@/pages/operations/LiveChatPage";
 import { TicketWorkspacePage } from "@/pages/operations/TicketWorkspacePage";
@@ -104,7 +103,6 @@ export function App() {
       >
         <Route index element={<LiveQueuePage />} />
         <Route path="queue" element={<LiveQueuePage />} />
-        <Route path="tickets" element={<AllTicketsPage />} />
         <Route path="assigned" element={<AssignedTicketsPage />} />
         <Route path="live-chat/:sessionId" element={<LiveChatPage />} />
         <Route path="tickets/:id" element={<TicketWorkspacePage />} />
