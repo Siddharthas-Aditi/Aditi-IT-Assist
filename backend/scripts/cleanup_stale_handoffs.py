@@ -20,9 +20,7 @@ from app.models.ticket import Ticket
 
 
 async def _run(apply: bool) -> dict:
-    cutoff = datetime.now(UTC) - timedelta(
-        seconds=settings.LIVE_HANDOFF_FALLBACK_SECONDS
-    )
+    cutoff = datetime.now(UTC) - timedelta(seconds=settings.LIVE_HANDOFF_FALLBACK_SECONDS)
     async with async_session_factory() as db:
         active_sub = select(SpecialistChatSession.ticket_id).where(
             SpecialistChatSession.status.in_(("active", "idle_warning"))
@@ -39,9 +37,7 @@ async def _run(apply: bool) -> dict:
         tickets = (await db.execute(stmt)).scalars().all()
         print(f"Found {len(tickets)} stale handoff ticket(s).")
         for t in tickets:
-            print(
-                f"  {t.ticket_number}  status={t.status}  created={t.created_at}"
-            )
+            print(f"  {t.ticket_number}  status={t.status}  created={t.created_at}")
             if apply:
                 t.status = "waiting_for_user"  # out of queue; visible for async
         if apply:

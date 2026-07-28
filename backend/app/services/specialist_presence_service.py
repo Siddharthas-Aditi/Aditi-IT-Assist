@@ -57,9 +57,7 @@ class PresenceService:
         await self.db.flush()
         return row
 
-    async def set_status(
-        self, user_id: uuid.UUID, status: str
-    ) -> SpecialistAvailability:
+    async def set_status(self, user_id: uuid.UUID, status: str) -> SpecialistAvailability:
         if status not in ("available", "away"):
             raise ValueError(f"invalid status {status!r}")
         # Setting a status also counts as presence activity.
@@ -71,14 +69,10 @@ class PresenceService:
     async def get(self, user_id: uuid.UUID) -> SpecialistAvailability | None:
         return await self.db.get(SpecialistAvailability, user_id)
 
-    async def list_available_ids(
-        self, now: datetime | None = None
-    ) -> list[uuid.UUID]:
+    async def list_available_ids(self, now: datetime | None = None) -> list[uuid.UUID]:
         from app.core.config import settings
 
         ts = now or datetime.now(UTC)
         ttl = settings.SPECIALIST_PRESENCE_TTL_SECONDS
         rows = (await self.db.execute(select(SpecialistAvailability))).scalars().all()
-        return [
-            r.user_id for r in rows if is_available(r.status, r.last_heartbeat_at, ts, ttl)
-        ]
+        return [r.user_id for r in rows if is_available(r.status, r.last_heartbeat_at, ts, ttl)]

@@ -102,9 +102,7 @@ async def test_update_properties_employee_forbidden():
         patch.object(svc, "_get_ticket", AsyncMock(return_value=ticket)),
         pytest.raises(PermissionError),
     ):
-        await svc.update_ticket_properties(
-            ticket.id, _user("employee"), priority="high"
-        )
+        await svc.update_ticket_properties(ticket.id, _user("employee"), priority="high")
 
 
 @pytest.mark.asyncio

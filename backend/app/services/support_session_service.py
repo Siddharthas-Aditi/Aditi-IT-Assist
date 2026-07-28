@@ -122,9 +122,7 @@ class SupportSessionService:
             record.status = status
             record.session_type = session_type
             record.issue_category = state.get("issue_category") or record.issue_category
-            record.issue_subcategory = (
-                state.get("issue_subcategory") or record.issue_subcategory
-            )
+            record.issue_subcategory = state.get("issue_subcategory") or record.issue_subcategory
             record.severity = state.get("severity") or record.severity
             record.urgency = state.get("urgency") or record.urgency
             if confidence is not None:

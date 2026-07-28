@@ -44,9 +44,7 @@ async def test_employee_internal_flag_forced_false():
     service._add_event = AsyncMock()
 
     employee = _user(role="employee", user_id=owner_id)
-    comment = await service.add_comment(
-        ticket.id, employee, "public update", is_internal=True
-    )
+    comment = await service.add_comment(ticket.id, employee, "public update", is_internal=True)
     assert comment.is_internal is False
     db.add.assert_called()
 
@@ -62,7 +60,5 @@ async def test_staff_can_add_internal_note():
     service._add_event = AsyncMock()
 
     agent = _user(role="it_lead")
-    comment = await service.add_comment(
-        ticket.id, agent, "internal triage note", is_internal=True
-    )
+    comment = await service.add_comment(ticket.id, agent, "internal triage note", is_internal=True)
     assert comment.is_internal is True

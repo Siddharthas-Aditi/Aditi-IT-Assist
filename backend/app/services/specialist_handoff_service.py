@@ -185,11 +185,7 @@ class HandoffService:
         # No active offer — check whether this is a repeat call by the specialist
         # who already accepted (idempotent), vs. a genuine conflict/missing offer.
         latest = await self._latest_offer_for(ticket_id)
-        if (
-            latest is not None
-            and latest.state == "accepted"
-            and latest.offered_to == specialist.id
-        ):
+        if latest is not None and latest.state == "accepted" and latest.offered_to == specialist.id:
             return latest
         raise PermissionError("No active handoff offer for this ticket")
 
