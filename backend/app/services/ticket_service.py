@@ -1,10 +1,12 @@
 """Ticket service — enterprise helpdesk ticket lifecycle management."""
 
+import csv
+import io
 import uuid
 from datetime import UTC, datetime, timedelta
 
 import structlog
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.auth import User
@@ -466,26 +468,177 @@ class TicketService:
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
 
+    @staticmethod
+    def _csv_terms(raw: str | None) -> list[str]:
+        """Split a comma-separated filter value into non-empty terms."""
+        if not raw:
+            return []
+        return [term.strip() for term in raw.split(",") if term.strip()]
+
+    def _agent_queue_filters(
+        self,
+        agent: User,
+        assigned_only: bool,
+        status: str | None,
+        priority: str | None,
+        category: str | None,
+        source: str | None,
+        search: str | None,
+        date_from: datetime | None,
+        date_to: datetime | None,
+    ) -> list:
+        """Build the WHERE clauses shared by the agent queue and CSV export.
+
+        `status`/`priority` accept comma-separated values so the UI can filter
+        on several at once; everything else is a single value.
+        """
+        clauses: list = []
+        if assigned_only:
+            clauses.append(Ticket.assigned_to == agent.id)
+
+        statuses = self._csv_terms(status)
+        if statuses:
+            clauses.append(Ticket.status.in_(statuses))
+
+        priorities = self._csv_terms(priority)
+        if priorities:
+            clauses.append(Ticket.priority.in_(priorities))
+
+        if category:
+            clauses.append(Ticket.category == category)
+        if source:
+            clauses.append(Ticket.source == source)
+        if date_from:
+            clauses.append(Ticket.created_at >= date_from)
+        if date_to:
+            clauses.append(Ticket.created_at <= date_to)
+
+        if search and search.strip():
+            pattern = f"%{search.strip()}%"
+            clauses.append(
+                or_(
+                    Ticket.ticket_number.ilike(pattern),
+                    Ticket.title.ilike(pattern),
+                    Ticket.description.ilike(pattern),
+                    Ticket.category.ilike(pattern),
+                )
+            )
+        return clauses
+
     async def list_tickets_for_agent(
         self,
         agent: User,
         assigned_only: bool = False,
         status: str | None = None,
         priority: str | None = None,
+        category: str | None = None,
+        source: str | None = None,
+        search: str | None = None,
+        date_from: datetime | None = None,
+        date_to: datetime | None = None,
         limit: int = 50,
         offset: int = 0,
-    ) -> list[Ticket]:
-        """List tickets visible to an IT agent."""
-        stmt = select(Ticket)
-        if assigned_only:
-            stmt = stmt.where(Ticket.assigned_to == agent.id)
-        if status:
-            stmt = stmt.where(Ticket.status == status)
-        if priority:
-            stmt = stmt.where(Ticket.priority == priority)
-        stmt = stmt.order_by(Ticket.created_at.desc()).limit(limit).offset(offset)
+    ) -> tuple[list[Ticket], int]:
+        """List tickets visible to an IT agent.
+
+        Returns `(page_of_tickets, total_matching)` — the total is counted
+        against the same filters but ignores limit/offset, so the UI can
+        paginate accurately instead of inferring the count from the page.
+        """
+        clauses = self._agent_queue_filters(
+            agent=agent,
+            assigned_only=assigned_only,
+            status=status,
+            priority=priority,
+            category=category,
+            source=source,
+            search=search,
+            date_from=date_from,
+            date_to=date_to,
+        )
+
+        total_stmt = select(func.count(Ticket.id)).where(*clauses)
+        total = (await self.db.execute(total_stmt)).scalar() or 0
+
+        stmt = (
+            select(Ticket)
+            .where(*clauses)
+            .order_by(Ticket.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
         result = await self.db.execute(stmt)
-        return list(result.scalars().all())
+        return list(result.scalars().all()), total
+
+    async def export_tickets_csv(
+        self,
+        agent: User,
+        assigned_only: bool = False,
+        status: str | None = None,
+        priority: str | None = None,
+        category: str | None = None,
+        source: str | None = None,
+        search: str | None = None,
+        date_from: datetime | None = None,
+        date_to: datetime | None = None,
+    ) -> str:
+        """Render every ticket matching the queue filters as CSV text.
+
+        Deliberately unpaginated — this backs the "export what I'm looking at"
+        action, so it must apply the same filters as the queue but no limit.
+        """
+        clauses = self._agent_queue_filters(
+            agent=agent,
+            assigned_only=assigned_only,
+            status=status,
+            priority=priority,
+            category=category,
+            source=source,
+            search=search,
+            date_from=date_from,
+            date_to=date_to,
+        )
+        stmt = select(Ticket).where(*clauses).order_by(Ticket.created_at.desc())
+        tickets = list((await self.db.execute(stmt)).scalars().all())
+
+        buffer = io.StringIO()
+        writer = csv.writer(buffer)
+        writer.writerow(
+            [
+                "ticket_number",
+                "title",
+                "status",
+                "priority",
+                "category",
+                "subcategory",
+                "item",
+                "ticket_type",
+                "source",
+                "assigned_to",
+                "created_at",
+                "resolved_at",
+                "closed_at",
+            ]
+        )
+        for ticket in tickets:
+            writer.writerow(
+                [
+                    ticket.ticket_number,
+                    ticket.title,
+                    ticket.status,
+                    ticket.priority,
+                    ticket.category or "",
+                    ticket.subcategory or "",
+                    ticket.item or "",
+                    ticket.ticket_type or "",
+                    ticket.source,
+                    str(ticket.assigned_to) if ticket.assigned_to else "",
+                    ticket.created_at.isoformat() if ticket.created_at else "",
+                    ticket.resolved_at.isoformat() if ticket.resolved_at else "",
+                    ticket.closed_at.isoformat() if ticket.closed_at else "",
+                ]
+            )
+        return buffer.getvalue()
 
     async def get_queue_summary(self) -> dict:
         """Get ticket queue summary for IT agents."""

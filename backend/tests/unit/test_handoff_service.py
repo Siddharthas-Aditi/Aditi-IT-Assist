@@ -163,6 +163,37 @@ class TestAdvanceOnce:
             assert offer.round_index == 1
             assert offer.state == "offered"
 
+    async def test_offer_for_claimed_ticket_is_terminalized_and_counted(self):
+        """A claimed ticket's offer must terminalize AND report the mutation.
+
+        The sweeper wrapper only commits when a non-"held" counter is set, so
+        an uncounted terminalization is rolled back on every pass and the offer
+        stays "offered" forever — the specialist keeps seeing a phantom offer
+        for a ticket that is already assigned.
+        """
+        async with async_session_factory() as db:
+            requester = await _make_user(db, "emp")
+            spec = await _make_user(db, "spec")
+            ticket = await _make_chat_ticket(db, requester)
+            ticket.assigned_to = spec.id  # already claimed
+            offer = LiveHandoffOffer(
+                ticket_id=ticket.id,
+                offered_to=spec.id,
+                offered_at=datetime.now(UTC),
+                expires_at=datetime.now(UTC) + timedelta(seconds=30),
+                round_index=0,
+                state="offered",
+            )
+            db.add(offer)
+            await db.flush()
+
+            counts = await HandoffService(db).advance_once()
+
+            assert offer.state == "accepted"
+            assert counts["terminalized"] >= 1
+            # The wrapper's commit gate must see a non-"held" signal.
+            assert any(v for k, v in counts.items() if k != "held")
+
 
 class TestAccept:
     async def test_accept_happy_path(self):

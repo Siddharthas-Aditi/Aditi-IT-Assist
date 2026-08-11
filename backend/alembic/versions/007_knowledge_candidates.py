@@ -1,7 +1,7 @@
 """Knowledge improvement candidates — review-gated drafts.
 
 Revision ID: 007_knowledge_candidates
-Revises: 006_add_knowledge_chunks_embedding
+Revises: 006_chunks_embedding
 Create Date: 2026-06-19
 
 Creates the ``knowledge_candidates`` table + two enums (state, source) used
@@ -18,7 +18,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision = "007_knowledge_candidates"
-down_revision = "006_add_knowledge_chunks_embedding"
+down_revision = "006_chunks_embedding"
 branch_labels = None
 depends_on = None
 

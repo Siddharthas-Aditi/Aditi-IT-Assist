@@ -318,3 +318,142 @@ class TestInternalNotesIsolation:
         # Only the non-internal comment was returned
         assert len(result["comments"]) == 1
         assert result["comments"][0].is_internal is False
+
+
+class TestAgentQueueFilters:
+    """Filter parsing for the IT agent queue and CSV export.
+
+    These back the Team Queue page, whose route passes category/source/search/
+    date filters and unpacks a `(tickets, total)` tuple.
+    """
+
+    def test_csv_terms_splits_and_strips(self):
+        assert TicketService._csv_terms("new, triaged ,in_progress") == [
+            "new",
+            "triaged",
+            "in_progress",
+        ]
+
+    def test_csv_terms_empty_values_yield_no_terms(self):
+        assert TicketService._csv_terms(None) == []
+        assert TicketService._csv_terms("") == []
+        assert TicketService._csv_terms(" , ") == []
+
+    def test_no_filters_produces_no_clauses(self):
+        service = TicketService(_make_mock_db())
+        clauses = service._agent_queue_filters(
+            agent=_make_user("it_agent"),
+            assigned_only=False,
+            status=None,
+            priority=None,
+            category=None,
+            source=None,
+            search=None,
+            date_from=None,
+            date_to=None,
+        )
+        assert clauses == []
+
+    def test_each_filter_contributes_a_clause(self):
+        service = TicketService(_make_mock_db())
+        clauses = service._agent_queue_filters(
+            agent=_make_user("it_agent"),
+            assigned_only=True,
+            status="new,triaged",
+            priority="high",
+            category="Email",
+            source="chat",
+            search="vpn",
+            date_from=datetime(2026, 1, 1, tzinfo=UTC),
+            date_to=datetime(2026, 2, 1, tzinfo=UTC),
+        )
+        # assigned_only, status, priority, category, source, date_from,
+        # date_to, search
+        assert len(clauses) == 8
+
+    def test_blank_search_is_ignored(self):
+        service = TicketService(_make_mock_db())
+        clauses = service._agent_queue_filters(
+            agent=_make_user("it_agent"),
+            assigned_only=False,
+            status=None,
+            priority=None,
+            category=None,
+            source=None,
+            search="   ",
+            date_from=None,
+            date_to=None,
+        )
+        assert clauses == []
+
+
+class TestAgentQueueListing:
+    """`list_tickets_for_agent` must return a (page, total) pair."""
+
+    async def test_returns_tickets_and_total(self):
+        db = _make_mock_db()
+
+        count_result = MagicMock()
+        count_result.scalar.return_value = 7
+
+        ticket = MagicMock()
+        page_result = MagicMock()
+        page_result.scalars.return_value.all.return_value = [ticket]
+
+        db.execute.side_effect = [count_result, page_result]
+
+        tickets, total = await TicketService(db).list_tickets_for_agent(
+            agent=_make_user("it_agent"), limit=1
+        )
+
+        assert tickets == [ticket]
+        # Total counts every match, not just the returned page.
+        assert total == 7
+
+
+class TestTicketCsvExport:
+    """`export_tickets_csv` backs the queue's export action."""
+
+    @staticmethod
+    def _ticket() -> MagicMock:
+        ticket = MagicMock()
+        ticket.ticket_number = "ITA-000042"
+        ticket.title = "VPN drops"
+        ticket.status = "new"
+        ticket.priority = "high"
+        ticket.category = "Network"
+        ticket.subcategory = "VPN"
+        ticket.item = "Client"
+        ticket.ticket_type = "Incident"
+        ticket.source = "chat"
+        ticket.assigned_to = None
+        ticket.created_at = datetime(2026, 3, 1, tzinfo=UTC)
+        ticket.resolved_at = None
+        ticket.closed_at = None
+        return ticket
+
+    async def test_export_emits_header_and_rows(self):
+        db = _make_mock_db()
+        result = MagicMock()
+        result.scalars.return_value.all.return_value = [self._ticket()]
+        db.execute.return_value = result
+
+        csv_text = await TicketService(db).export_tickets_csv(agent=_make_user("it_agent"))
+
+        lines = csv_text.strip().splitlines()
+        assert lines[0].startswith("ticket_number,title,status,priority,category")
+        assert "ITA-000042" in lines[1]
+        assert "VPN drops" in lines[1]
+
+    async def test_export_with_no_matches_still_has_header(self):
+        db = _make_mock_db()
+        result = MagicMock()
+        result.scalars.return_value.all.return_value = []
+        db.execute.return_value = result
+
+        csv_text = await TicketService(db).export_tickets_csv(agent=_make_user("it_agent"))
+
+        assert csv_text.strip().splitlines() == [
+            "ticket_number,title,status,priority,category,subcategory,item,"
+            "ticket_type,source,assigned_to,created_at,resolved_at,closed_at"
+        ]

@@ -191,7 +191,7 @@ class HandoffService:
 
     async def advance_once(self, *, now: datetime | None = None) -> dict[str, int]:
         ts = now or datetime.now(UTC)
-        counts = {"reoffered": 0, "broadened": 0, "fallback": 0, "held": 0}
+        counts = {"reoffered": 0, "broadened": 0, "fallback": 0, "held": 0, "terminalized": 0}
         stmt = (
             select(LiveHandoffOffer)
             .where(LiveHandoffOffer.state.in_(_ACTIVE_OFFER_STATES))
@@ -202,8 +202,13 @@ class HandoffService:
         for offer in offers:
             ticket = await self.db.get(Ticket, offer.ticket_id)
             if ticket is None or ticket.assigned_to is not None:
-                # Claimed/accepted already → terminalize.
+                # Claimed/accepted already → terminalize. This MUST be counted:
+                # the sweeper wrapper only commits when a non-"held" counter is
+                # non-zero, so an uncounted mutation here is rolled back every
+                # pass and the offer stays "offered" forever — surfacing a
+                # phantom offer for an already-claimed ticket.
                 offer.state = "accepted"
+                counts["terminalized"] += 1
                 continue
             tried = {offer.offered_to} if offer.offered_to else set()
             ranked = await self._ranked_available(ticket, exclude=tried)

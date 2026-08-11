@@ -200,7 +200,7 @@ class TestTicketEndpointWithAuth:
         """IT agent can access the ticket queue."""
         with patch("app.api.v1.tickets.TicketService") as mock_svc_cls:
             mock_svc = AsyncMock()
-            mock_svc.list_tickets_for_agent.return_value = []
+            mock_svc.list_tickets_for_agent.return_value = ([], 0)
             mock_svc_cls.return_value = mock_svc
 
             response = await agent_client.get("/api/v1/tickets/queue")

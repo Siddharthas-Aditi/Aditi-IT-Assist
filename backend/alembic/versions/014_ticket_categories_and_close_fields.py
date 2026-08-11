@@ -1,7 +1,7 @@
 """014 — ticket categories (3-level hierarchy) + ticket close/type fields.
 
-Revision ID: 014
-Revises: 013
+Revision ID: 014_ticket_categories
+Revises: 013_live_handoff
 """
 
 from __future__ import annotations
@@ -10,8 +10,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects.postgresql import UUID
 
-revision = "014"
-down_revision = "013"
+revision = "014_ticket_categories"
+down_revision = "013_live_handoff"
 branch_labels = None
 depends_on = None
 

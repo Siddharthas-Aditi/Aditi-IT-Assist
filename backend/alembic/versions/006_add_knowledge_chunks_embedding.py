@@ -1,6 +1,6 @@
 """Add embedding column to knowledge_chunks table.
 
-Revision ID: 006_add_knowledge_chunks_embedding
+Revision ID: 006_chunks_embedding
 Revises: 005_feedback
 Create Date: 2026-06-17
 
@@ -11,7 +11,7 @@ retrieval and indexing services.
 
 from alembic import op
 
-revision = "006_add_knowledge_chunks_embedding"
+revision = "006_chunks_embedding"
 down_revision = "005_feedback"
 branch_labels = None
 depends_on = None

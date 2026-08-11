@@ -104,8 +104,13 @@ async def _advance_handoff_offers_once() -> None:
     async with async_session_factory() as db:
         try:
             counts = await HandoffService(db).advance_once()
-            if any(v for k, v in counts.items() if k != "held"):
+            # Key the commit off the session, not the counters. Deciding from
+            # counters means any mutation someone forgets to count is rolled
+            # back on every pass — which is exactly how terminalized offers
+            # used to get stuck in "offered" forever.
+            if db.dirty or db.new or db.deleted:
                 await db.commit()
+                logger.info("handoff_advance_pass", **counts)
             else:
                 await db.rollback()
         except Exception:  # noqa: BLE001 — never let a bad pass kill the loop
