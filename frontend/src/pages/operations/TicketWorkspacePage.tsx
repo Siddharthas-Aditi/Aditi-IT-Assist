@@ -17,6 +17,7 @@ import { Card } from '@/components/ui';
 import { HandoffContextPanel } from '@/features/specialist-chat/HandoffContextPanel';
 import { CloseTicketModal } from '@/features/tickets/CloseTicketModal';
 import { TicketPropertiesPanel } from '@/features/tickets/TicketPropertiesPanel';
+import { TicketItsmPanel } from '@/features/itsm/TicketItsmPanel';
 import { apiRequest, ticketsApi } from '@/lib/api';
 import { isITStaff } from '@/lib/permissions';
 import { useAuthStore } from '@/stores/auth-store';
@@ -65,6 +66,9 @@ interface TicketDetailResponse {
   ticket: TicketDetail;
   comments: Comment[];
   events: TicketEvent[];
+  /** Requester identity, used to resolve their assets in the ITSM panel. */
+  requester_name?: string | null;
+  requester_email?: string | null;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -364,6 +368,17 @@ export function TicketWorkspacePage() {
             disabled={ticket.status === 'closed'}
             onUpdated={() => void load()}
             onError={setError}
+          />
+
+          <TicketItsmPanel
+            ticketId={ticket.id}
+            ticketNumber={ticket.ticket_number}
+            subject={ticket.title}
+            description={ticket.description}
+            category={ticket.category}
+            requesterEmail={data?.requester_email}
+            requesterName={data?.requester_name}
+            actorName={currentUser?.full_name ?? 'IT staff'}
           />
         </div>
       </div>

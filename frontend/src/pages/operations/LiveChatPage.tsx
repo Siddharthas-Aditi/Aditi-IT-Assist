@@ -25,6 +25,7 @@ import {
   liveChatApi,
 } from '@/features/specialist-chat/api';
 import { HandoffContextPanel } from '@/features/specialist-chat/HandoffContextPanel';
+import { TicketItsmPanel } from '@/features/itsm/TicketItsmPanel';
 
 // Employee-side consent prompts are handled globally by <ConsentWatcher />
 // in EmployeeLayout — this page only owns the specialist request action.
@@ -188,6 +189,21 @@ export function LiveChatPage() {
       {/* Specialist warm-handoff context: summary first, transcript second. */}
       {isSpecialist && session.ticket_id && (
         <HandoffContextPanel ticketId={session.ticket_id} />
+      )}
+
+      {/* The employee's kit, so the specialist can see the device before asking. */}
+      {isSpecialist && session.ticket_id && (
+        <div className="mb-3">
+          <TicketItsmPanel
+            ticketId={session.ticket_id}
+            ticketNumber={session.ticket_number || 'Ticket'}
+            subject={session.ticket_number || 'Live support chat'}
+            requesterEmail={session.user_email}
+            requesterName={session.user_name}
+            actorName={user?.full_name ?? 'IT staff'}
+            compact
+          />
+        </div>
       )}
 
       {session.status === 'idle_warning' && !isEnded && (

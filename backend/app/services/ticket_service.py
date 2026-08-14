@@ -451,7 +451,18 @@ class TicketService:
         )
         events = (await self.db.execute(events_stmt)).scalars().all()
 
-        return {"ticket": ticket, "comments": comments, "events": events}
+        # Requester identity travels with the detail so the workspace can show
+        # who raised it — and resolve their assigned assets — without a second
+        # round trip to an admin-only user endpoint.
+        requester = await self.db.get(User, ticket.requester_id)
+
+        return {
+            "ticket": ticket,
+            "comments": comments,
+            "events": events,
+            "requester_name": requester.full_name if requester else None,
+            "requester_email": requester.email if requester else None,
+        }
 
     async def list_tickets_for_employee(
         self,

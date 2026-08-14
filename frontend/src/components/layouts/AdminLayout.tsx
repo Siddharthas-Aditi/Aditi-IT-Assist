@@ -22,6 +22,8 @@ import {
   FileBarChart,
   Headset,
   Tags,
+  GitPullRequestArrow,
+  Boxes,
 } from 'lucide-react';
 
 import { useAuthStore } from '@/stores/auth-store';
@@ -52,6 +54,8 @@ const NAV: NavItem[] = [
   { to: '/dashboard', label: 'Analytics', icon: BarChart3, end: true, can: isLeadOrAbove },
   { to: '/dashboard/team-queue', label: 'Team Queue', icon: Users2, can: isLeadOrAbove },
   { to: '/dashboard/knowledge', label: 'Knowledge Base', icon: BookOpen, can: isLeadOrAbove },
+  { to: '/itsm/changes', label: 'Changes', icon: GitPullRequestArrow, can: isLeadOrAbove },
+  { to: '/itsm/assets', label: 'Assets', icon: Boxes, can: isLeadOrAbove },
   {
     to: '/dashboard/users',
     label: 'User Management',

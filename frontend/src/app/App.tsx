@@ -57,6 +57,26 @@ import { AgentOperationsPage } from "@/pages/admin/AgentOperationsPage";
 import { SpecialistReportPage } from "@/pages/admin/SpecialistReportPage";
 import { TicketCategoriesPage } from "@/pages/admin/TicketCategoriesPage";
 
+// ITSM workspace — Change Management + Inventory/Asset Management
+import { ItsmLayout } from "@/features/itsm/ItsmLayout";
+import { ItsmDashboard } from "@/features/itsm/ItsmDashboard";
+import { ChangeListPage } from "@/features/itsm/changes/ChangeListPage";
+import { ChangeFormPage } from "@/features/itsm/changes/ChangeFormPage";
+import { ChangeDetailPage } from "@/features/itsm/changes/ChangeDetailPage";
+import { ChangeTemplatesPage } from "@/features/itsm/changes/ChangeTemplatesPage";
+import { ChangeCalendarPage } from "@/features/itsm/changes/ChangeCalendarPage";
+import { ChangeBoardPage } from "@/features/itsm/changes/ChangeBoardPage";
+import { AssetListPage } from "@/features/itsm/assets/AssetListPage";
+import { AssetFormPage } from "@/features/itsm/assets/AssetFormPage";
+import { AssetDetailPage } from "@/features/itsm/assets/AssetDetailPage";
+import { AssetBoardPage } from "@/features/itsm/assets/AssetBoardPage";
+import { AssetReportsPage } from "@/features/itsm/assets/AssetReportsPage";
+import {
+  AssetTypesPage,
+  LocationsPage,
+  VendorsPage,
+} from "@/features/itsm/assets/ReferencePages";
+
 function HomeRedirect() {
   const { user, isAuthenticated } = useAuthStore();
   if (!isAuthenticated || !user) return <Navigate to="/login" replace />;
@@ -159,6 +179,39 @@ export function App() {
         <Route path="feedback/review" element={<FeedbackReviewPage />} />
         <Route path="agent-ops" element={<AgentOperationsPage />} />
         <Route path="reports/specialists" element={<SpecialistReportPage />} />
+      </Route>
+
+      {/* Changes + Assets — rendered inside the Admin Console shell so they
+          share its sidebar, branding, and account menu. */}
+      <Route
+        path="/itsm"
+        element={
+          <AdminRoute>
+            <AdminLayout />
+          </AdminRoute>
+        }
+      >
+        <Route element={<ItsmLayout />}>
+          <Route index element={<ItsmDashboard />} />
+
+          <Route path="changes" element={<ChangeListPage />} />
+          <Route path="changes/new" element={<ChangeFormPage />} />
+          <Route path="changes/calendar" element={<ChangeCalendarPage />} />
+          <Route path="changes/board" element={<ChangeBoardPage />} />
+          <Route path="changes/templates" element={<ChangeTemplatesPage />} />
+          <Route path="changes/:id" element={<ChangeDetailPage />} />
+          <Route path="changes/:id/edit" element={<ChangeFormPage />} />
+
+          <Route path="assets" element={<AssetListPage />} />
+          <Route path="assets/new" element={<AssetFormPage />} />
+          <Route path="assets/board" element={<AssetBoardPage />} />
+          <Route path="assets/types" element={<AssetTypesPage />} />
+          <Route path="assets/locations" element={<LocationsPage />} />
+          <Route path="assets/vendors" element={<VendorsPage />} />
+          <Route path="assets/reports" element={<AssetReportsPage />} />
+          <Route path="assets/:id" element={<AssetDetailPage />} />
+          <Route path="assets/:id/edit" element={<AssetFormPage />} />
+        </Route>
       </Route>
 
       {/* Audit (admin + auditor) */}

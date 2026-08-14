@@ -319,6 +319,8 @@ async def get_ticket_detail(
             }
             for e in result["events"]
         ],
+        "requester_name": result["requester_name"],
+        "requester_email": result["requester_email"],
     }
 
 

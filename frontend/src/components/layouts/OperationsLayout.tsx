@@ -12,6 +12,7 @@ import {
   ArrowLeft,
   ShieldCheck,
   Cpu,
+  Boxes,
 } from 'lucide-react';
 
 import { useAuthStore } from '@/stores/auth-store';
@@ -63,13 +64,24 @@ export function OperationsLayout() {
 
         {/* Cross-workspace links (legitimate multi-role navigation) */}
         <div className="space-y-0.5 px-3 pb-2">
+          {/* Both targets sit behind AdminRoute (it_lead + it_admin), which is
+              exactly what isAdmin() reports — so neither link can bounce an
+              agent to /unauthorized. */}
           {isAdmin() && (
-            <NavLink
-              to="/dashboard"
-              className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-white/60 transition-colors hover:bg-white/5 hover:text-white"
-            >
-              <LayoutDashboard size={14} /> Admin Console
-            </NavLink>
+            <>
+              <NavLink
+                to="/itsm/changes"
+                className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-white/60 transition-colors hover:bg-white/5 hover:text-white"
+              >
+                <Boxes size={14} /> Changes &amp; Assets
+              </NavLink>
+              <NavLink
+                to="/dashboard"
+                className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-white/60 transition-colors hover:bg-white/5 hover:text-white"
+              >
+                <LayoutDashboard size={14} /> Admin Console
+              </NavLink>
+            </>
           )}
           <NavLink
             to="/support"

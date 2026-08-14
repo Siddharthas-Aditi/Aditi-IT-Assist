@@ -118,3 +118,38 @@
   from { opacity: 0; transform: scale(0.95); }
   to { opacity: 1; transform: scale(1); }
 }
+
+/* ── ITSM workspace (Changes + Assets) ──────────────────────────────────
+   The modules live inside the Admin Console shell and use its light
+   surfaces. Only the typeface and scrollbar are scoped here: these screens
+   are data-dense tables and long forms, where Inter's tabular figures and a
+   slimmer scrollbar read better than the app default. */
+.itsm-root {
+  font-family: 'Inter', 'Lato', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-feature-settings: 'cv02', 'cv03', 'cv04';
+}
+
+.itsm-root ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.itsm-root ::-webkit-scrollbar-track {
+  background: transparent;
+}
+.itsm-root ::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+.itsm-root ::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+  background-clip: content-box;
+}
+
+/* Placeholder for the contentEditable description editor. */
+.itsm-richtext:empty::before {
+  content: attr(data-placeholder);
+  color: #94a3b8;
+  pointer-events: none;
+}
