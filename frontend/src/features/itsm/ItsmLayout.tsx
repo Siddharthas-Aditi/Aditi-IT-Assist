@@ -28,6 +28,7 @@ const ASSET_TABS = [
   { label: 'Asset Types', to: '/itsm/assets/types' },
   { label: 'Locations', to: '/itsm/assets/locations' },
   { label: 'Vendors', to: '/itsm/assets/vendors' },
+  { label: 'Import', to: '/itsm/assets/import' },
   { label: 'Reports', to: '/itsm/assets/reports' },
 ];
 
@@ -162,6 +163,14 @@ function CreateMenu() {
             className="block px-3 py-2 text-[12.5px] text-slate-700 hover:bg-slate-50"
           >
             New asset
+          </Link>
+          <Link
+            role="menuitem"
+            to="/itsm/assets/import"
+            onClick={() => setOpen(false)}
+            className="block px-3 py-2 text-[12.5px] text-slate-700 hover:bg-slate-50"
+          >
+            Bulk import assets
           </Link>
         </div>
       )}

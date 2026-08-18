@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { AlertTriangle } from 'lucide-react';
 
+import { ConditionPhotos } from '../components/ConditionPhotos';
 import { AssetPicker, AttachmentZone, PersonPicker } from '../components/Pickers';
 import { PageHeader } from '../components/chrome';
 import { useToast } from '../components/toast-context';
@@ -18,14 +19,11 @@ import {
 } from '../components/ui';
 import {
   ASSET_TYPES,
-  AVAILABILITY_ZONES,
   CLASSIFICATIONS,
   CONTRACTS,
   DEPARTMENTS,
   GROUPS,
-  LOCATIONS,
   PHYSICAL_SUBTYPES,
-  REGIONS,
   SOURCES,
   VENDORS,
   VIRTUAL_SUBTYPES,
@@ -40,10 +38,12 @@ import {
 } from '../data/store';
 import {
   ASSET_STATES,
+  CURRENCIES,
   HARDWARE_TYPES,
   IMPACTS,
   USAGE_TYPES,
   type Attachment,
+  type AssetConditionPhoto,
 } from '../data/types';
 import {
   draftFromAsset,
@@ -57,7 +57,7 @@ export function AssetFormPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const toast = useToast();
-  const { assets } = useItsmState();
+  const { assets, locations } = useItsmState();
 
   const editing = id ? getAsset(id) : undefined;
   const isEdit = Boolean(id);
@@ -275,15 +275,33 @@ export function AssetFormPage() {
               onChange={(e) => set('employeeId', e.target.value)}
             />
           </Field>
-          <Field label="Cost" error={errors.cost} htmlFor="af-cost">
-            <TextInput
-              id="af-cost"
-              type="number"
-              min={0}
-              value={draft.cost}
-              aria-invalid={Boolean(errors.cost)}
-              onChange={(e) => set('cost', Number(e.target.value))}
-            />
+          <Field
+            label="Cost"
+            error={errors.cost}
+            htmlFor="af-cost"
+            hint={`Recorded in ${draft.currency}. Totals are reported per currency, never converted.`}
+          >
+            <div className="flex gap-2">
+              <label className="sr-only" htmlFor="af-currency">
+                Currency
+              </label>
+              <Select
+                id="af-currency"
+                options={CURRENCIES}
+                value={draft.currency}
+                onChange={(e) => set('currency', e.target.value as AssetDraft['currency'])}
+                className="w-24 shrink-0"
+              />
+              <TextInput
+                id="af-cost"
+                type="number"
+                min={0}
+                step="0.01"
+                value={draft.cost}
+                aria-invalid={Boolean(errors.cost)}
+                onChange={(e) => set('cost', Number(e.target.value))}
+              />
+            </div>
           </Field>
           <Field label="Warranty" htmlFor="af-warr">
             <TextInput
@@ -350,55 +368,6 @@ export function AssetFormPage() {
               value={draft.classification}
               onChange={(e) => set('classification', e.target.value)}
             />
-          </Field>
-          <Field label="DTA Endorsement" htmlFor="af-dta">
-            <TextInput
-              id="af-dta"
-              value={draft.dtaEndorsement}
-              onChange={(e) => set('dtaEndorsement', e.target.value)}
-            />
-          </Field>
-          <Field label="Domain" htmlFor="af-domain">
-            <TextInput
-              id="af-domain"
-              value={draft.domain}
-              onChange={(e) => set('domain', e.target.value)}
-            />
-          </Field>
-          <Field label="Last Audit Date" htmlFor="af-audit">
-            <TextInput
-              id="af-audit"
-              type="date"
-              value={draft.lastAuditDate ?? ''}
-              onChange={(e) => set('lastAuditDate', e.target.value || null)}
-            />
-          </Field>
-          <Field label="Region" htmlFor="af-region">
-            <Select
-              id="af-region"
-              options={REGIONS}
-              value={draft.region}
-              onChange={(e) => set('region', e.target.value)}
-            />
-          </Field>
-          <Field label="Availability Zone" htmlFor="af-az">
-            <Select
-              id="af-az"
-              options={AVAILABILITY_ZONES}
-              value={draft.availabilityZone}
-              onChange={(e) => set('availabilityZone', e.target.value)}
-            />
-          </Field>
-          <Field label="Patch Managed">
-            <label className="flex items-center gap-2 pt-1 text-[13px] text-slate-700">
-              <input
-                type="checkbox"
-                checked={draft.patchManaged}
-                onChange={(e) => set('patchManaged', e.target.checked)}
-                className="h-3.5 w-3.5 rounded border-slate-300 bg-slate-100 text-sky-500 focus:ring-1 focus:ring-sky-500"
-              />
-              Managed by the patching pipeline
-            </label>
           </Field>
         </div>
       </Panel>
@@ -472,7 +441,7 @@ export function AssetFormPage() {
           <Field label="Location" htmlFor="af-loc">
             <Select
               id="af-loc"
-              options={LOCATIONS.map((l) => l.name)}
+              options={locations.map((l) => l.name)}
               placeholder="Select location"
               value={draft.location}
               onChange={(e) => set('location', e.target.value)}
@@ -576,6 +545,15 @@ export function AssetFormPage() {
         <p className="mt-2 text-[11.5px] text-slate-500">
           Related assets, changes, and services are managed from the asset’s Relationships tab.
         </p>
+      </Panel>
+
+      <Panel title="Asset Condition Images">
+        <ConditionPhotos
+          photos={draft.conditionPhotos}
+          onChange={(next: AssetConditionPhoto[]) => set('conditionPhotos', next)}
+          onError={(m) => toast.error(m)}
+          actorName="Sagar J"
+        />
       </Panel>
 
       <Panel title="Attachments">

@@ -27,19 +27,14 @@ export function emptyAssetDraft(): AssetDraft {
     assetState: 'In Stock',
     employeeId: '',
     cost: 0,
+    currency: 'INR',
     warranty: '3 years',
     acquisitionDate: null,
     warrantyExpiry: null,
     serialNumber: '',
     invoiceNumber: '',
     poNumber: '',
-    patchManaged: false,
     classification: 'Internal',
-    dtaEndorsement: 'Not Required',
-    domain: 'aditiconsulting.com',
-    lastAuditDate: null,
-    region: 'APAC',
-    availabilityZone: 'ap-south-1a',
 
     firmware: '',
     firmwareVersion: '',
@@ -62,6 +57,7 @@ export function emptyAssetDraft(): AssetDraft {
 
     parentAssetId: null,
     contract: 'No Contract',
+    conditionPhotos: [],
     attachments: [],
   };
 }

@@ -71,6 +71,7 @@ import { AssetFormPage } from "@/features/itsm/assets/AssetFormPage";
 import { AssetDetailPage } from "@/features/itsm/assets/AssetDetailPage";
 import { AssetBoardPage } from "@/features/itsm/assets/AssetBoardPage";
 import { AssetReportsPage } from "@/features/itsm/assets/AssetReportsPage";
+import { AssetImportPage } from "@/features/itsm/assets/AssetImportPage";
 import {
   AssetTypesPage,
   LocationsPage,
@@ -209,6 +210,7 @@ export function App() {
           <Route path="assets/locations" element={<LocationsPage />} />
           <Route path="assets/vendors" element={<VendorsPage />} />
           <Route path="assets/reports" element={<AssetReportsPage />} />
+          <Route path="assets/import" element={<AssetImportPage />} />
           <Route path="assets/:id" element={<AssetDetailPage />} />
           <Route path="assets/:id/edit" element={<AssetFormPage />} />
         </Route>

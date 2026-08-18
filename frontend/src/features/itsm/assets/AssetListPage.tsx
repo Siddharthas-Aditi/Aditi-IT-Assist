@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertTriangle, Download, Plus } from 'lucide-react';
+import { AlertTriangle, Download, Plus, Upload } from 'lucide-react';
 
 import { DataTable, type Column } from '../components/DataTable';
 import { exportCsv } from '../components/csv';
@@ -15,16 +15,17 @@ import {
   ASSET_TYPES,
   DEPARTMENTS,
   GROUPS,
-  LOCATIONS,
   PEOPLE,
   personName,
   VENDORS,
 } from '../data/reference';
+import { formatMoney } from '../data/money';
 import { canMoveAsset, daysUntil, isExpiringSoon } from '../data/rules';
 import { logAssetActivity, useItsmState } from '../data/store';
 import { ASSET_STATES, USAGE_TYPES, type Asset, type AssetState } from '../data/types';
 
-const FILTERS: FilterSpec[] = [
+function buildFilters(locationNames: string[]): FilterSpec[] {
+  return [
   { key: 'assetType', label: 'Asset Type', options: ASSET_TYPES.map((t) => t.name) },
   { key: 'assetState', label: 'Asset State', options: ASSET_STATES },
   { key: 'usageType', label: 'Usage Type', options: USAGE_TYPES },
@@ -32,11 +33,12 @@ const FILTERS: FilterSpec[] = [
   { key: 'managedByGroup', label: 'Managed By Group', options: GROUPS },
   { key: 'managedBy', label: 'Managed By', options: PEOPLE.map((p) => p.name) },
   { key: 'assignedTo', label: 'Assigned To', options: PEOPLE.map((p) => p.name) },
-  { key: 'location', label: 'Location', options: LOCATIONS.map((l) => l.name) },
   { key: 'vendor', label: 'Vendor', options: VENDORS.map((v) => v.name) },
   { key: 'warrantyBefore', label: 'Warranty Expiry ≤', options: [], type: 'date' },
-  { key: 'eolBefore', label: 'End of Life ≤', options: [], type: 'date' },
-];
+    { key: 'location', label: 'Location', options: locationNames },
+    { key: 'eolBefore', label: 'End of Life ≤', options: [], type: 'date' },
+  ];
+}
 
 function fmtDate(iso: string | null): string {
   if (!iso) return '—';
@@ -47,11 +49,6 @@ function fmtDate(iso: string | null): string {
   });
 }
 
-const INR = new Intl.NumberFormat('en-IN', {
-  style: 'currency',
-  currency: 'INR',
-  maximumFractionDigits: 0,
-});
 
 /** Warranty / EOL inside the 90-day window get an amber warning affordance. */
 function ExpiryCell({ date }: { date: string | null }) {
@@ -72,7 +69,7 @@ function ExpiryCell({ date }: { date: string | null }) {
 }
 
 export function AssetListPage() {
-  const { assets } = useItsmState();
+  const { assets, locations } = useItsmState();
   const navigate = useNavigate();
   const toast = useToast();
   const [search, setSearch] = useState('');
@@ -80,6 +77,7 @@ export function AssetListPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkState, setBulkState] = useState('');
   const savedViews = useSavedViews('aditi.itsm.views.assets');
+  const filterSpecs = useMemo(() => buildFilters(locations.map((l) => l.name)), [locations]);
 
   const rows = useMemo(() => {
     const needle = search.trim().toLowerCase();
@@ -156,7 +154,7 @@ export function AssetListPage() {
       header: 'Cost',
       value: (a) => a.cost,
       align: 'right',
-      render: (a) => INR.format(a.cost),
+      render: (a) => formatMoney(a.cost, a.currency),
     },
     {
       key: 'warrantyExpiry',
@@ -217,6 +215,9 @@ export function AssetListPage() {
         description={`${assets.length} assets tracked · ${expiringCount} nearing warranty or end of life.`}
         actions={
           <>
+            <Button onClick={() => navigate('/itsm/assets/import')}>
+              <Upload size={14} /> Bulk import
+            </Button>
             <Button onClick={() => exportCsv('assets.csv', rows, columns)} disabled={!rows.length}>
               <Download size={14} /> Export CSV
             </Button>
@@ -231,7 +232,7 @@ export function AssetListPage() {
         searchPlaceholder="Search by name, tag, serial, employee ID, model, vendor, location, or IP…"
         search={search}
         onSearchChange={setSearch}
-        specs={FILTERS}
+        specs={filterSpecs}
         values={filters}
         onChange={setFilters}
         savedViews={savedViews.views}

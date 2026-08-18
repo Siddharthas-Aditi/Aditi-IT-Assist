@@ -5,6 +5,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { AlertTriangle, Network } from 'lucide-react';
 
 import { PageHeader, Tabs } from '../components/chrome';
+import { ConditionPhotos } from '../components/ConditionPhotos';
 import { useToast } from '../components/toast-context';
 import {
   Button,
@@ -18,7 +19,8 @@ import {
   StatusBadge,
   TextInput,
 } from '../components/ui';
-import { DEPARTMENTS, GROUPS, LOCATIONS, personName } from '../data/reference';
+import { DEPARTMENTS, GROUPS, personName } from '../data/reference';
+import { formatMoney } from '../data/money';
 import { canMoveAsset, daysUntil, isExpiringSoon } from '../data/rules';
 import { logAssetActivity, useItsmState } from '../data/store';
 import {
@@ -33,6 +35,7 @@ import { RelationshipMap } from './RelationshipMap';
 const TABS = [
   'Overview',
   'Relationships',
+  'Condition',
   'Components',
   'Associations',
   'Purchase Orders',
@@ -43,11 +46,6 @@ const TABS = [
 ] as const;
 
 const ACTOR = 'Sagar J';
-const INR = new Intl.NumberFormat('en-IN', {
-  style: 'currency',
-  currency: 'INR',
-  maximumFractionDigits: 0,
-});
 
 function fmt(iso: string | null): string {
   if (!iso) return '—';
@@ -77,7 +75,7 @@ export function AssetDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const toast = useToast();
-  const { assets, changes, ticketAssetLinks } = useItsmState();
+  const { assets, changes, ticketAssetLinks, locations } = useItsmState();
   const [tab, setTab] = useState<string>('Overview');
 
   const asset = useMemo(
@@ -187,13 +185,7 @@ export function AssetDetailPage() {
                   </DetailRow>
                   <DetailRow label="Employee ID">{asset.employeeId}</DetailRow>
                   <DetailRow label="Serial Number">{asset.serialNumber}</DetailRow>
-                  <DetailRow label="Patch Managed">{asset.patchManaged ? 'Yes' : 'No'}</DetailRow>
                   <DetailRow label="Classification">{asset.classification}</DetailRow>
-                  <DetailRow label="DTA Endorsement">{asset.dtaEndorsement}</DetailRow>
-                  <DetailRow label="Domain">{asset.domain}</DetailRow>
-                  <DetailRow label="Last Audit Date">{fmt(asset.lastAuditDate)}</DetailRow>
-                  <DetailRow label="Region">{asset.region}</DetailRow>
-                  <DetailRow label="Availability Zone">{asset.availabilityZone}</DetailRow>
                 </dl>
               </Panel>
 
@@ -241,7 +233,7 @@ export function AssetDetailPage() {
 
               <Panel title="Financial Details">
                 <dl className="grid gap-x-6 sm:grid-cols-2">
-                  <DetailRow label="Cost">{INR.format(asset.cost)}</DetailRow>
+                  <DetailRow label="Cost">{formatMoney(asset.cost, asset.currency)}</DetailRow>
                   <DetailRow label="Invoice Number">{asset.invoiceNumber}</DetailRow>
                   <DetailRow label="PO Number">{asset.poNumber}</DetailRow>
                   <DetailRow label="Contract">{asset.contract}</DetailRow>
@@ -256,6 +248,22 @@ export function AssetDetailPage() {
               onAdd={addRelationship}
               onRemove={removeRelationship}
             />
+          )}
+
+          {tab === 'Condition' && (
+            <Panel title={`Asset condition images (${asset.conditionPhotos?.length ?? 0})`}>
+              <ConditionPhotos
+                photos={asset.conditionPhotos ?? []}
+                actorName={ACTOR}
+                onError={(m) => toast.error(m)}
+                onChange={(next) => {
+                  logAssetActivity(asset.id, ACTOR, 'Condition photos updated', {
+                    conditionPhotos: next,
+                  });
+                  toast.success('Condition photos updated.');
+                }}
+              />
+            </Panel>
           )}
 
           {tab === 'Components' && (
@@ -392,12 +400,12 @@ export function AssetDetailPage() {
                   <tr className="border-b border-slate-200">
                     <td className="px-2 py-1.5">Acquisition</td>
                     <td className="px-2 py-1.5 text-slate-500">{asset.invoiceNumber || '—'}</td>
-                    <td className="px-2 py-1.5">{INR.format(asset.cost)}</td>
+                    <td className="px-2 py-1.5">{formatMoney(asset.cost, asset.currency)}</td>
                   </tr>
                   <tr>
                     <td className="px-2 py-1.5 font-medium">Total</td>
                     <td className="px-2 py-1.5" />
-                    <td className="px-2 py-1.5 font-medium">{INR.format(asset.cost)}</td>
+                    <td className="px-2 py-1.5 font-medium">{formatMoney(asset.cost, asset.currency)}</td>
                   </tr>
                 </tbody>
               </table>
@@ -446,7 +454,7 @@ export function AssetDetailPage() {
               <DetailRow label="Asset State">
                 <StatusBadge status={asset.assetState} />
               </DetailRow>
-              <DetailRow label="Cost">{INR.format(asset.cost)}</DetailRow>
+              <DetailRow label="Cost">{formatMoney(asset.cost, asset.currency)}</DetailRow>
               <DetailRow label="Date of Expiry">
                 <ExpiryValue date={asset.warrantyExpiry} />
               </DetailRow>
@@ -487,7 +495,7 @@ export function AssetDetailPage() {
               <Field label="Location" htmlFor="q-loc">
                 <Select
                   id="q-loc"
-                  options={LOCATIONS.map((l) => l.name)}
+                  options={locations.map((l) => l.name)}
                   value={merged.location}
                   onChange={(e) => setQuick((q) => ({ ...q, location: e.target.value }))}
                 />

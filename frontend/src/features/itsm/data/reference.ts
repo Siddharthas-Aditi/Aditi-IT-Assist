@@ -161,49 +161,47 @@ export const ASSET_TYPES: AssetTypeRef[] = [
   },
 ];
 
-export const LOCATIONS: LocationRef[] = [
-  {
-    id: 'loc-blr',
-    name: 'India – Bangalore',
-    country: 'India',
-    city: 'Bangalore',
-    timezone: 'Asia/Kolkata',
-  },
-  {
-    id: 'loc-hyd',
-    name: 'India – Hyderabad',
-    country: 'India',
-    city: 'Hyderabad',
-    timezone: 'Asia/Kolkata',
-  },
-  {
-    id: 'loc-pune',
-    name: 'India – Pune',
-    country: 'India',
-    city: 'Pune',
-    timezone: 'Asia/Kolkata',
-  },
-  {
-    id: 'loc-dal',
-    name: 'US – Dallas',
-    country: 'United States',
-    city: 'Dallas',
-    timezone: 'America/Chicago',
-  },
-  {
-    id: 'loc-nj',
-    name: 'US – New Jersey',
-    country: 'United States',
-    city: 'Newark',
-    timezone: 'America/New_York',
-  },
-  {
-    id: 'loc-remote',
-    name: 'Remote – Work From Home',
-    country: '—',
-    city: '—',
-    timezone: '—',
-  },
+/**
+ * Aditi's operating locations, as used by the business.
+ *
+ * Names are stored verbatim so they match the source system exactly — that
+ * includes entries which look redundant to an outsider ("Raleigh" alongside
+ * "USA - Raleigh", "Rep. Dominicana" alongside "Dominican Republic"). They are
+ * distinct records in the business list, so they stay distinct here; the
+ * Locations page can merge or remove any of them.
+ */
+export const SEED_LOCATIONS: LocationRef[] = [
+  { id: 'loc-ar', name: 'Argentina', country: 'Argentina', city: '—', timezone: 'America/Argentina/Buenos_Aires' },
+  { id: 'loc-bo', name: 'Bolivia', country: 'Bolivia', city: '—', timezone: 'America/La_Paz' },
+  { id: 'loc-br', name: 'Brazil', country: 'Brazil', city: '—', timezone: 'America/Sao_Paulo' },
+  { id: 'loc-ca', name: 'Canada', country: 'Canada', city: '—', timezone: 'America/Toronto' },
+  { id: 'loc-cl', name: 'Chile', country: 'Chile', city: '—', timezone: 'America/Santiago' },
+  { id: 'loc-cin', name: 'Cincinnati', country: 'USA', city: 'Cincinnati', timezone: 'America/New_York' },
+  { id: 'loc-co', name: 'Colombia', country: 'Colombia', city: '—', timezone: 'America/Bogota' },
+  { id: 'loc-cr', name: 'Costa Rica', country: 'Costa Rica', city: '—', timezone: 'America/Costa_Rica' },
+  { id: 'loc-do', name: 'Dominican Republic', country: 'Dominican Republic', city: '—', timezone: 'America/Santo_Domingo' },
+  { id: 'loc-ec', name: 'Ecuador', country: 'Ecuador', city: '—', timezone: 'America/Guayaquil' },
+  { id: 'loc-sv', name: 'El Salvador', country: 'El Salvador', city: '—', timezone: 'America/El_Salvador' },
+  { id: 'loc-eu', name: 'Europe', country: 'Europe', city: '—', timezone: 'Europe/London' },
+  { id: 'loc-gt', name: 'Guatemala', country: 'Guatemala', city: '—', timezone: 'America/Guatemala' },
+  { id: 'loc-hn', name: 'Honduras', country: 'Honduras', city: '—', timezone: 'America/Tegucigalpa' },
+  { id: 'loc-in', name: 'India', country: 'India', city: '—', timezone: 'Asia/Kolkata' },
+  { id: 'loc-in-blr', name: 'India - Bangalore', country: 'India', city: 'Bangalore', timezone: 'Asia/Kolkata' },
+  { id: 'loc-in-con', name: 'India - Consultant', country: 'India', city: '—', timezone: 'Asia/Kolkata' },
+  { id: 'loc-in-vad', name: 'India - Vadodara', country: 'India', city: 'Vadodara', timezone: 'Asia/Kolkata' },
+  { id: 'loc-jm', name: 'Jamaica', country: 'Jamaica', city: '—', timezone: 'America/Jamaica' },
+  { id: 'loc-mx', name: 'Mexico', country: 'Mexico', city: '—', timezone: 'America/Mexico_City' },
+  { id: 'loc-py', name: 'Paraguay', country: 'Paraguay', city: '—', timezone: 'America/Asuncion' },
+  { id: 'loc-pe', name: 'Peru', country: 'Peru', city: '—', timezone: 'America/Lima' },
+  { id: 'loc-ral', name: 'Raleigh', country: 'USA', city: 'Raleigh', timezone: 'America/New_York' },
+  { id: 'loc-repdo', name: 'Rep. Dominicana', country: 'Dominican Republic', city: '—', timezone: 'America/Santo_Domingo' },
+  { id: 'loc-es', name: 'Spain', country: 'Spain', city: '—', timezone: 'Europe/Madrid' },
+  { id: 'loc-uy', name: 'Uruguay', country: 'Uruguay', city: '—', timezone: 'America/Montevideo' },
+  { id: 'loc-us', name: 'USA', country: 'USA', city: '—', timezone: 'America/New_York' },
+  { id: 'loc-us-bel', name: 'USA - Bellevue', country: 'USA', city: 'Bellevue', timezone: 'America/Los_Angeles' },
+  { id: 'loc-us-cal', name: 'USA - California', country: 'USA', city: '—', timezone: 'America/Los_Angeles' },
+  { id: 'loc-us-con', name: 'USA - Consultant', country: 'USA', city: '—', timezone: 'America/New_York' },
+  { id: 'loc-us-ral', name: 'USA - Raleigh', country: 'USA', city: 'Raleigh', timezone: 'America/New_York' },
 ];
 
 export const VENDORS: VendorRef[] = [
@@ -266,8 +264,30 @@ export const VENDORS: VendorRef[] = [
 ];
 
 export const CLASSIFICATIONS = ['Internal', 'Confidential', 'Restricted', 'Public'];
-export const REGIONS = ['APAC', 'NAMER', 'EMEA'];
-export const AVAILABILITY_ZONES = ['ap-south-1a', 'ap-south-1b', 'us-east-1a', 'on-premise'];
+/** Offered in the Locations form as suggestions — any other value is accepted. */
+export const COUNTRIES = [
+  'India',
+  'USA',
+  'Argentina',
+  'Bolivia',
+  'Brazil',
+  'Canada',
+  'Chile',
+  'Colombia',
+  'Costa Rica',
+  'Dominican Republic',
+  'Ecuador',
+  'El Salvador',
+  'Europe',
+  'Guatemala',
+  'Honduras',
+  'Jamaica',
+  'Mexico',
+  'Paraguay',
+  'Peru',
+  'Spain',
+  'Uruguay',
+];
 export const PHYSICAL_SUBTYPES = ['Access Point', 'Desktop', 'Laptop', 'Peripheral', 'Appliance', 'Rack Server'];
 export const VIRTUAL_SUBTYPES = ['Virtual Machine', 'Container Host', 'Cloud Instance', 'Not Applicable'];
 export const SOURCES = ['Manual', 'Discovery Scan', 'Intune Sync', 'CSV Import'];

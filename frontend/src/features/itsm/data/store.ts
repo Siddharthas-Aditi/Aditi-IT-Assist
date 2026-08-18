@@ -14,15 +14,26 @@ import { useSyncExternalStore } from 'react';
 import { seedAssets } from './mock-assets';
 import { seedChanges } from './mock-changes';
 import { seedTemplates } from './mock-templates';
-import type { Asset, Change, ChangeTemplate, TicketAssetLink } from './types';
+import { SEED_LOCATIONS } from './reference';
+import type {
+  Asset,
+  Change,
+  ChangeTemplate,
+  LocationRef,
+  TicketAssetLink,
+} from './types';
 
-const STORAGE_KEY = 'aditi.itsm.state.v1';
+// Bump this whenever the seed data changes shape or content in a way an open
+// session must not keep — sessionStorage would otherwise pin the old snapshot
+// and the new seed would never appear.
+const STORAGE_KEY = 'aditi.itsm.state.v2';
 
 export interface ItsmState {
   assets: Asset[];
   changes: Change[];
   templates: ChangeTemplate[];
   ticketAssetLinks: TicketAssetLink[];
+  locations: LocationRef[];
 }
 
 function buildSeed(): ItsmState {
@@ -33,6 +44,7 @@ function buildSeed(): ItsmState {
     changes: seedChanges(assetIdByTag),
     templates: seedTemplates(),
     ticketAssetLinks: [],
+    locations: SEED_LOCATIONS.map((l) => ({ ...l })),
   };
 }
 
@@ -48,6 +60,7 @@ function load(): ItsmState {
       changes: parsed.changes,
       templates: parsed.templates ?? seedTemplates(),
       ticketAssetLinks: parsed.ticketAssetLinks ?? [],
+      locations: parsed.locations?.length ? parsed.locations : SEED_LOCATIONS.map((l) => ({ ...l })),
     };
   } catch {
     // Corrupt or unreadable session state must never block the module.
@@ -254,6 +267,60 @@ export function findSerialDuplicate(serial: string, exceptId?: string): Asset | 
   return state.assets.find(
     (a) => a.id !== exceptId && a.serialNumber.trim().toLowerCase() === needle,
   );
+}
+
+// ── Bulk asset import ──────────────────────────────────────────────────
+
+/** Insert many assets in one commit so the UI re-renders once, not per row. */
+export function createAssetsBulk(
+  drafts: Omit<Asset, 'id' | 'createdAt' | 'updatedAt'>[],
+): Asset[] {
+  const now = nowIso();
+  const created = drafts.map((d) => ({
+    ...d,
+    id: newId('asset'),
+    createdAt: now,
+    updatedAt: now,
+  }));
+  setState({ ...state, assets: [...created, ...state.assets] });
+  return created;
+}
+
+// ── Locations ──────────────────────────────────────────────────────────
+
+export function createLocation(draft: Omit<LocationRef, 'id'>): LocationRef {
+  const loc: LocationRef = { ...draft, id: newId('loc') };
+  setState({ ...state, locations: [...state.locations, loc] });
+  return loc;
+}
+
+export function updateLocation(id: string, patch: Partial<LocationRef>): void {
+  const before = state.locations.find((l) => l.id === id);
+  const locations = state.locations.map((l) => (l.id === id ? { ...l, ...patch } : l));
+
+  // Renaming a location must carry the assets with it, otherwise every asset
+  // at that site silently drops out of the location filter.
+  const renamed = patch.name && before && patch.name !== before.name;
+  const assets = renamed
+    ? state.assets.map((a) =>
+        a.location === before.name ? { ...a, location: patch.name as string } : a,
+      )
+    : state.assets;
+
+  setState({ ...state, locations, assets });
+}
+
+/** Locations still in use cannot be deleted — the count tells the caller why. */
+export function assetCountAtLocation(name: string): number {
+  return state.assets.filter((a) => a.location === name).length;
+}
+
+export function deleteLocation(id: string): boolean {
+  const loc = state.locations.find((l) => l.id === id);
+  if (!loc) return false;
+  if (assetCountAtLocation(loc.name) > 0) return false;
+  setState({ ...state, locations: state.locations.filter((l) => l.id !== id) });
+  return true;
 }
 
 // ── Ticket ↔ asset links ───────────────────────────────────────────────

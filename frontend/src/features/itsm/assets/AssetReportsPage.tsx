@@ -22,7 +22,8 @@ import {
 
 import { PageHeader } from '../components/chrome';
 import { Button, Panel, StatusBadge } from '../components/ui';
-import { ASSET_TYPES, LOCATIONS, personName } from '../data/reference';
+import { ASSET_TYPES, personName } from '../data/reference';
+import { formatTotals } from '../data/money';
 import { daysUntil, isExpiringSoon } from '../data/rules';
 import { useItsmState } from '../data/store';
 import { ASSET_STATES, type Asset } from '../data/types';
@@ -55,7 +56,7 @@ function StatTile({
   hint,
 }: {
   label: string;
-  value: number;
+  value: number | string;
   tone?: 'warn' | 'default';
   hint?: string;
 }) {
@@ -187,7 +188,7 @@ function ExpiryList({ title, rows, dateOf }: { title: string; rows: Asset[]; dat
 }
 
 export function AssetReportsPage() {
-  const { assets } = useItsmState();
+  const { assets, locations } = useItsmState();
   const [location, setLocation] = useState('');
   const [assetType, setAssetType] = useState('');
 
@@ -240,7 +241,7 @@ export function AssetReportsPage() {
             className="min-w-[180px] rounded-md border border-slate-300 bg-white px-2 py-1 text-[12px] text-slate-900 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
           >
             <option value="">All locations</option>
-            {LOCATIONS.map((l) => (
+            {locations.map((l) => (
               <option key={l.id} value={l.name}>
                 {l.name}
               </option>
@@ -264,8 +265,13 @@ export function AssetReportsPage() {
         </label>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <StatTile label="Total assets" value={rows.length} hint="Matching the current filters" />
+        <StatTile
+          label="Total value"
+          value={formatTotals(rows)}
+          hint="Grouped by currency — never converted"
+        />
         <StatTile label="Unassigned" value={unassigned.length} hint="No owner recorded" />
         <StatTile
           label="Warranty ≤ 90 days"

@@ -1,12 +1,21 @@
 /** Reference data views: asset types, locations, and vendors. */
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { Pencil, Plus, Trash2 } from 'lucide-react';
 
 import { PageHeader } from '../components/chrome';
-import { Panel, StatusBadge } from '../components/ui';
-import { ASSET_TYPES, LOCATIONS, VENDORS } from '../data/reference';
-import { useItsmState } from '../data/store';
+import { useToast } from '../components/toast-context';
+import { Button, Field, Panel, StatusBadge, TextInput } from '../components/ui';
+import { ASSET_TYPES, COUNTRIES, VENDORS } from '../data/reference';
+import { formatTotals } from '../data/money';
+import {
+  createLocation,
+  deleteLocation,
+  updateLocation,
+  useItsmState,
+} from '../data/store';
+import type { Asset } from '../data/types';
 
 /** Shared table shell so all three reference pages read identically. */
 function RefTable({
@@ -77,8 +86,12 @@ export function AssetTypesPage() {
   );
 }
 
+const BLANK_LOCATION = { name: '', country: 'India', city: '', timezone: 'Asia/Kolkata' };
+
 export function LocationsPage() {
-  const { assets } = useItsmState();
+  const { assets, locations } = useItsmState();
+  const toast = useToast();
+  const [editing, setEditing] = useState<(typeof BLANK_LOCATION & { id?: string }) | null>(null);
 
   const counts = useMemo(() => {
     const map = new Map<string, number>();
@@ -86,26 +99,140 @@ export function LocationsPage() {
     return map;
   }, [assets]);
 
+  function save() {
+    if (!editing) return;
+    const name = editing.name.trim();
+    if (!name) {
+      toast.error('Location name is required.');
+      return;
+    }
+    const clash = locations.some(
+      (l) => l.id !== editing.id && l.name.trim().toLowerCase() === name.toLowerCase(),
+    );
+    if (clash) {
+      toast.error(`“${name}” already exists.`);
+      return;
+    }
+
+    if (editing.id) {
+      updateLocation(editing.id, { ...editing, name });
+      toast.success(`${name} updated. Assets at this site were moved with it.`);
+    } else {
+      createLocation({ ...editing, name });
+      toast.success(`${name} added.`);
+    }
+    setEditing(null);
+  }
+
+  function remove(id: string, name: string) {
+    const inUse = counts.get(name) ?? 0;
+    if (inUse > 0) {
+      toast.error(
+        `${name} still has ${inUse} asset${inUse > 1 ? 's' : ''}. Move them before deleting it.`,
+      );
+      return;
+    }
+    deleteLocation(id);
+    toast.info(`${name} removed.`);
+  }
+
   return (
     <div className="space-y-4">
       <PageHeader
         title="Locations"
         crumbs={[{ label: 'Assets', to: '/itsm/assets' }, { label: 'Locations' }]}
-        description="Sites where assets are deployed or stored."
+        description="Sites where assets are deployed or stored. Add as many as you need."
+        actions={
+          <Button variant="primary" onClick={() => setEditing({ ...BLANK_LOCATION })}>
+            <Plus size={14} /> Add location
+          </Button>
+        }
       />
+
+      {editing && (
+        <Panel title={editing.id ? 'Edit location' : 'New location'}>
+          <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
+            <Field label="Location name" required htmlFor="loc-name">
+              <TextInput
+                id="loc-name"
+                value={editing.name}
+                placeholder="India - Chennai"
+                onChange={(e) => setEditing({ ...editing, name: e.target.value })}
+              />
+            </Field>
+            <Field label="Country" htmlFor="loc-country">
+              <TextInput
+                id="loc-country"
+                list="itsm-countries"
+                value={editing.country}
+                onChange={(e) => setEditing({ ...editing, country: e.target.value })}
+              />
+              {/* A datalist offers USA/India without blocking anything else. */}
+              <datalist id="itsm-countries">
+                {COUNTRIES.map((c) => (
+                  <option key={c} value={c} />
+                ))}
+              </datalist>
+            </Field>
+            <Field label="City" htmlFor="loc-city">
+              <TextInput
+                id="loc-city"
+                value={editing.city}
+                onChange={(e) => setEditing({ ...editing, city: e.target.value })}
+              />
+            </Field>
+            <Field label="Timezone" htmlFor="loc-tz">
+              <TextInput
+                id="loc-tz"
+                value={editing.timezone}
+                onChange={(e) => setEditing({ ...editing, timezone: e.target.value })}
+              />
+            </Field>
+          </div>
+          <div className="mt-3 flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setEditing(null)}>
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={save}>
+              Save location
+            </Button>
+          </div>
+        </Panel>
+      )}
+
       <Panel>
-        <RefTable headers={['Location', 'City', 'Country', 'Timezone', 'Assets']}>
-          {LOCATIONS.map((l) => (
-            <tr key={l.id} className="border-b border-slate-200 last:border-0">
-              <td className="px-3 py-2 text-[13px] font-medium text-slate-900">{l.name}</td>
-              <td className="px-3 py-2 text-[12.5px] text-slate-500">{l.city}</td>
-              <td className="px-3 py-2 text-[12.5px] text-slate-500">{l.country}</td>
-              <td className="px-3 py-2 text-[12.5px] text-slate-500">{l.timezone}</td>
-              <td className="px-3 py-2 text-[12.5px] text-slate-800">
-                {counts.get(l.name) ?? 0}
-              </td>
-            </tr>
-          ))}
+        <RefTable headers={['Location', 'City', 'Country', 'Timezone', 'Assets', '']}>
+          {locations.map((l) => {
+            const inUse = counts.get(l.name) ?? 0;
+            return (
+              <tr key={l.id} className="border-b border-slate-200 last:border-0">
+                <td className="px-3 py-2 text-[13px] font-medium text-slate-900">{l.name}</td>
+                <td className="px-3 py-2 text-[12.5px] text-slate-500">{l.city}</td>
+                <td className="px-3 py-2 text-[12.5px] text-slate-500">{l.country}</td>
+                <td className="px-3 py-2 text-[12.5px] text-slate-500">{l.timezone}</td>
+                <td className="px-3 py-2 text-[12.5px] text-slate-800">{inUse}</td>
+                <td className="px-3 py-2">
+                  <div className="flex justify-end gap-1">
+                    <Button onClick={() => setEditing({ ...l })}>
+                      <Pencil size={12} /> Edit
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      onClick={() => remove(l.id, l.name)}
+                      title={
+                        inUse > 0
+                          ? `${inUse} asset(s) still at this location`
+                          : 'Delete this location'
+                      }
+                      aria-label={`Delete ${l.name}`}
+                    >
+                      <Trash2 size={12} />
+                    </Button>
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
         </RefTable>
       </Panel>
     </div>
@@ -116,19 +243,15 @@ export function VendorsPage() {
   const { assets } = useItsmState();
 
   const stats = useMemo(() => {
-    const map = new Map<string, { count: number; spend: number }>();
+    const map = new Map<string, { count: number; rows: { cost: number; currency: Asset['currency'] }[] }>();
     assets.forEach((a) => {
-      const cur = map.get(a.vendor) ?? { count: 0, spend: 0 };
-      map.set(a.vendor, { count: cur.count + 1, spend: cur.spend + a.cost });
+      const cur = map.get(a.vendor) ?? { count: 0, rows: [] };
+      cur.count += 1;
+      cur.rows.push({ cost: a.cost, currency: a.currency });
+      map.set(a.vendor, cur);
     });
     return map;
   }, [assets]);
-
-  const inr = new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 0,
-  });
 
   return (
     <div className="space-y-4">
@@ -159,7 +282,7 @@ export function VendorsPage() {
                 <td className="px-3 py-2 text-[12.5px] text-slate-500">{v.phone}</td>
                 <td className="px-3 py-2 text-[12.5px] text-slate-800">{s?.count ?? 0}</td>
                 <td className="px-3 py-2 text-[12.5px] text-slate-800">
-                  {inr.format(s?.spend ?? 0)}
+                  {formatTotals(s?.rows ?? [])}
                 </td>
               </tr>
             );

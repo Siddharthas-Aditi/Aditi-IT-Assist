@@ -178,6 +178,41 @@ export type UsageType = (typeof USAGE_TYPES)[number];
 export const HARDWARE_TYPES = ['Physical', 'Virtual'] as const;
 export type HardwareType = (typeof HARDWARE_TYPES)[number];
 
+export const CURRENCIES = ['INR', 'USD'] as const;
+export type CurrencyCode = (typeof CURRENCIES)[number];
+
+export const CURRENCY_LABELS: Record<CurrencyCode, string> = {
+  INR: '₹ Indian Rupee (INR)',
+  USD: '$ US Dollar (USD)',
+};
+
+export const ASSET_CONDITIONS = [
+  'New',
+  'Good',
+  'Fair',
+  'Minor Damage',
+  'Damaged',
+  'Faulty',
+] as const;
+export type AssetCondition = (typeof ASSET_CONDITIONS)[number];
+
+/**
+ * A dated condition photo.
+ *
+ * `dataUrl` holds a downscaled JPEG rather than the original upload — the
+ * store persists to sessionStorage, and full-resolution photos would blow the
+ * quota after a handful of assets.
+ */
+export interface AssetConditionPhoto {
+  id: string;
+  name: string;
+  condition: AssetCondition;
+  note: string;
+  dataUrl: string;
+  capturedAt: string;
+  capturedBy: string;
+}
+
 export const RELATIONSHIP_TARGETS = [
   'User',
   'Change',
@@ -223,19 +258,15 @@ export interface Asset {
   assetState: AssetState;
   employeeId: string;
   cost: number;
+  /** Currency the `cost` figure is denominated in. */
+  currency: CurrencyCode;
   warranty: string;
   acquisitionDate: string | null;
   warrantyExpiry: string | null;
   serialNumber: string;
   invoiceNumber: string;
   poNumber: string;
-  patchManaged: boolean;
   classification: string;
-  dtaEndorsement: string;
-  domain: string;
-  lastAuditDate: string | null;
-  region: string;
-  availabilityZone: string;
 
   // Network / access point
   firmware: string;
@@ -264,6 +295,8 @@ export interface Asset {
   relationships: AssetRelationship[];
   contract: string;
 
+  /** Dated photographic record of the asset's physical condition. */
+  conditionPhotos: AssetConditionPhoto[];
   attachments: Attachment[];
   activity: ActivityEntry[];
   createdAt: string;
