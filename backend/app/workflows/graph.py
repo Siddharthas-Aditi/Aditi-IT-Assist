@@ -1,14 +1,18 @@
 """LangGraph workflow definition — the core agent orchestration graph."""
 
+from typing import Any
+
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
 from app.core.config import settings
 from app.services.agents.escalation_triggers import evaluate_escalation
+from app.services.agents.supervisor import NextAction
 from app.workflows.nodes.escalation import escalation_node
 from app.workflows.nodes.policy import policy_enforcement_node
 from app.workflows.nodes.resolution import resolution_node
 from app.workflows.nodes.retrieval import retrieval_node
+from app.workflows.nodes.specialist_dispatch import specialist_dispatch_node
 from app.workflows.nodes.supervisor_shadow import supervisor_shadow_node
 from app.workflows.nodes.ticketing import ticket_node
 from app.workflows.nodes.triage import triage_node
@@ -39,10 +43,43 @@ def route_after_triage(state: WorkflowState) -> str:
     if decision.should_escalate:
         return "escalate"
 
-    # Shadow-mode supervisor runs between triage and policy. It logs +
-    # records its decision but never alters routing in Phase 1. See
-    # docs/development/rollout-plan-multi-agent.md for the promotion plan.
+    # Shadow and primary supervisor both live in the same node; routing out of
+    # it differs based on whether FEATURE_SUPERVISOR_PRIMARY is on.
     return "supervisor_shadow"
+
+
+def route_after_supervisor(state: WorkflowState) -> str:
+    """Route after the supervisor node.
+
+    Shadow mode (FEATURE_SUPERVISOR_PRIMARY=False): unconditionally forward to
+    the policy node — no UX change, the supervisor's logged decision is for
+    analytics only.
+
+    Primary mode (FEATURE_SUPERVISOR_PRIMARY=True): honour the supervisor's
+    ESCALATE and END decisions immediately. All other actions continue to the
+    policy node so RBAC and consent enforcement always runs before retrieval or
+    specialist dispatch.
+    """
+    if not settings.FEATURE_SUPERVISOR_PRIMARY:
+        return "policy"
+
+    supervisor_decision: dict[str, Any] = state.get("supervisor_decision") or {}
+    action_str = supervisor_decision.get("action", "")
+    try:
+        action = NextAction(action_str)
+    except ValueError:
+        return "policy"
+
+    if action is NextAction.ESCALATE:
+        return "escalate"
+    if action is NextAction.END:
+        return str(END)
+    # CLARIFY → triage already set needs_clarification; surface it via END
+    if action is NextAction.CLARIFY:
+        return str(END)
+    # DELEGATE, DELEGATE_SUB, RETRIEVE, RESPOND, WEB_FALLBACK → all continue
+    # through policy enforcement before retrieval/dispatch
+    return "policy"
 
 
 def route_after_policy(state: WorkflowState) -> str:
@@ -58,9 +95,10 @@ def route_after_policy(state: WorkflowState) -> str:
 def route_after_retrieval(state: WorkflowState) -> str:
     """Route after knowledge retrieval.
 
-    A response may only reach the resolver when its grounded retrieval passes
-    the configured reliability floor. This prevents the LLM from using weak
-    context as permission to answer from parametric knowledge.
+    When FEATURE_SUPERVISOR_PRIMARY is on and the supervisor decided DELEGATE
+    or DELEGATE_SUB, route to specialist_dispatch instead of the legacy
+    resolution node. The reliability floor is still checked first — a specialist
+    without grounded articles is the same as the legacy path: escalate.
     """
     decision = evaluate_escalation(
         state,
@@ -71,6 +109,17 @@ def route_after_retrieval(state: WorkflowState) -> str:
     )
     if decision.should_escalate:
         return "escalate"
+
+    if settings.FEATURE_SUPERVISOR_PRIMARY:
+        supervisor_decision: dict[str, Any] = state.get("supervisor_decision") or {}
+        action_str = supervisor_decision.get("action", "")
+        try:
+            action = NextAction(action_str)
+        except ValueError:
+            action = NextAction.RETRIEVE
+        if action in (NextAction.DELEGATE, NextAction.DELEGATE_SUB):
+            return "specialist_dispatch"
+
     return "resolve"
 
 
@@ -92,6 +141,18 @@ def route_after_resolution(state: WorkflowState) -> str:
     return str(END)
 
 
+def route_after_specialist_dispatch(state: WorkflowState) -> str:
+    """Route after specialist dispatch.
+
+    A specialist that signals escalation (escalation_signal set) moves to the
+    escalate node. Otherwise the session ends for this turn (the graph will be
+    re-entered on the next user message).
+    """
+    if state.get("should_escalate"):
+        return "escalate"
+    return str(END)
+
+
 def route_after_escalation(state: WorkflowState) -> str:
     """Route after escalation decision."""
     if state.get("should_escalate"):
@@ -104,11 +165,20 @@ def build_support_workflow() -> CompiledStateGraph[
 ]:
     """Build and compile the support workflow graph.
 
-    Graph topology:
-        triage -> policy -> retrieve -> resolve -> escalate -> draft_ticket -> END
+    Shadow mode topology (FEATURE_SUPERVISOR_PRIMARY=False, default):
+        triage -> supervisor_shadow -> policy -> retrieve -> resolve ->
+        escalate -> draft_ticket -> END
 
-    The policy node runs between triage and retrieval on every productive turn.
-    It enforces RBAC, consent requirements, and the max-turn safety limit.
+    Primary mode topology (FEATURE_SUPERVISOR_PRIMARY=True):
+        triage -> supervisor_shadow -> [ESCALATE→escalate | END→END | *→policy]
+        -> retrieve -> [DELEGATE→specialist_dispatch | *→resolve]
+        specialist_dispatch -> [should_escalate→escalate | *→END]
+        resolve -> escalate -> draft_ticket -> END
+
+    The policy node runs between supervisor and retrieval on every productive
+    turn. It enforces RBAC, consent requirements, and the max-turn safety limit.
+    The specialist_dispatch node replaces the resolution node for delegated
+    issues when the supervisor is primary.
     """
     workflow = StateGraph(WorkflowState)
 
@@ -118,6 +188,7 @@ def build_support_workflow() -> CompiledStateGraph[
     workflow.add_node("policy", policy_enforcement_node)
     workflow.add_node("retrieve", retrieval_node)
     workflow.add_node("resolve", resolution_node)
+    workflow.add_node("specialist_dispatch", specialist_dispatch_node)
     workflow.add_node("escalate", escalation_node)
     workflow.add_node("draft_ticket", ticket_node)
 
@@ -126,13 +197,11 @@ def build_support_workflow() -> CompiledStateGraph[
 
     # Define edges with conditional routing
     workflow.add_conditional_edges("triage", route_after_triage)
-    # supervisor_shadow is a pass-through: it logs the supervisor's decision
-    # then hands off to the policy node so the legacy linear path continues.
-    # Promoting it to a primary routing node (Phase 2) replaces this single
-    # edge with a conditional that branches on supervisor_decision.action.
-    workflow.add_edge("supervisor_shadow", "policy")
+    # Shadow mode: single edge forward. Primary mode: supervisor drives routing.
+    workflow.add_conditional_edges("supervisor_shadow", route_after_supervisor)
     workflow.add_conditional_edges("policy", route_after_policy)
     workflow.add_conditional_edges("retrieve", route_after_retrieval)
+    workflow.add_conditional_edges("specialist_dispatch", route_after_specialist_dispatch)
     workflow.add_conditional_edges("resolve", route_after_resolution)
     workflow.add_conditional_edges("escalate", route_after_escalation)
     workflow.add_edge("draft_ticket", END)

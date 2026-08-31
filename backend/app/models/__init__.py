@@ -1,5 +1,6 @@
 """Database models package — re-exports all models for Aditi IT Assist enterprise platform."""
 
+from app.models.agent_action_ledger import AgentActionLedger
 from app.models.analytics import AnalyticsSnapshot
 from app.models.audit import AuditEvent
 from app.models.auth import (
