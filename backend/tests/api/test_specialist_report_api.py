@@ -122,16 +122,22 @@ class TestSpecialistReportExport:
         assert resp.status_code == 403
 
     @pytest.mark.asyncio
-    async def test_csv_export(self, lead_client: AsyncClient):
+    async def test_it_lead_forbidden(self, lead_client: AsyncClient):
+        """Regression: was allowed before Workstream 4 (ANALYTICS_EXPORT is admin-only)."""
         resp = await lead_client.get(f"{BASE}/specialist-report/export", params={"format": "csv"})
+        assert resp.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_csv_export(self, admin_client: AsyncClient):
+        resp = await admin_client.get(f"{BASE}/specialist-report/export", params={"format": "csv"})
         assert resp.status_code == 200
         assert resp.headers["content-type"].startswith("text/csv")
         assert "attachment" in resp.headers["content-disposition"]
         assert ".csv" in resp.headers["content-disposition"]
 
     @pytest.mark.asyncio
-    async def test_xlsx_export(self, lead_client: AsyncClient):
-        resp = await lead_client.get(f"{BASE}/specialist-report/export", params={"format": "xlsx"})
+    async def test_xlsx_export(self, admin_client: AsyncClient):
+        resp = await admin_client.get(f"{BASE}/specialist-report/export", params={"format": "xlsx"})
         assert resp.status_code == 200
         assert (
             resp.headers["content-type"]
@@ -141,14 +147,14 @@ class TestSpecialistReportExport:
         assert ".xlsx" in resp.headers["content-disposition"]
 
     @pytest.mark.asyncio
-    async def test_pdf_export(self, lead_client: AsyncClient):
-        resp = await lead_client.get(f"{BASE}/specialist-report/export", params={"format": "pdf"})
+    async def test_pdf_export(self, admin_client: AsyncClient):
+        resp = await admin_client.get(f"{BASE}/specialist-report/export", params={"format": "pdf"})
         assert resp.status_code == 200
         assert resp.headers["content-type"] == "application/pdf"
         assert "attachment" in resp.headers["content-disposition"]
         assert ".pdf" in resp.headers["content-disposition"]
 
     @pytest.mark.asyncio
-    async def test_invalid_format_rejected(self, lead_client: AsyncClient):
-        resp = await lead_client.get(f"{BASE}/specialist-report/export", params={"format": "doc"})
+    async def test_invalid_format_rejected(self, admin_client: AsyncClient):
+        resp = await admin_client.get(f"{BASE}/specialist-report/export", params={"format": "doc"})
         assert resp.status_code == 400
