@@ -32,7 +32,7 @@ from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 
 # Snapshot/context schema version — bump on any breaking shape change so that
 # older persisted records remain interpretable.
-ESCALATION_CONTEXT_VERSION = "1.0"
+ESCALATION_CONTEXT_VERSION = "1.1"
 
 # Status the AI flow reached for the issue at escalation time.
 AI_RESOLUTION_STATUSES = (
@@ -139,8 +139,11 @@ class EscalationContext(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     ai_attempted_steps: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     # user_feedback_on_steps: [{"step": str, "feedback": str}]
     user_feedback_on_steps: Mapped[list | None] = mapped_column(JSONB, nullable=True)
-    # kb_articles_referenced: [{"article_id": str, "title": str, "relevance": float|None}]
+    # kb_articles_referenced: [{"article_id": str, "title": str, "relevance": float|None,
+    #                           "retrieval_confidence": float|None, "version": str|None}]
     kb_articles_referenced: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    # Full grounding decision trace retained at handoff for audit/replay.
+    retrieval_trace: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     # kb_gap_tags: controlled vocabulary (see services/agents/kb_gap_tags.py)
     kb_gap_tags: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     # web_research_findings: trust-filtered external findings captured at

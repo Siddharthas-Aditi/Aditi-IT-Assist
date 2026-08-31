@@ -87,13 +87,13 @@ The agent behaves like a real analyst, not a form:
                  ┌──────────┐
                  │ retrieve │  broad pool → ground_results: system-aware guard,
                  └────┬─────┘  reject cross-domain, rerank subtype
-        no GROUNDED   ┼──────────────→ escalate  (KB has nothing relevant → ticket)
-        article       ▼
+        no/weak GROUNDED┼────────────→ escalate  (below confidence floor → ticket offer)
+        article         ▼
                  ┌──────────┐
                  │ resolve  │  progression: next NEW steps; track suggested
                  └────┬─────┘
    steps exhausted ───┼──────────────→ escalate → draft_ticket → END
-                      ▼ (grounded next steps — shown regardless of confidence)
+                      ▼ (grounded next steps at or above the confidence floor)
                      END ("did this help?")
 ```
 
@@ -103,10 +103,27 @@ A ticket is logged **only** when the KB genuinely has no solution:
 - retrieval grounding kept **zero** articles (nothing on-system/on-domain), or
 - the resolver **exhausted** every grounded step for the issue.
 
-A merely *moderate* confidence score no longer triggers a ticket — if there's a
-grounded article, the agent troubleshoots from it. The ticket draft includes
+A retrieval confidence below the configured floor triggers an escalation offer,
+even if an article was technically retrieved; the resolver does not answer from
+that weak context. The ticket draft includes
 **user details** (name/email/id), the **problem statement**, and the **steps
 already tried** (`nodes/ticketing.py`).
+
+### Deterministic escalation policy
+
+`services/agents/escalation_triggers.py` is the single pure policy function
+used by graph routes and progression. It records the first applicable trigger:
+
+- explicit human request;
+- maximum conversation turns;
+- no safe issue classification;
+- no grounded articles;
+- retrieval or resolution confidence below the configured floor;
+- failed-step threshold reached; or
+- grounded steps exhausted.
+
+An escalation still only **offers** a ticket. Ticket creation remains gated on
+the employee's explicit confirmation in `ChatService`.
 
 Routing lives in [`graph.py`](../../backend/app/workflows/graph.py):
 `route_after_triage`, `route_after_retrieval`, `route_after_resolution`,

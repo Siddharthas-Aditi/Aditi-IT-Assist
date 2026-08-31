@@ -79,6 +79,14 @@ The node derives `knowledge_confidence` from the **grounded** top relevance:
 This feeds the composite resolution confidence (see
 [chat-grounding-rules.md](./chat-grounding-rules.md)).
 
+### Reliability floor
+
+`FLUID_CHAT_MIN_CONFIDENCE_TO_ADVISE` (currently `0.35`, retained under its
+existing configuration name for compatibility) is a hard floor for **all** chat
+flows, not only fluid chat. Below it, the retrieval node records an uncertainty
+reason and routing goes directly to escalation; the resolution LLM is not
+invoked with the weak context.
+
 ## Traceability
 
 `ground_results(...).trace()` returns:

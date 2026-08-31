@@ -27,6 +27,16 @@ class QuickReplyOption(BaseModel):
     value: str
 
 
+class KnowledgeCitationSchema(BaseModel):
+    """Visible provenance for a response grounded in approved knowledge."""
+
+    article_id: str
+    title: str
+    version: str | None = None
+    citation_label: str
+    category: str | None = None
+
+
 class ChatDebugInfo(BaseModel):
     """Developer-facing trace of how a response was produced.
 
@@ -78,6 +88,9 @@ class ChatMessageResponse(BaseModel):
     issue_category: str | None = None
     issue_subtype: str | None = None
     resolution_steps: list[ResolutionStepSchema] = []
+    # Present whenever the answer used retrieved KB content. Unlike ``debug``,
+    # this provenance is available to every employee-facing chat client.
+    citations: list[KnowledgeCitationSchema] = []
     requires_escalation: bool = False
     # True when the agent has OFFERED to raise a ticket + connect a human but
     # is waiting for the user to confirm (drives the "Connect" CTA). Distinct

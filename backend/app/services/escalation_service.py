@@ -118,8 +118,23 @@ def _normalize_steps(raw_steps: list | None, *, default_outcome: str) -> list[di
     return steps
 
 
-def _normalize_kb_refs(citations: list | None, knowledge_results: list | None) -> list[dict]:
+def _normalize_kb_refs(
+    citations: list | None,
+    knowledge_results: list | None,
+    retrieval_trace: dict | None,
+    retrieval_confidence: float | None,
+) -> list[dict]:
     """Best-effort normalization of KB citations/results into typed refs."""
+    results_by_id = {
+        str(item.get("id") or item.get("article_id")): item
+        for item in knowledge_results or []
+        if isinstance(item, dict)
+    }
+    relevance_by_id = {
+        str(item.get("id")): item.get("relevance")
+        for item in (retrieval_trace or {}).get("kept", [])
+        if isinstance(item, dict)
+    }
     source = citations or knowledge_results or []
     refs: list[dict] = []
     for item in source:
@@ -128,16 +143,33 @@ def _normalize_kb_refs(citations: list | None, knowledge_results: list | None) -
                 item.get("article_id") or item.get("id") or item.get("knowledge_article_id") or ""
             )
             title = str(item.get("title") or item.get("name") or "Untitled article")
-            relevance = item.get("relevance") or item.get("score")
+            result = results_by_id.get(article_id, {})
+            relevance = relevance_by_id.get(
+                article_id, item.get("relevance") or result.get("score")
+            )
             refs.append(
                 {
                     "article_id": article_id,
                     "title": title,
                     "relevance": float(relevance) if relevance is not None else None,
+                    "retrieval_confidence": retrieval_confidence,
+                    "version": (
+                        str(item["version"])
+                        if item.get("version") is not None
+                        else (str(result["version"]) if result.get("version") is not None else None)
+                    ),
                 }
             )
         elif item:
-            refs.append({"article_id": "", "title": str(item), "relevance": None})
+            refs.append(
+                {
+                    "article_id": "",
+                    "title": str(item),
+                    "relevance": None,
+                    "retrieval_confidence": retrieval_confidence,
+                    "version": None,
+                }
+            )
     return refs
 
 
@@ -214,7 +246,10 @@ class EscalationService:
         )
 
         kb_refs = _normalize_kb_refs(
-            state.get("knowledge_citations"), state.get("knowledge_results")
+            state.get("knowledge_citations"),
+            state.get("knowledge_results"),
+            state.get("retrieval_trace"),
+            state.get("knowledge_confidence"),
         )
         kb_gap_tags = derive_kb_gap_tags(
             knowledge_results=state.get("knowledge_results"),
@@ -250,6 +285,7 @@ class EscalationService:
             ai_attempted_steps=attempted_steps,
             user_feedback_on_steps=diag.get("user_feedback_on_steps") or [],
             kb_articles_referenced=kb_refs,
+            retrieval_trace=state.get("retrieval_trace") or {},
             kb_gap_tags=kb_gap_tags,
             web_research_findings=state.get("web_research_findings"),
             ai_confidence=state.get("resolution_confidence") or ticket.ai_confidence,
@@ -415,6 +451,7 @@ class EscalationService:
             ai_attempted_steps=[AttemptedStepOut(**s) for s in (c.ai_attempted_steps or [])],
             user_feedback_on_steps=c.user_feedback_on_steps or [],
             kb_articles_referenced=[KBArticleRefOut(**r) for r in (c.kb_articles_referenced or [])],
+            retrieval_trace=c.retrieval_trace or {},
             kb_gap_tags=c.kb_gap_tags or [],
             web_research_findings=c.web_research_findings,
             ai_confidence=c.ai_confidence,

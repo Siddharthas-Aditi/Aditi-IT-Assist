@@ -295,7 +295,7 @@ class TestHonestHandoffOnWeakGrounding:
 
         assert out["resolution_steps"] == []
         assert out["conversation_phase"] == "escalating"
-        assert out["escalation_reason"] == "no confident grounded guidance"
+        assert "reliable, approved guidance" in out["escalation_reason"]
         assert out["diagnostic_context"]["phase"] == "escalating"
 
     @pytest.mark.asyncio
@@ -349,8 +349,8 @@ class TestHonestHandoffOnWeakGrounding:
         assert out["conversation_phase"] != "escalating"
 
     @pytest.mark.asyncio
-    async def test_flag_off_weak_match_still_presents_steps(self, monkeypatch):
-        """Flag-off: unchanged — even weak-confidence steps are presented as today."""
+    async def test_flag_off_weak_match_still_escalates(self, monkeypatch):
+        """The reliability floor applies even when fluid chat is disabled."""
         from app.core.config import settings
 
         monkeypatch.setattr(settings, "FEATURE_FLUID_CHAT", False)
@@ -367,5 +367,5 @@ class TestHonestHandoffOnWeakGrounding:
 
             out = await resolution_node(state)
 
-        assert out["resolution_steps"] != []
-        assert out["conversation_phase"] != "escalating"
+        assert out["resolution_steps"] == []
+        assert out["conversation_phase"] == "escalating"

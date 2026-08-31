@@ -5,18 +5,22 @@ instead of broad category-based searches. Falls back to YAML seed when
 the database has no published articles.
 """
 
+from typing import Any
+
+from app.core.config import settings
 from app.core.database import async_session_factory
 from app.core.logging import get_logger
-from app.services.agents.diagnostic_state import DiagnosticContext
+from app.services.agents.diagnostic_state import DiagnosticContext, DiagnosticPhase
+from app.services.agents.escalation_triggers import EscalationTrigger, escalation_reason
 from app.services.agents.grounding import ground_results
 from app.services.agents.playbooks import get_playbook
 from app.services.knowledge.retrieval import KnowledgeRetrievalService
-from app.workflows.state import WorkflowState
+from app.workflows.state import KnowledgeCitation, WorkflowState
 
 logger = get_logger(__name__)
 
 
-def _scored_to_dict(scored_article) -> dict:
+def _scored_to_dict(scored_article: Any) -> dict[str, Any]:
     """Convert a ScoredArticle into a plain dict for workflow state."""
     art = scored_article.article
     # Support both KnowledgeArticle ORM instances and _DictArticle adapters
@@ -28,6 +32,7 @@ def _scored_to_dict(scored_article) -> dict:
         "tags": list(getattr(art, "tags", None) or []),
         "keywords": list(getattr(art, "keywords", None) or []),
         "citation_label": getattr(art, "citation_label", None) or getattr(art, "title", ""),
+        "version": getattr(art, "version", None),
         # Prefer structured resolution_steps; fall back to legacy steps field
         "resolution_steps": getattr(art, "resolution_steps", None) or [],
         "steps": getattr(art, "steps", None) or getattr(art, "resolution_steps", None) or [],
@@ -44,12 +49,13 @@ def _scored_to_dict(scored_article) -> dict:
     }
 
 
-def _build_citations(articles: list[dict]) -> list[dict]:
+def _build_citations(articles: list[dict[str, Any]]) -> list[KnowledgeCitation]:
     """Project retrieved articles into citation-ready source attributions."""
     return [
         {
             "article_id": a.get("id", "unknown"),
             "title": a.get("title", "Knowledge Article"),
+            "version": str(a["version"]) if a.get("version") is not None else None,
             "citation_label": a.get("citation_label") or a.get("title", ""),
             "category": a.get("category"),
         }
@@ -57,7 +63,7 @@ def _build_citations(articles: list[dict]) -> list[dict]:
     ]
 
 
-async def retrieval_node(state: WorkflowState) -> dict:
+async def retrieval_node(state: WorkflowState) -> dict[str, Any]:
     """Search knowledge base using focused queries from diagnostic context.
 
     This node:
@@ -149,7 +155,7 @@ async def retrieval_node(state: WorkflowState) -> dict:
         query_length=len(query),
     )
 
-    return {
+    response: dict[str, Any] = {
         "current_node": "retrieve",
         "knowledge_results": articles,
         "knowledge_confidence": confidence,
@@ -158,6 +164,29 @@ async def retrieval_node(state: WorkflowState) -> dict:
         "retrieval_trace": grounded.trace(),
         "audit_trail": [audit_entry],
     }
+    if confidence < settings.FLUID_CHAT_MIN_CONFIDENCE_TO_ADVISE:
+        # A weak retrieval is not safe LLM context. Persist the reason before
+        # the graph routes to escalation so the employee sees an explicit,
+        # reliable uncertainty statement rather than parametric advice.
+        diag_ctx.phase = DiagnosticPhase.ESCALATING
+        diag_ctx.escalation_reason = escalation_reason(
+            EscalationTrigger.LOW_RETRIEVAL_CONFIDENCE
+            if articles
+            else EscalationTrigger.NO_GROUNDED_ARTICLES
+        )
+        response.update(
+            {
+                "diagnostic_context": diag_ctx.to_dict(),
+                "conversation_phase": diag_ctx.phase.value,
+                "escalation_reason": diag_ctx.escalation_reason,
+            }
+        )
+        audit_entry["escalation_trigger"] = (
+            EscalationTrigger.LOW_RETRIEVAL_CONFIDENCE.value
+            if articles
+            else EscalationTrigger.NO_GROUNDED_ARTICLES.value
+        )
+    return response
 
 
 def _build_focused_query(diag_ctx: DiagnosticContext, state: WorkflowState) -> str:
@@ -212,7 +241,8 @@ def _build_focused_query(diag_ctx: DiagnosticContext, state: WorkflowState) -> s
     user_query = ""
     for msg in reversed(state.get("messages", [])):
         if hasattr(msg, "type") and msg.type == "human":
-            user_query = msg.content
+            content = msg.content
+            user_query = content if isinstance(content, str) else ""
             break
 
     category = diag_ctx.issue_category or ""

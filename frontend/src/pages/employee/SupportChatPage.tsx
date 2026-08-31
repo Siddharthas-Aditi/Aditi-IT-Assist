@@ -87,6 +87,14 @@ interface ResolutionStep {
   details?: string;
 }
 
+interface KnowledgeCitation {
+  article_id: string;
+  title: string;
+  version?: string | null;
+  citation_label: string;
+  category?: string | null;
+}
+
 interface TicketRef {
   ticket_id: string;
   ticket_number: string;
@@ -112,6 +120,7 @@ interface ChatMessage {
   isError?: boolean;
   /** Quick-reply chips offered after a troubleshooting step (e.g. "That worked"). */
   quickReplies?: QuickReplyOption[];
+  citations?: KnowledgeCitation[];
 }
 
 /** Render **bold** markdown and newlines without a full MD library. */
@@ -359,6 +368,7 @@ export function SupportChatPage() {
         issue_category?: string;
         confidence_score?: number;
         quick_replies?: QuickReplyOption[];
+        citations?: KnowledgeCitation[];
         resolved?: boolean;
         detail?: string | { msg?: string; loc?: unknown[] }[];
       } = {};
@@ -398,6 +408,7 @@ export function SupportChatPage() {
         category: data.issue_category ?? undefined,
         confidence: data.confidence_score,
         quickReplies: data.quick_replies ?? undefined,
+        citations: data.citations ?? undefined,
       };
       setMessages((prev) => [...prev, assistantMsg]);
 
@@ -667,6 +678,21 @@ export function SupportChatPage() {
                         </li>
                       ))}
                     </ol>
+                  </div>
+                )}
+
+                {msg.role === 'assistant' && msg.citations && msg.citations.length > 0 && (
+                  <div className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                    <p className="text-xs font-semibold text-slate-700">Sources</p>
+                    <ul className="mt-1 space-y-1">
+                      {msg.citations.map((citation) => (
+                        <li key={citation.article_id} className="text-xs text-slate-600">
+                          {citation.title}
+                          {citation.version ? ` · v${citation.version}` : ''}
+                          <span className="ml-1 font-mono text-slate-400">{citation.article_id}</span>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
                 )}
 

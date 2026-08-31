@@ -14,6 +14,7 @@ from app.models.auth import User
 from app.schemas.chat import (
     ChatDebugInfo,
     ChatMessageResponse,
+    KnowledgeCitationSchema,
     QuickReplyOption,
     ResolutionStepSchema,
     TicketRef,
@@ -89,6 +90,14 @@ class ChatService:
         unlikely; this closes the deliberate-guess (IDOR) path.
         """
         session = await self._store.load(session_id)
+        if session is None and user_id and self.support_session_service is not None:
+            # Redis/session-store state is an acceleration layer, not the only
+            # copy of diagnostic history. Rehydrate from support_sessions after
+            # a process restart, pod reschedule, cache eviction, or cache loss.
+            session = await self.support_session_service.restore_chat_session(session_id, user_id)
+            if session is not None:
+                await self._store.save(session_id, session)
+                logger.info("chat_session_rehydrated_from_database", session_id=session_id)
         if session is None:
             return None
         if user_id and session.user_id and session.user_id != user_id:
@@ -387,6 +396,7 @@ class ChatService:
             issue_category=result.get("issue_category"),
             issue_subtype=result.get("issue_subtype"),
             resolution_steps=steps,
+            citations=self._response_citations(result),
             # Once a ticket exists, stop prompting for escalation — show the
             # ticket instead. The "Connect" CTA is driven by escalation_offered.
             requires_escalation=bool(result.get("should_escalate")) and ticket_ref is None,
@@ -405,6 +415,31 @@ class ChatService:
             resolved=bool(result.get("issue_resolved")),
             debug=debug,
         )
+
+    @staticmethod
+    def _response_citations(result: dict) -> list[KnowledgeCitationSchema]:
+        """Return visible citations for every response grounded in KB results.
+
+        Retrieval normally supplies ``knowledge_citations``. The fallback keeps
+        the API provenance invariant intact for older callers and test doubles
+        that provide retrieved chunks but not the projected citation list.
+        """
+        raw = result.get("knowledge_citations") or [
+            {
+                "article_id": str(article.get("id", "unknown")),
+                "title": str(article.get("title", "Knowledge Article")),
+                "version": (
+                    str(article["version"]) if article.get("version") is not None else None
+                ),
+                "citation_label": str(
+                    article.get("citation_label") or article.get("title", "Knowledge Article")
+                ),
+                "category": article.get("category"),
+            }
+            for article in result.get("knowledge_results", [])
+            if isinstance(article, dict)
+        ]
+        return [KnowledgeCitationSchema(**citation) for citation in raw]
 
     # ── Ticketing / live-agent handoff ───────────────────────────────
 

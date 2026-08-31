@@ -59,12 +59,12 @@ triage, queue routing, analytics, KB improvement, and AI evaluation:
 |-------|--------|
 | Links | `ticket_id` (unique), `transcript_snapshot_id`, `chat_session_id`, `user_id`, `escalation_created_at` |
 | Issue understanding | `issue_summary`, `user_problem_statement`, `detected_intent`, `category`, `subcategory`, `affected_system`, `urgency`, `sentiment` |
-| AI attempts | `ai_attempted_steps[]`, `user_feedback_on_steps[]`, `kb_articles_referenced[]`, `kb_gap_tags[]`, `ai_confidence`, `ai_resolution_status` |
+| AI attempts | `ai_attempted_steps[]`, `user_feedback_on_steps[]`, `kb_articles_referenced[]`, immutable `retrieval_trace`, `kb_gap_tags[]`, `ai_confidence`, `ai_resolution_status` |
 | Escalation/routing | `escalation_reason`, `live_support_required`, `specialist_queue_target`, `handoff_triggered_by`, `supervisor_decision_trace`, `diagnostic_slots`, `context_version` |
 | Resolution comparison (post-resolution) | `specialist_resolution_summary`, `specialist_resolution_steps[]`, `final_resolution_category`, `ai_vs_specialist_resolution_gap`, `kb_candidate_flag`, `resolution_compared_at` |
 
 `ai_attempted_steps[]` entries are `{instruction, outcome (worked/failed/skipped/unknown), source_kb_title}`.
-`kb_articles_referenced[]` entries are `{article_id, title, relevance}`.
+`kb_articles_referenced[]` entries are `{article_id, title, relevance, retrieval_confidence, version}`. `retrieval_trace` preserves the complete kept/rejected grounding trace at handoff.
 
 ## KB gap tags
 

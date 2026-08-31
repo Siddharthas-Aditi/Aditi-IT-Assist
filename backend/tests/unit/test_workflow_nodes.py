@@ -44,11 +44,10 @@ class TestOrchestrator:
         state = {"knowledge_results": [], "knowledge_confidence": 0.0}
         assert route_after_retrieval(state) == "escalate"
 
-    def test_route_after_retrieval_resolves_even_at_low_confidence(self):
-        """Policy: if the KB returned any grounded article, troubleshoot from it
-        (don't ticket just because confidence is moderate)."""
+    def test_route_after_retrieval_escalates_at_low_confidence(self):
+        """Weak retrieval must not reach the LLM resolver."""
         state = {"knowledge_results": [{"id": "1"}], "knowledge_confidence": 0.2}
-        assert route_after_retrieval(state) == "resolve"
+        assert route_after_retrieval(state) == "escalate"
 
     def test_route_after_retrieval_resolves_with_good_results(self):
         state = {"knowledge_results": [{"id": "1"}], "knowledge_confidence": 0.7}

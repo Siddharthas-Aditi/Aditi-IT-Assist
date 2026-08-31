@@ -1,7 +1,10 @@
 """LangGraph workflow definition — the core agent orchestration graph."""
 
 from langgraph.graph import END, StateGraph
+from langgraph.graph.state import CompiledStateGraph
 
+from app.core.config import settings
+from app.services.agents.escalation_triggers import evaluate_escalation
 from app.workflows.nodes.escalation import escalation_node
 from app.workflows.nodes.policy import policy_enforcement_node
 from app.workflows.nodes.resolution import resolution_node
@@ -21,20 +24,19 @@ def route_after_triage(state: WorkflowState) -> str:
     # BEFORE the max-turns guard: a user who says "it works, thanks" on a long
     # conversation must get a clean close, not a forced escalation to a ticket.
     if state.get("issue_resolved"):
-        return END
-
-    # Safety: if the conversation has gone too long without resolution, escalate.
-    if (state.get("turn_count") or 0) >= _MAX_TURNS:
-        return "escalate"
+        return str(END)
 
     if state.get("needs_clarification"):
-        return END  # Return clarification question to user
-    if state.get("issue_category") is None:
-        return "escalate"  # Cannot classify after attempts
+        return str(END)  # Return clarification question to user
 
-    # Check if diagnostic context indicates live agent request
-    diag = state.get("diagnostic_context") or {}
-    if diag.get("live_agent_requested"):
+    decision = evaluate_escalation(
+        state,
+        stage="triage",
+        minimum_confidence=settings.FLUID_CHAT_MIN_CONFIDENCE_TO_ADVISE,
+        miss_threshold=settings.RESOLUTION_MISS_ESCALATE_THRESHOLD,
+        max_turns=_MAX_TURNS,
+    )
+    if decision.should_escalate:
         return "escalate"
 
     # Shadow-mode supervisor runs between triage and policy. It logs +
@@ -49,19 +51,25 @@ def route_after_policy(state: WorkflowState) -> str:
     if violations:
         return "escalate"
     if state.get("requires_consent") and not state.get("consent_granted"):
-        return END  # Wait for consent before proceeding
+        return str(END)  # Wait for consent before proceeding
     return "retrieve"
 
 
 def route_after_retrieval(state: WorkflowState) -> str:
     """Route after knowledge retrieval.
 
-    Policy: if the knowledge base has ANY relevant (grounded) article, we
-    troubleshoot from it — we do NOT ticket just because confidence is moderate.
-    We only escalate (→ ticket) when grounding found nothing usable, i.e. there
-    is genuinely no solution in the KB for this issue.
+    A response may only reach the resolver when its grounded retrieval passes
+    the configured reliability floor. This prevents the LLM from using weak
+    context as permission to answer from parametric knowledge.
     """
-    if not state.get("knowledge_results"):
+    decision = evaluate_escalation(
+        state,
+        stage="retrieval",
+        minimum_confidence=settings.FLUID_CHAT_MIN_CONFIDENCE_TO_ADVISE,
+        miss_threshold=settings.RESOLUTION_MISS_ESCALATE_THRESHOLD,
+        max_turns=_MAX_TURNS,
+    )
+    if decision.should_escalate:
         return "escalate"
     return "resolve"
 
@@ -69,35 +77,31 @@ def route_after_retrieval(state: WorkflowState) -> str:
 def route_after_resolution(state: WorkflowState) -> str:
     """Route after resolution attempt.
 
-    Escalate when:
-    - the resolver exhausted all grounded steps / detected a loop (confidence 0),
-    - or grounding is too weak to stand behind an answer (< 0.35).
-
-    Otherwise return the grounded next-step guidance to the user. A grounded but
-    only moderately-confident answer (0.35-0.5) is still worth showing — it is
-    on-domain and on-subtype — and the resolution node frames it with a
-    "did this help?" so the user can drive escalation if it doesn't.
+    The same reliability floor remains a defensive post-resolution guard. The
+    retrieval route normally prevents weak context from reaching this point.
     """
-    diag = state.get("diagnostic_context") or {}
-    # The resolver sets phase=escalating only when it has exhausted every
-    # grounded step for the issue. That — not a moderate confidence score — is
-    # what warrants a ticket. A grounded answer is shown to the user regardless
-    # of confidence (it's framed with "did this help?" so the user can escalate).
-    if diag.get("phase") == "escalating":
+    decision = evaluate_escalation(
+        state,
+        stage="resolution",
+        minimum_confidence=settings.FLUID_CHAT_MIN_CONFIDENCE_TO_ADVISE,
+        miss_threshold=settings.RESOLUTION_MISS_ESCALATE_THRESHOLD,
+        max_turns=_MAX_TURNS,
+    )
+    if decision.should_escalate:
         return "escalate"
-    if not state.get("resolution_steps"):
-        return "escalate"
-    return END
+    return str(END)
 
 
 def route_after_escalation(state: WorkflowState) -> str:
     """Route after escalation decision."""
     if state.get("should_escalate"):
         return "draft_ticket"
-    return END
+    return str(END)
 
 
-def build_support_workflow() -> StateGraph:
+def build_support_workflow() -> CompiledStateGraph[
+    WorkflowState, None, WorkflowState, WorkflowState
+]:
     """Build and compile the support workflow graph.
 
     Graph topology:

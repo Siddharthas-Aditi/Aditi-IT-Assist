@@ -58,6 +58,8 @@ class KBArticleRefOut(BaseModel):
     article_id: str
     title: str
     relevance: float | None = None
+    retrieval_confidence: float | None = None
+    version: str | None = None
 
 
 class EscalationContextOut(BaseModel):
@@ -81,6 +83,7 @@ class EscalationContextOut(BaseModel):
     ai_attempted_steps: list[AttemptedStepOut] = Field(default_factory=list)
     user_feedback_on_steps: list[dict] = Field(default_factory=list)
     kb_articles_referenced: list[KBArticleRefOut] = Field(default_factory=list)
+    retrieval_trace: dict = Field(default_factory=dict)
     kb_gap_tags: list[str] = Field(default_factory=list)
     web_research_findings: list[dict] | None = None
     ai_confidence: float | None = None

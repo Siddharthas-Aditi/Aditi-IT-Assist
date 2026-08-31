@@ -88,7 +88,7 @@ subtype only. Do **not** create monolithic "all issues" articles.
 ## What the agent does when it can't ground
 
 - **No subtype yet** → ask a focused, playbook-driven clarification (with chips).
-- **No on-domain/on-subtype article** → low confidence → escalate with a summary.
+- **No on-domain/on-subtype article, or confidence below the configured floor** → state uncertainty explicitly and escalate with a summary. The resolver must not use weak retrieval as permission to answer from model knowledge.
 - **Steps exhausted** → escalate with the list of what was tried.
 
 See [troubleshooting-state-machine.md](./troubleshooting-state-machine.md).

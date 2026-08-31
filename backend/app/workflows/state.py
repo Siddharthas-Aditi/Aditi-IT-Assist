@@ -15,6 +15,34 @@ class ResolutionStep(TypedDict):
     details: str | None
 
 
+class KnowledgeCitation(TypedDict):
+    """Source attribution for an employee-facing grounded response."""
+
+    article_id: str
+    title: str
+    version: str | None
+    citation_label: str
+    category: str | None
+
+
+class RetrievalTrace(TypedDict, total=False):
+    """Serializable account of grounding decisions for one retrieval pass."""
+
+    kept: list[dict[str, Any]]
+    rejected: list[dict[str, Any]]
+    top_relevance: float
+    has_subtype_match: bool
+
+
+class WorkflowAuditEntry(TypedDict, total=False):
+    """One structured workflow audit event."""
+
+    event: str
+    confidence: float
+    threshold: float
+    reason: str
+
+
 class HandoffSummary(TypedDict):
     """Structured summary for human agent handoff."""
 
@@ -64,12 +92,12 @@ class WorkflowState(TypedDict):
     impact: Literal["individual", "team", "department", "organization"] | None
 
     # Knowledge retrieval (set by Knowledge Agent)
-    knowledge_results: list[dict]
+    knowledge_results: list[dict[str, Any]]
     knowledge_confidence: float
     # Grounding trace (kept/rejected articles + relevance) for debugging.
-    retrieval_trace: dict | None
+    retrieval_trace: RetrievalTrace | None
     # Source attribution for grounded answers (title + citation label + id).
-    knowledge_citations: list[dict]
+    knowledge_citations: list[KnowledgeCitation]
     # True when retrieval was restricted to published, governed content only.
     knowledge_published_only: bool
 
@@ -77,7 +105,7 @@ class WorkflowState(TypedDict):
     resolution_steps: list[ResolutionStep]
     resolution_confidence: float
     # Component breakdown behind resolution_confidence (debug/observability).
-    confidence_breakdown: dict | None
+    confidence_breakdown: dict[str, float] | None
     steps_attempted: list[str]
 
     # Escalation (set by Escalation Agent)
@@ -105,11 +133,11 @@ class WorkflowState(TypedDict):
     # the channel is OVERWRITTEN so only the last node's audit survived. The
     # chat service resets this to [] at the start of each turn, so it captures
     # exactly one turn's node trail (no unbounded cross-turn growth).
-    audit_trail: Annotated[list[dict], operator.add]
+    audit_trail: Annotated[list[WorkflowAuditEntry], operator.add]
 
     # ── Diagnostic Context (multi-turn conversation state) ───────
     diagnostic_context: dict[str, Any] | None  # Serialized DiagnosticContext
-    quick_replies: list[dict] | None  # [{label, value}] for frontend chips
+    quick_replies: list[dict[str, str]] | None  # [{label, value}] for frontend chips
     conversation_phase: str | None  # Current DiagnosticPhase value
     resolution_confirmed: bool | None  # User confirmed issue is resolved
     issue_resolved: bool | None  # User confirmed the fix worked (closing turn)
@@ -140,4 +168,4 @@ class WorkflowState(TypedDict):
     # When the supervisor shadow node runs, it leaves its decision here so
     # downstream nodes + analytics can join on it. Schema mirrors
     # ``SupervisorDecision`` minus the inputs snapshot.
-    supervisor_decision: dict | None
+    supervisor_decision: dict[str, Any] | None

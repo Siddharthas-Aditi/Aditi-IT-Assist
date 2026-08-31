@@ -129,8 +129,17 @@ class TestCreateArtifacts:
             "issue_subtype": "mailbox-full",
             "resolution_confidence": 0.2,
             "escalation_reason": "AI exhausted grounded steps",
-            "knowledge_results": [{"id": "kb1", "title": "Mailbox quota", "score": 0.7}],
-            "knowledge_citations": [{"article_id": "kb1", "title": "Mailbox quota"}],
+            "knowledge_results": [
+                {"id": "kb1", "title": "Mailbox quota", "score": 0.7, "version": "4"}
+            ],
+            "knowledge_citations": [
+                {"article_id": "kb1", "title": "Mailbox quota", "version": "4"}
+            ],
+            "knowledge_confidence": 0.62,
+            "retrieval_trace": {
+                "kept": [{"id": "kb1", "title": "Mailbox quota", "relevance": 0.91}],
+                "rejected": [{"id": "kb-x", "reason": "cross-domain"}],
+            },
             "diagnostic_context": {
                 "exact_problem_statement": "Mailbox full, cannot send",
                 "affected_system": "outlook",
@@ -157,6 +166,16 @@ class TestCreateArtifacts:
         assert "article_suggested_but_unresolved" in context.kb_gap_tags
         assert context.transcript_snapshot_id == snap.id
         assert context.live_support_required is True
+        assert context.kb_articles_referenced == [
+            {
+                "article_id": "kb1",
+                "title": "Mailbox quota",
+                "relevance": 0.91,
+                "retrieval_confidence": 0.62,
+                "version": "4",
+            }
+        ]
+        assert context.retrieval_trace["rejected"][0]["id"] == "kb-x"
 
     async def test_idempotent_when_context_exists(self):
         existing = EscalationContext(ticket_id=uuid.uuid4(), chat_session_id="s")

@@ -102,6 +102,35 @@ describe('SupportChatPage resolution-steps rendering', () => {
     expect(screen.getByText(/Restart the app/i)).toBeInTheDocument();
     expect(screen.getByText(/Restart your computer/i)).toBeInTheDocument();
   });
+
+  it('renders KB citations visibly beneath a grounded response', () => {
+    seedChatSession([
+      {
+        id: 'ai-citation',
+        role: 'assistant',
+        content: 'Archive old mail to free space.',
+        timestamp: new Date().toISOString(),
+        citations: [
+          {
+            article_id: 'kb-outlook-42',
+            title: 'Mailbox quota management',
+            version: '4',
+            citation_label: 'KB-OUTLOOK-42',
+          },
+        ],
+      },
+    ]);
+
+    render(
+      <MemoryRouter>
+        <SupportChatPage />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText('Sources')).toBeInTheDocument();
+    expect(screen.getByText(/Mailbox quota management · v4/)).toBeInTheDocument();
+    expect(screen.getByText('kb-outlook-42')).toBeInTheDocument();
+  });
 });
 
 describe('SupportChatPage quick-reply chips', () => {

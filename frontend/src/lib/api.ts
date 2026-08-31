@@ -325,6 +325,13 @@ export interface ChatMessageResponse {
     instruction: string;
     details?: string;
   }[];
+  citations: {
+    article_id: string;
+    title: string;
+    version?: string | null;
+    citation_label: string;
+    category?: string | null;
+  }[];
   requires_escalation: boolean;
   follow_up_question: string | null;
   quick_replies: { label: string; value: string }[] | null;

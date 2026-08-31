@@ -15,6 +15,7 @@ from app.services.agents.conversation_messages import (
     generate_escalation_offer,
 )
 from app.services.agents.diagnostic_state import DiagnosticContext
+from app.services.agents.escalation_triggers import EscalationTrigger, escalation_reason
 from app.services.agents.intent_classifier import ConversationIntent
 from app.services.agents.llm_intent import classify_intent_with_llm
 from app.workflows.state import WorkflowState
@@ -64,7 +65,12 @@ async def escalation_node(state: WorkflowState) -> dict:
         # New escalation request → offer with explanation
         reason = _determine_escalation_reason(state, diag_ctx)
         handoff_summary = _build_handoff_summary(state, reason, diag_ctx)
-        if diag_ctx.live_agent_requested:
+        if reason == escalation_reason(EscalationTrigger.LOW_RETRIEVAL_CONFIDENCE):
+            message = (
+                "I’m not confident that I have reliable, approved guidance for this issue, "
+                "so I don’t want to guess. I can prepare this for our IT team to review."
+            )
+        elif diag_ctx.live_agent_requested:
             message = _build_escalation_message(diag_ctx, reason)
         else:
             message = await generate_escalation_offer(diag_ctx, reason)

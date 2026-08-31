@@ -26,7 +26,7 @@ logs can explain *why* an article was kept, reranked, or rejected.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from app.services.agents.diagnostic_state import DiagnosticContext
@@ -36,7 +36,7 @@ if TYPE_CHECKING:
 class GroundedArticle:
     """A retrieved article after grounding, with its relevance breakdown."""
 
-    article: dict
+    article: dict[str, Any]
     relevance: float
     subtype_match: bool
     reasons: list[str] = field(default_factory=list)
@@ -47,15 +47,15 @@ class GroundingResult:
     """Output of the grounding pass."""
 
     kept: list[GroundedArticle] = field(default_factory=list)
-    rejected: list[dict] = field(default_factory=list)  # [{title, category, reason}]
+    rejected: list[dict[str, Any]] = field(default_factory=list)  # [{title, category, reason}]
     top_relevance: float = 0.0
     has_subtype_match: bool = False
     same_family_only: bool = True
 
-    def kept_articles(self) -> list[dict]:
+    def kept_articles(self) -> list[dict[str, Any]]:
         return [g.article for g in self.kept]
 
-    def trace(self) -> dict:
+    def trace(self) -> dict[str, Any]:
         """Compact, serializable trace for observability / admin debug view."""
         return {
             "kept": [
@@ -123,11 +123,11 @@ def _tokens(text: str) -> set[str]:
     }
 
 
-def _article_subtype(article: dict) -> str | None:
+def _article_subtype(article: dict[str, Any]) -> str | None:
     return article.get("subcategory") or article.get("subtype") or article.get("issue_type")
 
 
-def _article_text(article: dict) -> str:
+def _article_text(article: dict[str, Any]) -> str:
     parts = [
         str(article.get("title", "")),
         str(_article_subtype(article) or ""),
@@ -140,7 +140,7 @@ def _article_text(article: dict) -> str:
 
 
 def ground_results(
-    articles: list[dict],
+    articles: list[dict[str, Any]],
     diag_ctx: DiagnosticContext,
     *,
     allowed_families: set[str] | None = None,
@@ -198,7 +198,8 @@ def ground_results(
 
         # ── Subtype match (strongest signal) ─────────────────────
         subtype_match = bool(subtype_norm) and (
-            art_subtype == subtype_norm or (subtype_tokens and subtype_tokens.issubset(art_tokens))
+            art_subtype == subtype_norm
+            or bool(subtype_tokens and subtype_tokens.issubset(art_tokens))
         )
         if subtype_match:
             relevance += 0.55

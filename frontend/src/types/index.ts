@@ -42,6 +42,7 @@ export interface ChatMessage {
   conversationPhase?: string;
   resolved?: boolean;
   debug?: ChatDebugInfo;
+  citations?: { article_id: string; title: string; version?: string | null; citation_label: string; category?: string | null }[];
   timestamp: Date;
 }
 
@@ -53,6 +54,7 @@ export interface ChatResponse {
   issue_category: string | null;
   issue_subtype: string | null;
   resolution_steps: ResolutionStep[];
+  citations: { article_id: string; title: string; version?: string | null; citation_label: string; category?: string | null }[];
   requires_escalation: boolean;
   follow_up_question: string | null;
   quick_replies: QuickReplyOption[] | null;

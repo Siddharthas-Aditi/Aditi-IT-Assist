@@ -13,6 +13,11 @@ from app.core.config import settings
 from app.core.logging import get_logger
 from app.services.agents.confidence import compute_resolution_confidence
 from app.services.agents.diagnostic_state import DiagnosticContext, DiagnosticPhase
+from app.services.agents.escalation_triggers import (
+    EscalationTrigger,
+    escalation_reason,
+    evaluate_escalation,
+)
 from app.services.agents.playbooks import get_playbook
 from app.services.llm_service import get_llm_service
 from app.workflows.state import WorkflowState
@@ -178,6 +183,37 @@ async def resolution_node(state: WorkflowState) -> dict:
     diag_ctx = DiagnosticContext.from_dict(state.get("diagnostic_context") or {})
     trace = state.get("retrieval_trace") or {}
 
+    # Defense in depth: the graph should already route a weak retrieval away
+    # from this node. Retaining this guard makes direct node invocation safe,
+    # too — the LLM never receives insufficiently grounded context.
+    retrieval_decision = evaluate_escalation(
+        state,
+        stage="retrieval",
+        minimum_confidence=settings.FLUID_CHAT_MIN_CONFIDENCE_TO_ADVISE,
+        miss_threshold=settings.RESOLUTION_MISS_ESCALATE_THRESHOLD,
+        max_turns=10,
+    )
+    if retrieval_decision.should_escalate:
+        diag_ctx.phase = DiagnosticPhase.ESCALATING
+        diag_ctx.last_response_type = "escalate"
+        diag_ctx.escalation_reason = escalation_reason(retrieval_decision.trigger)
+        return {
+            "current_node": "resolve",
+            "resolution_steps": [],
+            "resolution_confidence": state.get("knowledge_confidence", 0.0),
+            "diagnostic_context": diag_ctx.to_dict(),
+            "conversation_phase": diag_ctx.phase.value,
+            "escalation_reason": diag_ctx.escalation_reason,
+            "audit_trail": [
+                {
+                    "event": "resolution.refused_low_confidence_retrieval",
+                    "trigger": (
+                        retrieval_decision.trigger.value if retrieval_decision.trigger else None
+                    ),
+                }
+            ],
+        }
+
     # ── NEW: Check if KB articles actually match the diagnosed issue ──
     # This enables agent collaboration: if retrieval found same-category articles
     # but wrong subtype, we should try web search instead.
@@ -227,16 +263,19 @@ async def resolution_node(state: WorkflowState) -> dict:
     # Even if more grounded steps exist, don't drag the user through all of
     # them — offer a live specialist once enough steps have failed.
     miss_threshold = max(1, settings.RESOLUTION_MISS_ESCALATE_THRESHOLD)
-    if remaining and len(diag_ctx.failed_steps) >= miss_threshold:
+    progression_decision = evaluate_escalation(
+        state,
+        stage="progression",
+        minimum_confidence=settings.FLUID_CHAT_MIN_CONFIDENCE_TO_ADVISE,
+        miss_threshold=miss_threshold,
+        max_turns=10,
+    )
+    if remaining and progression_decision.trigger is EscalationTrigger.FAILED_STEP_THRESHOLD:
         diag_ctx.resolution_attempts += 1
         diag_ctx.resolution_confidence = 0.0
         diag_ctx.phase = DiagnosticPhase.ESCALATING
         diag_ctx.last_response_type = "escalate"
-        subtype = diag_ctx.issue_subtype or diag_ctx.symptom or "this issue"
-        diag_ctx.escalation_reason = (
-            f"{len(diag_ctx.failed_steps)} troubleshooting steps for '{subtype}' were "
-            f"attempted without resolving the issue."
-        )
+        diag_ctx.escalation_reason = escalation_reason(progression_decision.trigger)
         logger.info(
             "resolution_miss_threshold_escalation",
             failed=len(diag_ctx.failed_steps),
@@ -265,11 +304,7 @@ async def resolution_node(state: WorkflowState) -> dict:
         diag_ctx.resolution_confidence = 0.0
         diag_ctx.phase = DiagnosticPhase.ESCALATING
         diag_ctx.last_response_type = "escalate"
-        subtype = diag_ctx.issue_subtype or diag_ctx.symptom or "this issue"
-        diag_ctx.escalation_reason = (
-            f"All grounded troubleshooting steps for '{subtype}' were attempted "
-            f"without resolving the issue."
-        )
+        diag_ctx.escalation_reason = escalation_reason(EscalationTrigger.GROUNDED_STEPS_EXHAUSTED)
         logger.info(
             "resolution_steps_exhausted",
             subtype=diag_ctx.issue_subtype,

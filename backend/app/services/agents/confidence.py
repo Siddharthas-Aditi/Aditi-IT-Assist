@@ -34,7 +34,7 @@ class ConfidenceBreakdown:
     unresolved_penalty: float = 0.0  # prior failed attempts penalty
     final: float = 0.0
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, float]:
         return {k: round(v, 3) for k, v in asdict(self).items()}
 
 

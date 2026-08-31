@@ -42,10 +42,21 @@ def _ctx():
     return ctx
 
 
+def _grounded_state(ctx: DiagnosticContext, *, messages: list[HumanMessage] | None = None) -> dict:
+    """State as emitted by a successful, confidence-gated retrieval node."""
+    return {
+        "knowledge_results": _kb(),
+        "knowledge_confidence": 0.8,
+        "retrieval_trace": {"has_subtype_match": True},
+        "diagnostic_context": ctx.to_dict(),
+        "messages": messages or [],
+    }
+
+
 @pytest.mark.asyncio
 async def test_presents_single_step_first_turn():
     ctx = _ctx()
-    state = {"knowledge_results": _kb(), "diagnostic_context": ctx.to_dict()}
+    state = _grounded_state(ctx)
     result = await R.resolution_node(state)
     assert len(result["resolution_steps"]) == 1
     assert result["resolution_steps"][0]["instruction"] == "Check for physical obstructions"
@@ -57,7 +68,7 @@ async def test_advances_to_next_step_after_failure():
     # Simulate step 1 already suggested and failed.
     ctx.record_suggested_steps(["Check for physical obstructions"])
     ctx.mark_last_batch_failed()
-    state = {"knowledge_results": _kb(), "diagnostic_context": ctx.to_dict()}
+    state = _grounded_state(ctx)
     result = await R.resolution_node(state)
     assert len(result["resolution_steps"]) == 1
     assert result["resolution_steps"][0]["instruction"] == "Restart the laptop"
@@ -76,7 +87,7 @@ def test_fallback_prose_single_step_has_no_below_pointer():
 @pytest.mark.asyncio
 async def test_normal_step_turn_includes_quick_replies():
     ctx = _ctx()
-    state = {"knowledge_results": _kb(), "diagnostic_context": ctx.to_dict()}
+    state = _grounded_state(ctx)
     result = await R.resolution_node(state)
     assert result["quick_replies"] == [
         {"label": "That worked", "value": "that worked"},
@@ -104,7 +115,8 @@ async def test_escalation_turn_has_no_quick_replies():
             "details": "Settings -> Time & Language.",
         }
     )
-    state = {"knowledge_results": kb, "diagnostic_context": ctx.to_dict()}
+    state = _grounded_state(ctx)
+    state["knowledge_results"] = kb
     result = await R.resolution_node(state)
     assert result["conversation_phase"] == "escalating"
     assert not result.get("quick_replies")
@@ -114,11 +126,10 @@ async def test_escalation_turn_has_no_quick_replies():
 async def test_simplification_turn_includes_quick_replies():
     ctx = _ctx()
     ctx.resolution_attempts = 2
-    state = {
-        "knowledge_results": _kb(),
-        "diagnostic_context": ctx.to_dict(),
-        "messages": [HumanMessage(content="can you break it down more simply?")],
-    }
+    state = _grounded_state(
+        ctx,
+        messages=[HumanMessage(content="can you break it down more simply?")],
+    )
     result = await R.resolution_node(state)
     assert result["conversation_phase"] == "confirming"
     assert result["resolution_steps"]
@@ -150,7 +161,8 @@ async def test_escalates_after_threshold_misses_even_with_steps_left():
             "details": "Settings -> Time & Language.",
         }
     )
-    state = {"knowledge_results": kb, "diagnostic_context": ctx.to_dict()}
+    state = _grounded_state(ctx)
+    state["knowledge_results"] = kb
     result = await R.resolution_node(state)
     # Routed to escalation: no steps presented, phase escalating.
     assert result["resolution_steps"] == []

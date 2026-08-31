@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 import structlog
+from langchain_core.messages import AIMessage, HumanMessage
 
 from app.models.support import Message, SupportSession
 from app.repositories.support_session_repository import SupportSessionRepository
@@ -60,6 +61,34 @@ def _knowledge_article_ids(state: dict[str, Any]) -> list[str]:
     return ids
 
 
+def _recovery_state(state: dict[str, Any]) -> dict[str, Any]:
+    """Return the DB-safe subset required to resume diagnostic progression.
+
+    LangGraph messages are persisted in the normalized ``messages`` table;
+    keeping them out of JSONB avoids serializing LangChain objects. The
+    diagnostic context contains the suggested/failed step history and is the
+    authoritative durable state for restart recovery.
+    """
+    keys = (
+        "session_id",
+        "user_id",
+        "user_name",
+        "user_email",
+        "issue_category",
+        "issue_subcategory",
+        "issue_subtype",
+        "severity",
+        "urgency",
+        "impact",
+        "turn_count",
+        "diagnostic_context",
+        "conversation_phase",
+        "issue_resolved",
+        "resolution_confirmed",
+    )
+    return {key: state.get(key) for key in keys if key in state}
+
+
 class SupportSessionService:
     """Persist and query durable support session records."""
 
@@ -90,7 +119,15 @@ class SupportSessionService:
         session_type = _derive_session_type(state, envelope)
         confidence = state.get("resolution_confidence") or state.get("knowledge_confidence")
         article_ids = _knowledge_article_ids(state)
-        metadata = {"knowledge_article_ids": article_ids} if article_ids else None
+        metadata: dict[str, Any] = {
+            "workflow_recovery": _recovery_state(state),
+            "session_ticket": envelope.ticket if envelope else None,
+            "waiting_since": envelope.waiting_since.isoformat()
+            if envelope and envelope.waiting_since
+            else None,
+        }
+        if article_ids:
+            metadata["knowledge_article_ids"] = article_ids
 
         record = await self.repo.get_by_id(parsed_id)
         if record is None:
@@ -152,6 +189,49 @@ class SupportSessionService:
         )
         await self.repo.add_message(user_msg)
         await self.repo.add_message(assistant_msg)
+
+    async def restore_chat_session(self, session_id: str, user_id: str) -> ChatSession | None:
+        """Rebuild a chat envelope from the durable database after cache loss.
+
+        This is the restart/pod-reschedule path. Ownership is checked against
+        the database before any messages or diagnostic state are returned.
+        """
+        parsed_id = _parse_session_id(session_id)
+        if parsed_id is None:
+            return None
+        row = await self.repo.get_with_messages(parsed_id)
+        if row is None or str(row.user_id) != user_id:
+            return None
+
+        metadata = row.metadata_json or {}
+        stored = metadata.get("workflow_recovery") or {}
+        state = dict(stored) if isinstance(stored, dict) else {}
+        state["session_id"] = session_id
+        state["user_id"] = user_id
+        state["messages"] = [
+            HumanMessage(content=message.content)
+            if message.role == "user"
+            else AIMessage(content=message.content)
+            for message in sorted(row.messages, key=lambda item: item.created_at)
+            if message.role in {"user", "assistant"}
+        ]
+
+        waiting_raw = metadata.get("waiting_since")
+        waiting_since = (
+            datetime.fromisoformat(waiting_raw) if isinstance(waiting_raw, str) else None
+        )
+        from app.services.agents.session_store import ChatSession
+
+        return ChatSession(
+            user_id=user_id,
+            state=state,
+            ticket=(
+                metadata.get("session_ticket")
+                if isinstance(metadata.get("session_ticket"), dict)
+                else None
+            ),
+            waiting_since=waiting_since,
+        )
 
     async def sync_envelope(
         self,
