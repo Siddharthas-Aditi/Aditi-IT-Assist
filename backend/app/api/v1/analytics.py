@@ -39,7 +39,6 @@ ExportAnalytics = Annotated[object, Depends(require_permissions(P.ANALYTICS_EXPO
 DBDep = Annotated[AsyncSession, Depends(get_db)]
 
 
-
 def _handle_denied(exc: PermissionDenied) -> NoReturn:
     raise HTTPException(status_code=403, detail=str(exc))
 
@@ -321,4 +320,3 @@ async def export_scoped_report(
         media_type="text/csv",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
-
