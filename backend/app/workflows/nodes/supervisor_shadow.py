@@ -97,14 +97,17 @@ async def supervisor_shadow_node(state: WorkflowState) -> dict[str, Any]:
         matched=str(diag.get("last_intent_matched") or "shadow"),
     )
 
-    # Build session metrics from whatever we have on the state. Without a
-    # supervisor-owned counter the shadow's per-agent caps are imprecise,
-    # but they're good enough to measure routing intent.
+    # Build session metrics from state. Without a supervisor-owned counter the
+    # shadow's per-agent caps are imprecise for analytics, but in primary mode
+    # specialist_dispatch_node keeps supervisor_metrics accurate.
+    metrics_raw: dict[str, Any] = state.get("supervisor_metrics") or {}
     metrics = SessionMetrics(
-        handoffs=int(state.get("audit_trail_handoffs") or 0),  # type: ignore[call-overload]
+        handoffs=int(metrics_raw.get("handoffs") or 0),
         turn_count=int(state.get("turn_count") or 0),
         loop_signals=int(diag.get("loop_counter") or 0),
     )
+    delegations: dict[str, int] = metrics_raw.get("delegations_per_agent") or {}
+    metrics.delegations_per_agent = dict(delegations)
 
     decision = decide(
         intent=intent,

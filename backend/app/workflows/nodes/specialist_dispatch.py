@@ -252,6 +252,17 @@ async def specialist_dispatch_node(state: WorkflowState) -> dict[str, Any]:
         result["should_escalate"] = False
         result["escalation_reason"] = None
 
+    # Persist the delegation counters so the supervisor's cap guardrails work
+    # across turns and survive restarts (via the same SessionStore mechanism
+    # used for diagnostic_context).
+    existing: dict[str, Any] = state.get("supervisor_metrics") or {}
+    delegations: dict[str, int] = dict(existing.get("delegations_per_agent") or {})
+    delegations[specialist_name] = delegations.get(specialist_name, 0) + 1
+    result["supervisor_metrics"] = {
+        "handoffs": int(existing.get("handoffs") or 0) + 1,
+        "delegations_per_agent": delegations,
+    }
+
     return result
 
 

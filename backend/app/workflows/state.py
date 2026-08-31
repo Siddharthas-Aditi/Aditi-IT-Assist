@@ -169,3 +169,8 @@ class WorkflowState(TypedDict):
     # downstream nodes + analytics can join on it. Schema mirrors
     # ``SupervisorDecision`` minus the inputs snapshot.
     supervisor_decision: dict[str, Any] | None
+    # Durable per-session delegation counters for the supervisor guardrails.
+    # Persisted via SessionStore (same mechanism as diagnostic_context) so the
+    # per-specialist cap and global handoff cap survive across turns and restarts.
+    # Shape: {"handoffs": int, "delegations_per_agent": {specialist_name: int}}
+    supervisor_metrics: dict[str, Any] | None
