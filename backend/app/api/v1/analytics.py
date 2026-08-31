@@ -1,5 +1,6 @@
 """Analytics API endpoints — IT management dashboards."""
 
+import uuid
 from calendar import monthrange
 from datetime import UTC, datetime
 from typing import Annotated, NoReturn
@@ -143,6 +144,14 @@ async def export_specialist_report(
 # ── Scoped reports (Workstream 4) ─────────────────────────────────────────────
 
 
+async def _get_viewer_id(user: object) -> uuid.UUID | None:
+    from app.models.auth import User as UserModel
+
+    if isinstance(user, UserModel):
+        return user.id
+    return None
+
+
 @router.get("/reports/resolution-trends", response_model=ResolutionTrendReport)
 async def get_resolution_trends(
     user: Annotated[object, Depends(get_current_active_user)],
@@ -153,7 +162,9 @@ async def get_resolution_trends(
     """Resolution time trends. Scoped by caller's analytics permission."""
     perms = await _get_perms(user, db)
     try:
-        return await ScopedReportService(db).resolution_time_trends(perms, start, end)
+        return await ScopedReportService(db).resolution_time_trends(
+            perms, start, end, viewer_user_id=await _get_viewer_id(user)
+        )
     except PermissionDenied as exc:
         _handle_denied(exc)
 
@@ -168,7 +179,9 @@ async def get_escalation_rate(
     """Escalation rate over the window."""
     perms = await _get_perms(user, db)
     try:
-        return await ScopedReportService(db).escalation_rate(perms, start, end)
+        return await ScopedReportService(db).escalation_rate(
+            perms, start, end, viewer_user_id=await _get_viewer_id(user)
+        )
     except PermissionDenied as exc:
         _handle_denied(exc)
 
@@ -196,7 +209,9 @@ async def get_agent_workload_report(
     """Agent workload report using tickets and the agent_action_ledger."""
     perms = await _get_perms(user, db)
     try:
-        return await ScopedReportService(db).agent_workload(perms, start, end)
+        return await ScopedReportService(db).agent_workload(
+            perms, start, end, viewer_user_id=await _get_viewer_id(user)
+        )
     except PermissionDenied as exc:
         _handle_denied(exc)
 
@@ -211,7 +226,9 @@ async def get_sla_compliance(
     """SLA compliance report."""
     perms = await _get_perms(user, db)
     try:
-        return await ScopedReportService(db).sla_compliance(perms, start, end)
+        return await ScopedReportService(db).sla_compliance(
+            perms, start, end, viewer_user_id=await _get_viewer_id(user)
+        )
     except PermissionDenied as exc:
         _handle_denied(exc)
 
@@ -226,7 +243,9 @@ async def get_feedback_sentiment(
     """Feedback sentiment aggregation."""
     perms = await _get_perms(user, db)
     try:
-        return await ScopedReportService(db).feedback_sentiment(perms, start, end)
+        return await ScopedReportService(db).feedback_sentiment(
+            perms, start, end, viewer_user_id=await _get_viewer_id(user)
+        )
     except PermissionDenied as exc:
         _handle_denied(exc)
 
@@ -309,10 +328,7 @@ async def export_scoped_report(
         csv_bytes = b""
 
     render_fn, media_type, ext = _EXPORT[format]
-    if format == "csv":
-        content = csv_bytes
-    else:
-        content = csv_bytes  # export endpoints always return csv for non-SpecialistReport data
+    content = csv_bytes  # all scoped report exports use csv
 
     filename = f"{report_name}-{start_dt:%Y%m%d}-{end_dt:%Y%m%d}.{ext}"
     return Response(

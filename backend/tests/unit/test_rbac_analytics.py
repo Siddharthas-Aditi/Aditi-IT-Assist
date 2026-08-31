@@ -80,11 +80,13 @@ class TestRolePermissionMatrix:
     def test_it_agent_lacks_analytics_view_all(self) -> None:
         assert P.ANALYTICS_VIEW_ALL not in get_effective_permissions(UserRole.IT_AGENT)
 
-    def test_it_lead_has_analytics_view_all(self) -> None:
-        assert P.ANALYTICS_VIEW_ALL.value in IT_LEAD
-
     def test_it_lead_has_analytics_view_team(self) -> None:
         assert P.ANALYTICS_VIEW_TEAM.value in IT_LEAD
+
+    def test_it_lead_lacks_analytics_view_all(self) -> None:
+        """IT_LEAD now holds VIEW_TEAM only — VIEW_ALL was removed to enforce real scoping."""
+        assert P.ANALYTICS_VIEW_ALL.value not in IT_LEAD
+        assert P.ANALYTICS_VIEW_ALL not in ROLE_PERMISSIONS[UserRole.IT_LEAD]
 
     def test_it_lead_lacks_analytics_export(self) -> None:
         """CRITICAL: leads must NOT have export — this was the security gap."""

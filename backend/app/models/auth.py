@@ -90,6 +90,8 @@ class Group(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         UUID(as_uuid=True), ForeignKey("roles.id"), nullable=True
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # 'general' | 'saml_sync' | 'analytics_team' — added in migration 019
+    group_type: Mapped[str] = mapped_column(String(32), default="general")
 
 
 class UserGroup(Base):

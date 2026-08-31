@@ -908,7 +908,7 @@ ROLE_PERMISSIONS: dict[UserRole, list[P]] = {
         # Phase 1 — IT_LEAD can promote KB candidates into real articles.
         P.KNOWLEDGE_PROMOTE_CANDIDATE,
         P.ANALYTICS_VIEW_TEAM,
-        P.ANALYTICS_VIEW_ALL,
+        # IT_LEAD sees their team's data; ANALYTICS_VIEW_ALL is IT_ADMIN-only.
         P.ANALYTICS_VIEW_AGENT_PERF,
         P.FEEDBACK_VIEW_ANALYTICS,
         P.FEEDBACK_REVIEW,
@@ -932,6 +932,7 @@ ROLE_PERMISSIONS: dict[UserRole, list[P]] = {
         P.KNOWLEDGE_INGEST,
         P.KNOWLEDGE_INGEST_REVIEW,
         P.ANALYTICS_EXPORT,
+        P.ANALYTICS_VIEW_ALL,  # explicit: IT_LEAD no longer inherits this
         P.ADMIN_MANAGE_USERS,
         P.ADMIN_MANAGE_ROLES,
         P.ADMIN_ASSIGN_ROLES,
