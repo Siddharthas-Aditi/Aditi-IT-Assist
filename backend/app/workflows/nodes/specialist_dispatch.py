@@ -50,7 +50,7 @@ from app.services.agents.specialists.base import SpecialistInput, SpecialistOutp
 from app.services.agents.supervisor import NextAction
 
 if TYPE_CHECKING:
-    from app.workflows.state import WorkflowState
+    from app.workflows.state import ResolutionStep, WorkflowState
 
 logger = get_logger(__name__)
 
@@ -92,8 +92,6 @@ def _build_specialist_input(state: WorkflowState, sub_agent_name: str | None) ->
 
 def _output_to_state(output: SpecialistOutput, current_state: WorkflowState) -> dict[str, Any]:
     """Map a SpecialistOutput to workflow state update fields."""
-    from app.workflows.state import ResolutionStep
-
     steps: list[ResolutionStep] = [
         {
             "step_number": s.step_number,

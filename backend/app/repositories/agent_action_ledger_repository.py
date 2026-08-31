@@ -6,14 +6,17 @@ exists so rows are immutable once written, matching the ledger contract.
 
 from __future__ import annotations
 
-import uuid
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.agent_action_ledger import AgentActionLedger
+
+if TYPE_CHECKING:
+    import uuid
+
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class AgentActionLedgerRepository:

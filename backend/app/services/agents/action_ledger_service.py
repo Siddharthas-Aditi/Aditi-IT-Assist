@@ -21,11 +21,14 @@ the ledger to achieve true durability-on-crash.
 
 from __future__ import annotations
 
-import uuid
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from app.core.logging import get_logger
-from app.repositories.agent_action_ledger_repository import AgentActionLedgerRepository
+
+if TYPE_CHECKING:
+    import uuid
+
+    from app.repositories.agent_action_ledger_repository import AgentActionLedgerRepository
 
 logger = get_logger(__name__)
 
