@@ -247,9 +247,7 @@ class ApprovalQueue:
 
     # ── Reading ──────────────────────────────────────────────────────────
 
-    async def list(
-        self, *, status: ApprovalStatus | None = None
-    ) -> list[PendingApproval]:
+    async def list(self, *, status: ApprovalStatus | None = None) -> list[PendingApproval]:
         async with async_session_factory() as db:
             repo = PendingApprovalRepository(db)
             rows = await repo.list_by_status(status.value if status else None)
