@@ -3,8 +3,9 @@ from __future__ import annotations
 from app.core.config import Settings
 
 
-def test_fluid_chat_flag_defaults_off():
-    s = Settings()
+def test_fluid_chat_flag_defaults_off(monkeypatch):
+    monkeypatch.delenv("FEATURE_FLUID_CHAT", raising=False)
+    s = Settings(_env_file=None)
     assert s.FEATURE_FLUID_CHAT is False
 
 

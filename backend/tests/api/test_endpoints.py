@@ -154,6 +154,12 @@ class TestTicketEndpointWithAuth:
         mock_ticket.status = "new"
         mock_ticket.priority = "high"
         mock_ticket.category = "hardware/camera"
+        mock_ticket.subcategory = None
+        mock_ticket.item = None
+        mock_ticket.ticket_type = None
+        mock_ticket.source = "manual"
+        mock_ticket.urgency = None
+        mock_ticket.impact = None
         mock_ticket.requester_id = uuid.uuid4()
         mock_ticket.assigned_to = None
         mock_ticket.created_at = datetime.now(UTC)
@@ -161,6 +167,10 @@ class TestTicketEndpointWithAuth:
         mock_ticket.sla_resolution_target = None
         mock_ticket.ai_summary = None
         mock_ticket.resolution_notes = None
+        mock_ticket.close_notes = None
+        mock_ticket.closed_by = None
+        mock_ticket.closed_at = None
+        mock_ticket.resolved_at = None
 
         with patch("app.api.v1.tickets.TicketService") as mock_svc_cls:
             mock_svc = AsyncMock()

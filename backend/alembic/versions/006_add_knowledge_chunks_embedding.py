@@ -19,6 +19,9 @@ depends_on = None
 
 def upgrade() -> None:
     """Add embedding column to knowledge_chunks."""
+    # The pgvector image exposes this extension, but each fresh database must
+    # enable it before the ``vector`` column type can be referenced.
+    op.execute("CREATE EXTENSION IF NOT EXISTS vector")
     # Add the pgvector column for embeddings (3072 dimensions for text-embedding-3-large)
     # Using raw SQL since SQLAlchemy doesn't have built-in support for pgvector type in migrations
     op.execute("ALTER TABLE knowledge_chunks ADD COLUMN embedding vector(3072) NULL")

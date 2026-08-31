@@ -83,26 +83,14 @@ def upgrade() -> None:
         sa.Column("channel", sa.String(50), nullable=False, server_default="web_chat"),
         sa.Column(
             "feedback_source",
-            sa.Enum(
-                "inline_chat",
-                "ticket_page",
-                "followup",
-                name="feedback_source_enum",
-                create_type=False,
-            ),
+            feedback_source_enum,
             nullable=False,
             server_default="inline_chat",
         ),
         # Session context
         sa.Column(
             "support_mode",
-            sa.Enum(
-                "ai_only",
-                "ai_plus_live_agent",
-                "live_agent_only",
-                name="support_mode_enum",
-                create_type=False,
-            ),
+            support_mode_enum,
             nullable=False,
             server_default="ai_only",
         ),
@@ -128,13 +116,7 @@ def upgrade() -> None:
         sa.Column("sentiment_label", sa.String(20), nullable=True),
         sa.Column(
             "quality_bucket",
-            sa.Enum(
-                "positive",
-                "neutral",
-                "negative",
-                name="quality_bucket_enum",
-                create_type=False,
-            ),
+            quality_bucket_enum,
             nullable=True,
         ),
         sa.Column(

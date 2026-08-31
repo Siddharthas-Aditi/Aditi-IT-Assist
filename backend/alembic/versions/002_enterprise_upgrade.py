@@ -18,7 +18,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision = "002_enterprise_upgrade"
-down_revision = None  # Adjust to actual previous revision
+down_revision = "001_initial"
 branch_labels = None
 depends_on = None
 
@@ -171,6 +171,85 @@ def upgrade() -> None:
     )
 
     # ── Tickets (enhanced) ───────────────────────────────────────
+    ticket_priority_v2 = postgresql.ENUM(
+        "low",
+        "medium",
+        "high",
+        "critical",
+        name="ticket_priority_v2",
+        create_type=False,
+    )
+    ticket_status_v2 = postgresql.ENUM(
+        "new",
+        "triaged",
+        "in_progress",
+        "waiting_for_user",
+        "escalated",
+        "resolved",
+        "closed",
+        name="ticket_status_v2",
+        create_type=False,
+    )
+    ticket_impact = postgresql.ENUM(
+        "individual",
+        "team",
+        "department",
+        "organization",
+        name="ticket_impact",
+        create_type=False,
+    )
+    ticket_source = postgresql.ENUM(
+        "chat",
+        "email",
+        "manual",
+        "remote_session_followup",
+        "api",
+        name="ticket_source",
+        create_type=False,
+    )
+    comment_type = postgresql.ENUM(
+        "note",
+        "reply",
+        "system",
+        "ai_suggestion",
+        name="comment_type",
+        create_type=False,
+    )
+    bind = op.get_bind()
+    ticket_priority_v2.create(bind, checkfirst=True)
+    ticket_status_v2.create(bind, checkfirst=True)
+    ticket_impact.create(bind, checkfirst=True)
+    ticket_source.create(bind, checkfirst=True)
+    comment_type.create(bind, checkfirst=True)
+
+    # The pre-enterprise schema used ``ticket_priority``/``ticket_status``.
+    # Convert them explicitly so a clean migration produces the same column
+    # types the runtime model binds against.
+    op.alter_column("tickets", "priority", server_default=None)
+    op.alter_column(
+        "tickets",
+        "priority",
+        existing_type=postgresql.ENUM(name="ticket_priority"),
+        type_=ticket_priority_v2,
+        postgresql_using="priority::text::ticket_priority_v2",
+    )
+    op.alter_column("tickets", "priority", server_default="medium")
+    op.alter_column("tickets", "status", server_default=None)
+    op.alter_column(
+        "tickets",
+        "status",
+        existing_type=postgresql.ENUM(name="ticket_status"),
+        type_=ticket_status_v2,
+        postgresql_using=(
+            "(CASE status::text WHEN 'draft' THEN 'new' WHEN 'open' THEN 'new' "
+            "ELSE status::text END)::ticket_status_v2"
+        ),
+    )
+    op.alter_column("tickets", "status", server_default="new")
+    # Chat-created tickets may not originate from a persisted support session;
+    # this matches the nullable relationship in the runtime model.
+    op.alter_column("tickets", "session_id", nullable=True)
+
     op.add_column("tickets", sa.Column("ticket_number", sa.String(20), unique=True, index=True))
     op.add_column(
         "tickets",
@@ -179,9 +258,9 @@ def upgrade() -> None:
     op.add_column("tickets", sa.Column("category", sa.String(100), index=True))
     op.add_column("tickets", sa.Column("subcategory", sa.String(100), nullable=True))
     op.add_column("tickets", sa.Column("severity", sa.String(20), nullable=True))
-    op.add_column("tickets", sa.Column("impact", sa.String(20), nullable=True))
+    op.add_column("tickets", sa.Column("impact", ticket_impact, nullable=True))
     op.add_column("tickets", sa.Column("urgency", sa.String(20), nullable=True))
-    op.add_column("tickets", sa.Column("source", sa.String(20), nullable=True))
+    op.add_column("tickets", sa.Column("source", ticket_source, nullable=True))
     op.add_column(
         "tickets", sa.Column("escalated_to", postgresql.UUID(as_uuid=True), nullable=True)
     )
@@ -222,7 +301,7 @@ def upgrade() -> None:
         ),
         sa.Column("content", sa.Text, nullable=False),
         sa.Column("is_internal", sa.Boolean, default=False),
-        sa.Column("comment_type", sa.String(20), default="note"),
+        sa.Column("comment_type", comment_type, default="note"),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
     )
 

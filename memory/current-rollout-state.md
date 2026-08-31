@@ -4,8 +4,8 @@ Snapshot of what's shipped, flagged, stubbed, or deferred. **Update this file wh
 you change flag state, ship a stubbed area, or add a phase.** Cross-check the
 "Implementation Status" table in `CLAUDE.md`.
 
-_Last synced from repo: 2026-07-02 PM (production-hardening iteration —
-`plans/production-readiness-2026-07.md`; migrations through `009`, `REGISTRY_VERSION 1.2.0`)._
+_Last synced from repo: 2026-08-31 (UAT foundation-hardening iteration —
+migrations through `015_ticket_number_sequence`; supervisor remains shadow-only)._
 
 ## Shipped & on by default
 - FastAPI backend, JWT local auth (login/register/me/logout/refresh), RBAC (5 roles).
@@ -21,7 +21,9 @@ _Last synced from repo: 2026-07-02 PM (production-hardening iteration —
   `/api/v1/health/metrics` (`METRICS_ENABLED`), real readiness probe (DB+Redis, 503),
   optional OTEL tracing (`OTEL_ENABLED`). Security headers middleware + nginx headers/CSP.
 - Ticket lifecycle + SLA; LangGraph workflow (6 nodes + supervisor shadow).
-- Conversational intent classifier (hybrid LLM + keyword); 7 specialist agents.
+- Conversational intent classifier (hybrid LLM + keyword); typed specialist
+  definitions are available for evaluation, but primary specialist dispatch is
+  not yet enabled in the employee chat graph.
 - Grounded published-only retrieval + citations (keyword path default).
 - Knowledge management + governance + improvement loop (review-gated).
 - Controlled web fallback (registry opt-in, trust-tier filtered, candidate-creating).
@@ -37,11 +39,11 @@ _Last synced from repo: 2026-07-02 PM (production-hardening iteration —
   session API — admin-center launch URL + in-client code exchange; TeamViewer documented
   alternative).
 - Analytics API, audit logging, background scheduler (idle + remote-session sweepers),
-  Docker Compose, Alembic migrations 002–009, admin console.
+  Docker Compose, Alembic migrations 001–015, admin console.
 - Post-chat feedback system.
-- **Durable AI chat sessions (2026-07-22)**: migration ``012`` creates
-  ``support_sessions``/``messages`` (tables were referenced by feedback/specialist
-  FKs but never migrated). ``SupportSessionService`` mirrors each successful chat
+- **Durable AI chat sessions (2026-07-22)**: migration ``012`` upgrades the
+  bootstrap ``support_sessions``/``messages`` schema to the durable contract.
+  ``SupportSessionService`` mirrors each successful chat
   turn; ``GET /chat/sessions*`` implemented; tickets link via ``session_id``;
   ``PostChatFeedbackCard`` wired in employee chat on resolution.
 - **Deploy mechanics (2026-07)**: prod compose `migrate` one-shot service gates backend

@@ -6,7 +6,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 import structlog
-from sqlalchemy import func, or_, select
+from sqlalchemy import ColumnElement, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.auth import User
@@ -27,7 +27,6 @@ class TicketService:
 
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
-        self._next_ticket_number: int | None = None
 
     async def create_ticket(
         self,
@@ -398,7 +397,7 @@ class TicketService:
         self,
         ticket_id: uuid.UUID,
         employee: User,
-    ) -> dict | None:
+    ) -> dict[str, object] | None:
         """Get ticket visible to the requesting employee (own tickets only)."""
         ticket = await self._get_ticket(ticket_id)
         if not ticket or ticket.requester_id != employee.id:
@@ -427,7 +426,7 @@ class TicketService:
             "events": events,
         }
 
-    async def get_ticket_for_agent(self, ticket_id: uuid.UUID) -> dict | None:
+    async def get_ticket_for_agent(self, ticket_id: uuid.UUID) -> dict[str, object] | None:
         """Get full ticket detail for IT staff — all comments (incl. internal) + events.
 
         Unlike the employee view this is not scoped to the requester and includes
@@ -497,13 +496,13 @@ class TicketService:
         search: str | None,
         date_from: datetime | None,
         date_to: datetime | None,
-    ) -> list:
+    ) -> list[ColumnElement[bool]]:
         """Build the WHERE clauses shared by the agent queue and CSV export.
 
         `status`/`priority` accept comma-separated values so the UI can filter
         on several at once; everything else is a single value.
         """
-        clauses: list = []
+        clauses: list[ColumnElement[bool]] = []
         if assigned_only:
             clauses.append(Ticket.assigned_to == agent.id)
 
@@ -651,7 +650,7 @@ class TicketService:
             )
         return buffer.getvalue()
 
-    async def get_queue_summary(self) -> dict:
+    async def get_queue_summary(self) -> dict[str, int]:
         """Get ticket queue summary for IT agents."""
         # Unassigned tickets
         unassigned_stmt = select(func.count(Ticket.id)).where(
@@ -700,8 +699,12 @@ class TicketService:
         self.db.add(event)
 
     async def _generate_ticket_number(self) -> str:
-        """Generate a unique sequential ticket number."""
-        stmt = select(func.count(Ticket.id))
-        result = await self.db.execute(stmt)
-        count = result.scalar() or 0
-        return f"ITA-{count + 1:06d}"
+        """Generate a unique ticket number using PostgreSQL's atomic sequence.
+
+        Counting rows races under concurrent ticket creation and can also reuse
+        numbers after deletion. ``nextval`` is database-owned and non-
+        transactional, so every caller receives a distinct value even when a
+        surrounding ticket insert is rolled back.
+        """
+        result = await self.db.execute(text("SELECT nextval('ticket_number_sequence')"))
+        return f"ITA-{result.scalar_one():06d}"

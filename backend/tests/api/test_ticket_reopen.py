@@ -85,7 +85,20 @@ async def _seed_ticket(status: str = "resolved") -> uuid.UUID:
             priority="medium",
         )
         await session.flush()
-        if status != "new":
+        if status == "closed":
+            try:
+                staff = await _real_user("it_agent")
+            except AssertionError:
+                staff = await _real_user("it_lead")
+            await service.close_ticket(
+                ticket.id,
+                staff,
+                resolution_notes="Resolved before reopen regression test",
+                category="Incident",
+                subcategory="System Login Issue",
+                item="Password Reset",
+            )
+        elif status != "new":
             await service.update_status(ticket.id, status, requester)
         await session.commit()
         return ticket.id

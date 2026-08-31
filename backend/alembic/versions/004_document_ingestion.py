@@ -47,13 +47,13 @@ def upgrade() -> None:
         ),
         sa.Column(
             "parse_status",
-            sa.Enum(name="ingestion_parse_status", create_constraint=False),
+            postgresql.ENUM(name="ingestion_parse_status", create_type=False),
             nullable=False,
             server_default="pending",
         ),
         sa.Column(
             "extraction_status",
-            sa.Enum(name="ingestion_extraction_status", create_constraint=False),
+            postgresql.ENUM(name="ingestion_extraction_status", create_type=False),
             nullable=False,
             server_default="pending",
         ),
@@ -111,7 +111,10 @@ def upgrade() -> None:
         sa.Column("validation_warnings", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
         sa.Column(
             "review_status",
-            sa.Enum(name="ingestion_candidate_review_status", create_constraint=False),
+            postgresql.ENUM(
+                name="ingestion_candidate_review_status",
+                create_type=False,
+            ),
             nullable=False,
             server_default="pending",
         ),

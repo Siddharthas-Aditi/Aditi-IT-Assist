@@ -5,8 +5,8 @@ applyTo: "backend/alembic/**"
 
 Full playbook: `skills/playbooks/database-migrations.md`. Domain model: `memory/domain-model.md`.
 
-- Create migrations with `make db-revision MSG="..."`; the next id follows `009`
-  (current head). Keep the sequence contiguous.
+- Create migrations with `make db-revision MSG="..."`; inspect the current Alembic
+  head first (currently `015_ticket_number_sequence`) and keep the sequence contiguous.
 - Every migration MUST have a working, tested `downgrade`. Verify upgrade **and**
   downgrade on a scratch DB before committing.
 - Model changes (`app/models/`) and the migration go together; also update Pydantic

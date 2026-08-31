@@ -12,6 +12,8 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 from app.services.ticket_service import SLA_RESOLUTION_HOURS, SLA_RESPONSE_HOURS, TicketService
 
 # ─────────────────────────────────────────────────────────────────────
@@ -138,6 +140,20 @@ class TestTicketCreation:
         assert call_kwargs["sla_resolution_target"] <= now + timedelta(hours=4, minutes=1)
 
 
+class TestTicketNumberGeneration:
+    async def test_uses_database_sequence_instead_of_counting_ticket_rows(self):
+        db = _make_mock_db()
+        result = MagicMock()
+        result.scalar_one.return_value = 42
+        db.execute.return_value = result
+
+        ticket_number = await TicketService(db)._generate_ticket_number()
+
+        assert ticket_number == "ITA-000042"
+        statement = str(db.execute.call_args.args[0])
+        assert "nextval('ticket_number_sequence')" in statement
+
+
 class TestEmployeeDataIsolation:
     """Tests for employee data isolation in ticket service."""
 
@@ -222,8 +238,8 @@ class TestTicketStatusTransitions:
         assert result.status == "resolved"
         assert result.resolved_at is not None
 
-    async def test_update_status_sets_closed_at(self):
-        """Closing a ticket sets closed_at timestamp."""
+    async def test_update_status_rejects_closing_outside_the_close_workflow(self):
+        """Closing requires the dedicated workflow and its mandatory close metadata."""
         db = _make_mock_db()
         service = TicketService(db)
         actor = _make_user("it_agent")
@@ -235,11 +251,9 @@ class TestTicketStatusTransitions:
 
         with (
             patch.object(service, "_get_ticket", return_value=mock_ticket),
-            patch.object(service, "_add_event", new_callable=AsyncMock),
+            pytest.raises(ValueError, match="Use POST /tickets/.+/close"),
         ):
-            result = await service.update_status(uuid.uuid4(), "closed", actor)
-
-        assert result.closed_at is not None
+            await service.update_status(uuid.uuid4(), "closed", actor)
 
     async def test_assign_ticket_records_event(self):
         """Assigning a ticket should record an assignment event."""

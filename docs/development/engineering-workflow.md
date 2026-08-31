@@ -39,7 +39,7 @@ and workflows as production assets.
 - Verify frontend↔backend contract (permission gating mirrors backend; API shapes match).
 
 ## 5. Schema / DB changes (safe path)
-- Add an Alembic migration (`make db-revision MSG=...`), next id after `009`.
+- Add an Alembic migration (`make db-revision MSG=...`), next id after `015`.
 - Provide a working `downgrade`. Bump any typed contract version you change.
 - Update `memory/domain-model.md` + the relevant `docs/architecture/*`.
 - See `skills/playbooks/database-migrations.md`.

@@ -84,9 +84,12 @@ here → update this file + the relevant `docs/architecture/*.md` in the same PR
 
 ## Migrations
 
-`002_enterprise_upgrade` → `003_knowledge_management` → `004_document_ingestion` →
-`005_feedback` → `006_add_knowledge_chunks_embedding` → `007_knowledge_candidates` →
+`001_initial` → `002_enterprise_upgrade` → `003_knowledge_management` →
+`004_document_ingestion` → `005_feedback` → `006_add_knowledge_chunks_embedding` →
+`007_knowledge_candidates` →
 `008_specialist_chat` → `009_chat_escalation_artifacts` → `010_web_research_findings` →
 `011_scheduled_report_runs` → `012_support_sessions` → `013_live_handoff` →
-`014_ticket_categories_and_close_fields`. Next revision = `015_*`.
+`014_ticket_categories_and_close_fields` → `015_ticket_number_sequence`.
+Ticket numbers are allocated through the database-owned `ticket_number_sequence`,
+not by counting rows. Next revision = `016_*`.
 See skill `skills/playbooks/database-migrations.md`.
