@@ -52,6 +52,8 @@ class Resource(StrEnum):
     ADMIN = "admin"
     FEEDBACK = "feedback"
     INTEGRATION = "integration"  # external systems reached via MCP (Phase 7)
+    CHANGE = "change"
+    ASSET = "asset"
 
 
 class Action(StrEnum):
@@ -82,6 +84,9 @@ class Action(StrEnum):
     REINDEX = "reindex"
     SUGGEST = "suggest"
     FEEDBACK = "feedback"
+    IMPLEMENT = "implement"
+    ROLLBACK = "rollback"
+    RETIRE = "retire"
 
 
 class Scope(StrEnum):
@@ -233,6 +238,26 @@ class P(StrEnum):
     # run approved remediation, benign device action). Catalog-bound + autonomy-
     # policy-gated in the tool layer. Highest-risk external capability.
     INTEGRATION_DEVICE_EXECUTE = "integration:device_execute"
+
+    # ── Change management ──────────────────────────────────
+    CHANGE_CREATE = "change:create"
+    CHANGE_READ = "change:read"
+    CHANGE_UPDATE = "change:update"
+    CHANGE_DELETE = "change:delete"
+    CHANGE_SUBMIT = "change:submit"
+    CHANGE_APPROVE = "change:approve"
+    CHANGE_IMPLEMENT = "change:implement"
+    CHANGE_ROLLBACK = "change:rollback"
+    CHANGE_CLOSE = "change:close"
+
+    # ── Asset management ───────────────────────────────────
+    ASSET_CREATE = "asset:create"
+    ASSET_READ = "asset:read"
+    ASSET_UPDATE = "asset:update"
+    ASSET_DELETE = "asset:delete"
+    ASSET_ASSIGN = "asset:assign"
+    ASSET_RETIRE = "asset:retire"
+    ASSET_TRANSFER = "asset:transfer"
 
 
 # ─── Permission Registry ───────────────────────────────────────────────────────
@@ -813,6 +838,122 @@ PERMISSION_REGISTRY: list[PermissionDef] = [
         high_risk=True,
         consent_required=True,
     ),
+    # ── Change management ──
+    PermissionDef(
+        P.CHANGE_CREATE,
+        "Create Change Request",
+        Resource.CHANGE,
+        Action.CREATE,
+        Scope.NONE,
+        audit_required=True,
+    ),
+    PermissionDef(P.CHANGE_READ, "Read Change Requests", Resource.CHANGE, Action.READ, Scope.ALL),
+    PermissionDef(
+        P.CHANGE_UPDATE,
+        "Update Change Request",
+        Resource.CHANGE,
+        Action.UPDATE,
+        Scope.ALL,
+        audit_required=True,
+    ),
+    PermissionDef(
+        P.CHANGE_DELETE,
+        "Delete Change Request",
+        Resource.CHANGE,
+        Action.DELETE,
+        Scope.ALL,
+        audit_required=True,
+    ),
+    PermissionDef(
+        P.CHANGE_SUBMIT,
+        "Submit Change for Approval",
+        Resource.CHANGE,
+        Action.SUBMIT,
+        Scope.NONE,
+        audit_required=True,
+    ),
+    PermissionDef(
+        P.CHANGE_APPROVE,
+        "Approve/Reject Change",
+        Resource.CHANGE,
+        Action.APPROVE,
+        Scope.NONE,
+        audit_required=True,
+    ),
+    PermissionDef(
+        P.CHANGE_IMPLEMENT,
+        "Implement Change",
+        Resource.CHANGE,
+        Action.IMPLEMENT,
+        Scope.NONE,
+        audit_required=True,
+    ),
+    PermissionDef(
+        P.CHANGE_ROLLBACK,
+        "Rollback Change",
+        Resource.CHANGE,
+        Action.ROLLBACK,
+        Scope.NONE,
+        audit_required=True,
+    ),
+    PermissionDef(
+        P.CHANGE_CLOSE,
+        "Close Change",
+        Resource.CHANGE,
+        Action.CLOSE,
+        Scope.NONE,
+        audit_required=True,
+    ),
+    # ── Asset management ──
+    PermissionDef(
+        P.ASSET_CREATE,
+        "Create Asset",
+        Resource.ASSET,
+        Action.CREATE,
+        Scope.NONE,
+        audit_required=True,
+    ),
+    PermissionDef(P.ASSET_READ, "Read Assets", Resource.ASSET, Action.READ, Scope.ALL),
+    PermissionDef(
+        P.ASSET_UPDATE,
+        "Update Asset",
+        Resource.ASSET,
+        Action.UPDATE,
+        Scope.ALL,
+        audit_required=True,
+    ),
+    PermissionDef(
+        P.ASSET_DELETE,
+        "Delete Asset",
+        Resource.ASSET,
+        Action.DELETE,
+        Scope.ALL,
+        audit_required=True,
+    ),
+    PermissionDef(
+        P.ASSET_ASSIGN,
+        "Assign Asset",
+        Resource.ASSET,
+        Action.ASSIGN,
+        Scope.NONE,
+        audit_required=True,
+    ),
+    PermissionDef(
+        P.ASSET_RETIRE,
+        "Retire/Dispose Asset",
+        Resource.ASSET,
+        Action.RETIRE,
+        Scope.NONE,
+        audit_required=True,
+    ),
+    PermissionDef(
+        P.ASSET_TRANSFER,
+        "Transfer Asset",
+        Resource.ASSET,
+        Action.TRANSFER,
+        Scope.NONE,
+        audit_required=True,
+    ),
 ]
 
 
@@ -835,6 +976,9 @@ ROLE_PERMISSIONS: dict[UserRole, list[P]] = {
         P.ANALYTICS_VIEW_OWN,
         P.FEEDBACK_SUBMIT,
         P.FEEDBACK_VIEW_OWN,
+        # Employees can read changes and assets affecting them.
+        P.CHANGE_READ,
+        P.ASSET_READ,
     ],
     UserRole.SECURITY_AUDITOR: [
         P.TICKET_READ_ALL,
@@ -845,6 +989,9 @@ ROLE_PERMISSIONS: dict[UserRole, list[P]] = {
         # Read-only visibility into knowledge content, versions, and audit trail
         P.KNOWLEDGE_READ,
         P.KNOWLEDGE_VIEW_INTERNAL,
+        # Read-only visibility into all change and asset records.
+        P.CHANGE_READ,
+        P.ASSET_READ,
     ],
     UserRole.IT_AGENT: [
         # Inherited from no one, explicit grants:
@@ -886,6 +1033,17 @@ ROLE_PERMISSIONS: dict[UserRole, list[P]] = {
         # External read-only diagnostics (MCP, Phase 7).
         P.INTEGRATION_DIRECTORY_READ,
         P.INTEGRATION_TICKETING_READ,
+        # Change and Asset management.
+        P.CHANGE_CREATE,
+        P.CHANGE_READ,
+        P.CHANGE_UPDATE,
+        P.CHANGE_SUBMIT,
+        P.CHANGE_IMPLEMENT,
+        P.ASSET_CREATE,
+        P.ASSET_READ,
+        P.ASSET_UPDATE,
+        P.ASSET_ASSIGN,
+        P.ASSET_TRANSFER,
     ],
     UserRole.IT_LEAD: [
         # Inherits all IT_AGENT permissions, plus:
@@ -919,6 +1077,12 @@ ROLE_PERMISSIONS: dict[UserRole, list[P]] = {
         # The agent runs autonomous low-risk actions under a service principal that
         # also holds this permission; leads approve anything above the threshold.
         P.INTEGRATION_DEVICE_EXECUTE,
+        # Change and Asset management (lead-only lifecycle actions).
+        P.CHANGE_APPROVE,
+        P.CHANGE_CLOSE,
+        P.CHANGE_ROLLBACK,
+        P.ASSET_RETIRE,
+        P.ASSET_DELETE,
     ],
     UserRole.IT_ADMIN: [
         # Inherits all IT_LEAD permissions, plus:
@@ -945,6 +1109,8 @@ ROLE_PERMISSIONS: dict[UserRole, list[P]] = {
         P.ADMIN_IMPERSONATE_USER,
         P.FEEDBACK_VIEW_ANALYTICS,
         P.FEEDBACK_REVIEW,
+        # Change and Asset management (admin-only actions).
+        P.CHANGE_DELETE,
     ],
 }
 

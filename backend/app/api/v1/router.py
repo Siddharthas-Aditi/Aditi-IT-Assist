@@ -5,7 +5,9 @@ from fastapi import APIRouter
 from app.api.v1.admin import router as admin_router
 from app.api.v1.agent_ops import router as agent_ops_router
 from app.api.v1.analytics import router as analytics_router
+from app.api.v1.assets import router as assets_router
 from app.api.v1.auth import router as auth_router
+from app.api.v1.changes import router as changes_router
 from app.api.v1.chat import router as chat_router
 from app.api.v1.device_execution import router as device_execution_router
 from app.api.v1.feedback import router as feedback_router
@@ -42,6 +44,8 @@ api_router.include_router(analytics_router, prefix="/analytics", tags=["analytic
 api_router.include_router(remote_support_router, prefix="/remote-support", tags=["remote-support"])
 api_router.include_router(admin_router, prefix="/admin", tags=["admin"])
 api_router.include_router(feedback_router, prefix="/feedback", tags=["feedback"])
+api_router.include_router(changes_router, prefix="/changes", tags=["changes"])
+api_router.include_router(assets_router, prefix="/assets", tags=["assets"])
 # Live IT-specialist features — queue (claim/release/resolve), 'My Assigned',
 # and the human-to-human chat itself. See docs/architecture/live-specialist-chat.md
 # ORDER MATTERS: the extras router owns the literal GET /specialist-queue/mine.

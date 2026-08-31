@@ -2,6 +2,7 @@
 
 from app.models.agent_action_ledger import AgentActionLedger
 from app.models.analytics import AnalyticsSnapshot
+from app.models.asset import Asset, AssetEvent
 from app.models.audit import AuditEvent
 from app.models.auth import (
     AuthIdentity,
@@ -15,6 +16,15 @@ from app.models.auth import (
     UserRoleAssignment,
 )
 from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
+from app.models.change import (
+    Change,
+    ChangeApproval,
+    ChangeAssetLink,
+    ChangeEvent,
+    ChangeStatus,
+    ChangeTask,
+    TicketAssetLink,
+)
 from app.models.escalation import EscalationContext, TranscriptSnapshot
 from app.models.feedback import ConversationFeedback, MessageFeedback
 from app.models.ingestion import IngestionCandidate, IngestionJob
