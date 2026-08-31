@@ -20,7 +20,7 @@ and handoffs) now actually function, and confirm loop_signals was already correc
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
 from langchain_core.messages import HumanMessage
@@ -28,7 +28,6 @@ from langchain_core.messages import HumanMessage
 from app.services.agents.intent_classifier import ConversationIntent, IntentClassification
 from app.services.agents.registry import find_specialist_for
 from app.services.agents.supervisor import NextAction, SessionMetrics, SupervisorDecision, decide
-
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -323,8 +322,8 @@ class TestSupervisorShadowRehydration:
     async def test_shadow_node_reads_handoffs_from_state(self) -> None:
         """supervisor_shadow_node reads handoffs from supervisor_metrics, not
         the non-existent audit_trail_handoffs key."""
-        from app.workflows.nodes.supervisor_shadow import supervisor_shadow_node
         from app.core.config import settings
+        from app.workflows.nodes.supervisor_shadow import supervisor_shadow_node
 
         state = {
             "supervisor_metrics": {
@@ -355,8 +354,8 @@ class TestSupervisorShadowRehydration:
     @pytest.mark.asyncio
     async def test_shadow_node_reads_per_agent_delegations_from_state(self) -> None:
         """supervisor_shadow_node reads delegations_per_agent from supervisor_metrics."""
-        from app.workflows.nodes.supervisor_shadow import supervisor_shadow_node
         from app.core.config import settings
+        from app.workflows.nodes.supervisor_shadow import supervisor_shadow_node
 
         state = {
             "supervisor_metrics": {
@@ -407,8 +406,10 @@ class TestDispatchNodeUpdatesMetrics:
 
         with (
             patch("app.workflows.nodes.specialist_dispatch.settings") as mock_settings,
-            patch("app.workflows.nodes.specialist_dispatch.async_session_factory",
-                  side_effect=Exception("no-db-in-unit-test")),
+            patch(
+                "app.workflows.nodes.specialist_dispatch.async_session_factory",
+                side_effect=Exception("no-db-in-unit-test"),
+            ),
         ):
             mock_settings.FEATURE_SUPERVISOR_PRIMARY = True
             mock_settings.FLUID_CHAT_MIN_CONFIDENCE_TO_ADVISE = 0.35
@@ -436,8 +437,10 @@ class TestDispatchNodeUpdatesMetrics:
 
         with (
             patch("app.workflows.nodes.specialist_dispatch.settings") as mock_settings,
-            patch("app.workflows.nodes.specialist_dispatch.async_session_factory",
-                  side_effect=Exception("no-db-in-unit-test")),
+            patch(
+                "app.workflows.nodes.specialist_dispatch.async_session_factory",
+                side_effect=Exception("no-db-in-unit-test"),
+            ),
         ):
             mock_settings.FEATURE_SUPERVISOR_PRIMARY = True
             mock_settings.FLUID_CHAT_MIN_CONFIDENCE_TO_ADVISE = 0.35
