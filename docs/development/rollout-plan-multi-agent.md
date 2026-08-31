@@ -47,17 +47,43 @@ changes go live.
 - Migrations `007_knowledge_candidates` + `008_specialist_chat` shipped.
 - Typed permissions for queue/chat/promote; routes migrated.
 
-### Phase 2 — Promote supervisor to primary (next sprint)
-- Run **dual-mode evaluation**: shadow logs are now generating production
-  data; compare supervisor's recommended action against actual graph
-  routing. Promote when diff rate < 2% on the golden conversation set
-  for two weeks.
-- Flip `FEATURE_SUPERVISOR_PRIMARY=true`: rewrite the existing
-  `route_after_triage` to consume `supervisor_decision.action` instead
-  of its own logic; add `specialist_dispatch_node` that invokes the
-  appropriate `SpecialistAgent.handle(...)`.
-- Wire web-fallback path through the supervisor for the two specialists
-  that allow it (`zoom_meetings`, `network_vpn`).
+### Phase 2 — Promote supervisor to primary (IMPLEMENTED behind flag, not yet promoted)
+
+> **Status as of 2026-08-31**: Primary routing is **implemented** and flag-gated,
+> not future work. `FEATURE_SUPERVISOR_PRIMARY=false` (default) keeps the legacy
+> linear path. Set to `true` to activate specialist dispatch.
+
+What shipped (Workstream 1, commit `605241c`):
+- `route_after_supervisor` conditional: when `FEATURE_SUPERVISOR_PRIMARY=true`
+  the supervisor's `ESCALATE`, `END`, and `CLARIFY` decisions are acted on
+  immediately; all other actions continue through policy enforcement.
+- `specialist_dispatch_node`: after retrieval, `DELEGATE`/`DELEGATE_SUB` decisions
+  route to the correct typed `SpecialistAgent.handle()` via `SPECIALIST_REGISTRY`
+  instead of the legacy `resolution_node`.
+- Escalation trigger reuse: `route_after_retrieval` and `specialist_dispatch_node`
+  both call `evaluate_escalation()` — no new routing conditions outside
+  `escalation_triggers.py`.
+- Extra-slots path (Workstream 1 gap fix): `decide()` now accepts `extra_slots`
+  so `network_type`, `platform_os`, and `device_type` from `DiagnosticContext`
+  reach `_missing_required_slots`. The shadow node infers `network_type` from the
+  subtype (e.g. `vpn-not-connecting` → `"vpn"`) when the field is not yet
+  explicitly populated.
+
+What remains before unconditional promotion:
+- **Eval threshold validation.** Shadow logs must show diff rate < 2% on the
+  golden conversation set for two weeks. Tooling to measure this is not yet
+  automated; it is the required gate before defaulting `FEATURE_SUPERVISOR_PRIMARY`
+  to `true`.
+- **Flag default flip and gradual rollout.** The flag currently defaults to `false`
+  to satisfy the safe-defaults policy. Promotion requires a staged flip (canary →
+  full) with monitoring.
+- **Web-fallback wiring** through the supervisor for `zoom_meetings` and
+  `network_vpn` — the registry declares `web_fallback_allowed=True` but the
+  dispatch node does not yet route to `ControlledWebResearchAgent`.
+
+> **Open question:** what is the monitoring criteria and rollout percentage plan
+> for flipping this flag in production? This is not yet defined; it should be
+> decided and recorded here before the flag default changes.
 
 ### Phase 3 — Improvement loop UI + observability (sprint after)
 - SME review queue UI for `KnowledgeCandidate`.
@@ -79,9 +105,11 @@ changes go live.
 | Flag | Default | Purpose |
 |---|---|---|
 | `FEATURE_INTENT_CLASSIFIER` | `true` | Phase 0. Off only for emergency rollback. |
-| `FEATURE_SUPERVISOR_ROUTING` | `false` | Phase 2. Routes via the new supervisor. |
-| `FEATURE_SPECIALIST_HANDLERS` | `false` | Phase 2. Calls specialist `handle()` instead of legacy resolution. |
-| `FEATURE_WEB_FALLBACK` | `false` | Phase 2. Enables the controlled web-research path. |
+| `FEATURE_SUPERVISOR_SHADOW` | `true` | Phase 1 hardening. Logs the supervisor's decision without acting on it. |
+| `FEATURE_SUPERVISOR_PRIMARY` | `false` | **Implemented, not yet promoted.** When `true`, activates `specialist_dispatch_node`; supervisor's ESCALATE/END/CLARIFY decisions are authoritative. Requires eval gate before defaulting to `true`. |
+| `FEATURE_SUPERVISOR_ROUTING` | — | Superseded by `FEATURE_SUPERVISOR_PRIMARY`. Not used. |
+| `FEATURE_SPECIALIST_HANDLERS` | — | Superseded by `FEATURE_SUPERVISOR_PRIMARY`. Not used. |
+| `FEATURE_WEB_FALLBACK` | `false` | Phase 2 (pending). Enables the controlled web-research path via the supervisor. Not yet wired into the dispatch node. |
 | `FEATURE_QUEUE_UI` | `false` | Phase 2. Exposes the specialist UI; the API can ship sooner. |
 | `FEATURE_KB_CANDIDATES` | `true` after migration | Phase 2/3. Opt-in candidate creation from resolutions. |
 | `FEATURE_AGENT_TOOLS` | `false` | Phase 5. Bounded LLM tool-use loop for specialists with `allowed_tools` (read-only tools first). See `docs/architecture/agent-tooling.md` and `plans/agentic-ops-platform-evolution.md`. |
