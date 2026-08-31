@@ -29,6 +29,7 @@ from app.models.knowledge import (
 )
 from app.models.knowledge_candidate import KnowledgeCandidate
 from app.models.live_handoff import LiveHandoffOffer, SpecialistAvailability
+from app.models.pending_approval import PendingApprovalRecord
 from app.models.remote_support import RemoteSessionEvent, RemoteSupportConsent, RemoteSupportSession
 from app.models.reporting import ScheduledReportRun
 from app.models.specialist_chat import SpecialistChatMessage, SpecialistChatSession

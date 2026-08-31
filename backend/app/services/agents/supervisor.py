@@ -160,6 +160,7 @@ def decide(
     issue_resolved: bool,
     resolution_attempts: int,
     metrics: SessionMetrics,
+    extra_slots: dict[str, str | None] | None = None,
 ) -> SupervisorDecision:
     """Pure-function routing decision.
 
@@ -167,12 +168,12 @@ def decide(
     (the workflow node) is responsible for assembling these from the workflow
     state, then acting on the returned decision.
 
-    The function is small enough to fit on a page intentionally — the registry
-    holds the per-agent rules, the intent classifier holds the conversational
-    rules, and this function is the routing logic. Three layers, one purpose
-    each.
+    ``extra_slots`` carries specialist-required slot values that are tracked in
+    ``DiagnosticContext`` but not covered by the fixed top-level parameters
+    (e.g. ``network_type``, ``platform_os``). Values are merged into the snapshot
+    so ``_missing_required_slots`` can see them. Unknown keys are ignored.
     """
-    snapshot = {
+    snapshot: dict[str, Any] = {
         "intent": intent.intent.value,
         "intent_confidence": intent.confidence,
         "category": issue_category,
@@ -183,6 +184,9 @@ def decide(
         "resolution_attempts": resolution_attempts,
         "handoffs": metrics.handoffs,
     }
+    # Merge caller-supplied slot values (e.g. from DiagnosticContext).
+    if extra_slots:
+        snapshot.update({k: v for k, v in extra_slots.items() if v is not None})
 
     # ── 1. Short-circuits driven by conversational intent ───────────────
     # These happen BEFORE the registry / confidence checks because the user's

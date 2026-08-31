@@ -27,7 +27,7 @@ Why a shadow node now
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from app.core.config import settings
 from app.core.logging import get_logger
@@ -43,7 +43,40 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-async def supervisor_shadow_node(state: WorkflowState) -> dict:
+def _infer_network_type(subtype: str | None) -> str | None:
+    """Infer the network_type slot value from a known subtype slug."""
+    if not subtype:
+        return None
+    sub = subtype.lower()
+    if "vpn" in sub:
+        return "vpn"
+    if "wifi" in sub or "wi-fi" in sub:
+        return "wifi"
+    if "internet" in sub or "connectivity" in sub:
+        return "internet"
+    if "3cx" in sub or "voip" in sub:
+        return "voip"
+    return None
+
+
+def _extra_slots_from_diag(diag: Any, issue_subtype: str | None) -> dict[str, str | None]:
+    """Build the extra_slots dict the supervisor needs from DiagnosticContext.
+
+    Values from the context take precedence; if a slot is still None we try to
+    infer it deterministically from the issue subtype so the supervisor can
+    satisfy specialist required-slot checks without an extra conversational turn.
+    """
+    network_type: str | None = diag.get("network_type") or _infer_network_type(issue_subtype)
+    platform_os: str | None = diag.get("platform_os")
+    device_type: str | None = diag.get("device_type")
+    return {
+        "network_type": network_type,
+        "platform_os": platform_os,
+        "device_type": device_type,
+    }
+
+
+async def supervisor_shadow_node(state: WorkflowState) -> dict[str, Any]:
     """Compute (but do not act on) the supervisor's routing decision.
 
     No-op when ``FEATURE_SUPERVISOR_SHADOW`` is off — the function returns
@@ -68,7 +101,7 @@ async def supervisor_shadow_node(state: WorkflowState) -> dict:
     # supervisor-owned counter the shadow's per-agent caps are imprecise,
     # but they're good enough to measure routing intent.
     metrics = SessionMetrics(
-        handoffs=int(state.get("audit_trail_handoffs") or 0),
+        handoffs=int(state.get("audit_trail_handoffs") or 0),  # type: ignore[call-overload]
         turn_count=int(state.get("turn_count") or 0),
         loop_signals=int(diag.get("loop_counter") or 0),
     )
@@ -84,6 +117,7 @@ async def supervisor_shadow_node(state: WorkflowState) -> dict:
         issue_resolved=bool(state.get("issue_resolved")),
         resolution_attempts=int(diag.get("resolution_attempts") or 0),
         metrics=metrics,
+        extra_slots=_extra_slots_from_diag(diag, state.get("issue_subtype")),
     )
 
     logger.info(

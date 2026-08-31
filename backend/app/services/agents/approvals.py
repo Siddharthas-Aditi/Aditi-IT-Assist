@@ -1,7 +1,7 @@
-"""Human-approval queue for agent write actions (Phase 8 operability).
+"""Human-approval queue for agent write actions — durable, DB-backed.
 
-A small in-memory queue that turns the runtime's propose→approve→execute
-contract into something an IT specialist can act on:
+The queue turns the runtime's propose→approve→execute contract into something
+an IT specialist can act on:
 
 * an IT agent (or an agent turn) **proposes** a governed write action — it is
   dispatched through the :class:`AgentToolRuntime`, which (because every write
@@ -12,10 +12,25 @@ contract into something an IT specialist can act on:
   audit, and idempotency all still apply;
 * or it is **rejected**.
 
-In-memory (single instance) by design for now — same trade-off as the agent
-task store; the API/UI contract is identical to a future DB-backed queue. No
-write ever executes without an explicit approve() call (the runtime guarantees
-it; the action-safety eval pins it).
+Durability
+----------
+Records are persisted to ``pending_approval_records`` (migration 018). A service
+restart does NOT lose pending approvals. On restart, any row stuck in the
+``EXECUTING`` state (crash during execution) is reset to ``PENDING`` and marked
+with ``recovered_at`` so approvers can see it is stale. No row is ever silently
+dropped or auto-approved.
+
+TOCTOU safety
+-------------
+``approve()`` uses ``SELECT ... FOR UPDATE`` inside an explicit transaction so
+only one caller can claim a given approval at a time. A second concurrent
+``approve()`` sees the row in ``EXECUTING`` and returns the current record.
+
+External interface
+------------------
+The ``PendingApproval`` dataclass is preserved as the DTO returned by all methods.
+``reject()``, ``list()``, and ``get()`` are now async (DB access requires await);
+callers in agent_ops.py are updated accordingly.
 """
 
 from __future__ import annotations
@@ -28,24 +43,30 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from app.core.database import async_session_factory
 from app.core.logging import get_logger
+from app.models.pending_approval import PendingApprovalRecord
+from app.repositories.pending_approval_repository import PendingApprovalRepository
 from app.services.agents.tools.base import Approval, ToolContext, ToolInvocation
 from app.services.agents.tools.registry import build_default_runtime
+from app.services.agents.tools.runtime import AgentToolRuntime
 
 logger = get_logger(__name__)
 
 
 class ApprovalStatus(StrEnum):
     PENDING = "pending"
-    EXECUTING = "executing"  # claimed by an approve() call; execution in flight
-    APPROVED = "approved"  # approved + executed successfully
+    EXECUTING = "executing"
+    APPROVED = "approved"
     REJECTED = "rejected"
-    FAILED = "failed"  # approved but execution errored
-    INVALID = "invalid"  # proposal rejected by the runtime (bad args / not gated)
+    FAILED = "failed"
+    INVALID = "invalid"
 
 
 @dataclass
 class PendingApproval:
+    """DTO returned by all queue methods. Unchanged public surface."""
+
     tool_name: str
     raw_args: dict[str, Any]
     proposer_id: str
@@ -60,18 +81,37 @@ class PendingApproval:
     decided_by: str | None = None
     result: dict[str, Any] | None = None
     error: str | None = None
+    # Non-null when the row was recovered from EXECUTING state at restart.
+    recovered_at: datetime | None = None
+
+
+def _to_dto(row: PendingApprovalRecord) -> PendingApproval:
+    return PendingApproval(
+        id=row.id,
+        tool_name=row.tool_name,
+        raw_args=row.raw_args or {},
+        proposer_id=row.proposer_id,
+        reason=row.reason or "",
+        status=ApprovalStatus(row.status),
+        side_effect=row.side_effect or "write",
+        mcp_server=row.mcp_server,
+        args_hash=row.args_hash or "",
+        created_at=row.created_at,
+        decided_at=row.decided_at,
+        decided_by=row.decided_by,
+        result=row.result,
+        error=row.error,
+        recovered_at=row.recovered_at,
+    )
 
 
 class ApprovalQueue:
-    """In-memory store + workflow for human-gated agent actions."""
+    """DB-backed store + workflow for human-gated agent actions."""
 
-    def __init__(self, runtime=None) -> None:
-        # Include MCP write tools + device-execution tools so both are dispatchable
-        # from the shared approval queue (Phase 8 writes + Phase 9 device actions).
+    def __init__(self, runtime: AgentToolRuntime | None = None) -> None:
         self._runtime = runtime or build_default_runtime(
             include_mcp=True, include_device_execution=True
         )
-        self._records: dict[str, PendingApproval] = {}
 
     # ── Proposing ────────────────────────────────────────────────────────
 
@@ -83,119 +123,163 @@ class ApprovalQueue:
         proposer_id: str,
         reason: str = "",
     ) -> PendingApproval:
-        """Validate + park a write action for human approval.
-
-        Segregation of duties: proposing is low-privilege (an IT agent suggests
-        a remediation), so RBAC is **not** checked here — it is enforced at
-        approval time against the *approver*. Proposing only validates that the
-        tool exists, the args are well-formed, and the tool is genuinely
-        human-gated (a non-gated/unknown tool or bad args is recorded
-        ``invalid`` and is never executable).
-        """
+        """Validate + persist a write action. Segregation of duties: no RBAC
+        at proposal time — RBAC is enforced against the approver at approval."""
         from app.services.agents.tools.runtime import _hash_obj
 
         spec = self._runtime.get_spec(tool_name)
-        record = PendingApproval(
+        approval_id = uuid.uuid4().hex
+        side_effect = spec.side_effect.value if spec else "unknown"
+        mcp_server = getattr(spec, "mcp_server", None) if spec else None
+        args_hash = _hash_obj(raw_args)
+
+        if spec is None:
+            status = ApprovalStatus.INVALID
+            error: str | None = f"unknown tool {tool_name!r}"
+        elif spec.approval is not Approval.HUMAN:
+            status = ApprovalStatus.INVALID
+            error = "tool is not human-approval-gated; nothing to queue"
+        else:
+            try:
+                spec.args_model.model_validate(raw_args)
+                status = ApprovalStatus.PENDING
+                error = None
+            except ValidationError as exc:
+                status = ApprovalStatus.INVALID
+                error = f"invalid arguments: {exc.error_count()} error(s)"
+
+        row = PendingApprovalRecord(
+            id=approval_id,
             tool_name=tool_name,
             raw_args=raw_args,
             proposer_id=proposer_id,
             reason=reason,
-            side_effect=spec.side_effect.value if spec else "unknown",
-            mcp_server=spec.mcp_server if spec else None,
-            args_hash=_hash_obj(raw_args),
+            side_effect=side_effect,
+            mcp_server=mcp_server,
+            args_hash=args_hash,
+            status=status.value,
+            error=error,
         )
-        if spec is None:
-            record.status = ApprovalStatus.INVALID
-            record.error = f"unknown tool {tool_name!r}"
-        elif spec.approval is not Approval.HUMAN:
-            record.status = ApprovalStatus.INVALID
-            record.error = "tool is not human-approval-gated; nothing to queue"
-        else:
-            try:
-                spec.args_model.model_validate(raw_args)
-                record.status = ApprovalStatus.PENDING
-            except ValidationError as exc:
-                record.status = ApprovalStatus.INVALID
-                record.error = f"invalid arguments: {exc.error_count()} error(s)"
-        self._records[record.id] = record
+        async with async_session_factory() as db:
+            repo = PendingApprovalRepository(db)
+            await repo.create(row)
+            await db.commit()
+
         logger.info(
             "approval_proposed",
-            id=record.id,
+            id=approval_id,
             tool=tool_name,
-            status=record.status.value,
+            status=status.value,
             proposer=proposer_id,
         )
-        return record
+        return _to_dto(row)
 
     # ── Deciding ─────────────────────────────────────────────────────────
 
     async def approve(self, approval_id: str, approver: ToolContext) -> PendingApproval:
-        record = self._records.get(approval_id)
-        if record is None:
-            raise KeyError(approval_id)
-        if record.status is not ApprovalStatus.PENDING:
-            return record
-        # Claim the record BEFORE the first await. The event loop can only switch
-        # coroutines at an await point, so setting a non-PENDING status here (with
-        # no await in between) makes the check-and-claim atomic: a second
-        # concurrent approve() on the same id sees EXECUTING and returns early,
-        # preventing a double execution of a human-gated write/device action.
-        record.status = ApprovalStatus.EXECUTING
-
+        """Claim and execute. Row lock prevents concurrent double-execution."""
         from app.services.agents.tools.runtime import ProposedAction
 
+        # Phase 1: lock + claim atomically.
+        async with async_session_factory() as db:
+            repo = PendingApprovalRepository(db)
+            row = await repo.get_for_update(approval_id)
+            if row is None:
+                raise KeyError(approval_id)
+            if row.status != ApprovalStatus.PENDING.value:
+                return _to_dto(row)
+            row.status = ApprovalStatus.EXECUTING.value
+            await db.commit()
+
+        # Phase 2: execute outside the lock (long-running, possibly MCP call).
         proposed = ProposedAction(
-            invocation=ToolInvocation(record.tool_name, record.raw_args),
-            tool_name=record.tool_name,
-            side_effect=record.side_effect,
-            mcp_server=record.mcp_server,
+            invocation=ToolInvocation(row.tool_name, row.raw_args),
+            tool_name=row.tool_name,
+            side_effect=row.side_effect or "write",
+            mcp_server=row.mcp_server,
             description="",
-            args_hash=record.args_hash,
+            args_hash=row.args_hash or "",
         )
         outcome = await self._runtime.execute_approved(
-            proposed, approver, allowed_tools=(record.tool_name,), approver_id=approver.user_id
+            proposed, approver, allowed_tools=(row.tool_name,), approver_id=approver.user_id
         )
-        record.decided_at = datetime.now(UTC)
-        record.decided_by = approver.user_id
-        if outcome.executed:
-            record.status = ApprovalStatus.APPROVED
-            record.result = (
-                outcome.result.model_dump(mode="json")
-                if outcome.result is not None and hasattr(outcome.result, "model_dump")
-                else None
-            )
-        else:
-            record.status = ApprovalStatus.FAILED
-            record.error = outcome.error or outcome.status.value
+
+        # Phase 3: persist decision.
+        async with async_session_factory() as db:
+            repo = PendingApprovalRepository(db)
+            row2 = await repo.get(approval_id)
+            if row2 is None:
+                raise KeyError(approval_id)
+            row2.decided_at = datetime.now(UTC)
+            row2.decided_by = approver.user_id
+            if outcome.executed:
+                row2.status = ApprovalStatus.APPROVED.value
+                row2.result = (
+                    outcome.result.model_dump(mode="json")
+                    if outcome.result is not None and hasattr(outcome.result, "model_dump")
+                    else None
+                )
+            else:
+                row2.status = ApprovalStatus.FAILED.value
+                row2.error = outcome.error or outcome.status.value
+            await db.commit()
+
         logger.info(
             "approval_decided",
             id=approval_id,
-            status=record.status.value,
+            status=row2.status,
             approver=approver.user_id,
         )
-        return record
+        return _to_dto(row2)
 
-    def reject(self, approval_id: str, approver_id: str) -> PendingApproval:
-        record = self._records.get(approval_id)
-        if record is None:
-            raise KeyError(approval_id)
-        if record.status is ApprovalStatus.PENDING:
-            record.status = ApprovalStatus.REJECTED
-            record.decided_at = datetime.now(UTC)
-            record.decided_by = approver_id
-        return record
+    async def reject(self, approval_id: str, approver_id: str) -> PendingApproval:
+        async with async_session_factory() as db:
+            repo = PendingApprovalRepository(db)
+            row = await repo.get(approval_id)
+            if row is None:
+                raise KeyError(approval_id)
+            if row.status == ApprovalStatus.PENDING.value:
+                row.status = ApprovalStatus.REJECTED.value
+                row.decided_at = datetime.now(UTC)
+                row.decided_by = approver_id
+                await db.commit()
+        return _to_dto(row)
 
     # ── Reading ──────────────────────────────────────────────────────────
 
-    def list(self, *, status: ApprovalStatus | None = None) -> list[PendingApproval]:
-        items = sorted(self._records.values(), key=lambda r: r.created_at, reverse=True)
-        return [r for r in items if status is None or r.status is status]
+    async def list(
+        self, *, status: ApprovalStatus | None = None
+    ) -> list[PendingApproval]:
+        async with async_session_factory() as db:
+            repo = PendingApprovalRepository(db)
+            rows = await repo.list_by_status(status.value if status else None)
+        return [_to_dto(r) for r in rows]
 
-    def get(self, approval_id: str) -> PendingApproval | None:
-        return self._records.get(approval_id)
+    async def get(self, approval_id: str) -> PendingApproval | None:
+        async with async_session_factory() as db:
+            repo = PendingApprovalRepository(db)
+            row = await repo.get(approval_id)
+        return _to_dto(row) if row is not None else None
+
+    # ── Startup reconciliation ────────────────────────────────────────────
+
+    @classmethod
+    async def reconcile_on_startup(cls) -> int:
+        """Reset EXECUTING rows (crash leftovers) to PENDING. Never auto-approves."""
+        async with async_session_factory() as db:
+            repo = PendingApprovalRepository(db)
+            count = await repo.reset_executing_to_pending()
+            await db.commit()
+        if count:
+            logger.warning(
+                "approval_queue_reconciled",
+                recovered=count,
+                note="EXECUTING rows reset to PENDING; execution never completed",
+            )
+        return count
 
 
-# Process-wide singleton so the API and any agent turn share one queue.
+# Process-wide singleton. DB-backed; no mutable state on the object itself.
 _queue: ApprovalQueue | None = None
 
 

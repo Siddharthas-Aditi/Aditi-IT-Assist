@@ -620,7 +620,14 @@ class TestActionLedgerService:
 class TestSupervisorDecideForThreeCategories:
     """Pin supervisor routing decisions for the 3 task categories."""
 
-    def _decide(self, *, category: str, subtype: str, system: str) -> SupervisorDecision:
+    def _decide(
+        self,
+        *,
+        category: str,
+        subtype: str,
+        system: str,
+        extra_slots: dict | None = None,
+    ) -> SupervisorDecision:
         return decide(
             intent=_ic(ConversationIntent.CONTINUE),
             issue_category=category,
@@ -632,6 +639,7 @@ class TestSupervisorDecideForThreeCategories:
             issue_resolved=False,
             resolution_attempts=0,
             metrics=SessionMetrics(),
+            extra_slots=extra_slots,
         )
 
     def test_password_reset_delegates_to_access_mfa(self) -> None:
@@ -644,31 +652,50 @@ class TestSupervisorDecideForThreeCategories:
         assert d.action in (NextAction.DELEGATE, NextAction.DELEGATE_SUB)
         assert d.agent == "access_mfa"
 
-    def test_vpn_delegates_to_network_vpn(self) -> None:
-        """Supervisor delegates to network_vpn once required slots are satisfied.
+    # ── network_vpn: Gap 2 fixed ──────────────────────────────────────────
 
-        Without network_type in the snapshot, supervisor returns CLARIFY (correct
-        behavior — it needs to know if it's WiFi, ethernet, etc.). Once the triage
-        node fills that slot, routing proceeds to DELEGATE. We pin the agent name.
-        """
+    def test_vpn_clarifies_without_extra_slots(self) -> None:
+        """Without extra_slots, supervisor still needs network_type → CLARIFY."""
         d = self._decide(
             category="network/connectivity",
             subtype="vpn-not-connecting",
             system="vpn",
         )
-        # Supervisor correctly clarifies (network_type slot not in snapshot)
         assert d.action is NextAction.CLARIFY
         assert d.agent == "network_vpn"
 
-    def test_device_intune_delegates_to_device_intune(self) -> None:
-        """Supervisor identifies device_intune specialist even when platform_os is missing."""
+    def test_vpn_delegates_when_network_type_in_extra_slots(self) -> None:
+        """With network_type supplied (inferred from subtype by shadow node), DELEGATE."""
+        d = self._decide(
+            category="network/connectivity",
+            subtype="vpn-not-connecting",
+            system="vpn",
+            extra_slots={"network_type": "vpn"},
+        )
+        assert d.action in (NextAction.DELEGATE, NextAction.DELEGATE_SUB)
+        assert d.agent == "network_vpn"
+
+    # ── device_intune: Gap 2 fixed ────────────────────────────────────────
+
+    def test_device_intune_clarifies_without_platform_os(self) -> None:
+        """Without platform_os, supervisor correctly requests clarification."""
         d = self._decide(
             category="device-management/intune",
             subtype="enrollment-failure",
             system="intune",
         )
-        # Supervisor correctly clarifies (platform_os slot not in snapshot)
         assert d.action is NextAction.CLARIFY
+        assert d.agent == "device_intune"
+
+    def test_device_intune_delegates_when_platform_os_in_extra_slots(self) -> None:
+        """With platform_os supplied (from triage context), DELEGATE."""
+        d = self._decide(
+            category="device-management/intune",
+            subtype="enrollment-failure",
+            system="intune",
+            extra_slots={"platform_os": "Windows"},
+        )
+        assert d.action in (NextAction.DELEGATE, NextAction.DELEGATE_SUB)
         assert d.agent == "device_intune"
 
     def test_user_escalate_request_bypasses_delegate(self) -> None:

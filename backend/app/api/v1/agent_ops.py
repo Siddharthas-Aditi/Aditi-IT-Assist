@@ -154,7 +154,7 @@ async def list_approvals(
 ) -> ApprovalListResponse:
     queue = get_approval_queue()
     status_enum = ApprovalStatus(status) if status else None
-    return ApprovalListResponse(items=[_to_record(p) for p in queue.list(status=status_enum)])
+    return ApprovalListResponse(items=[_to_record(p) for p in await queue.list(status=status_enum)])
 
 
 @router.post("/approvals", response_model=ApprovalRecord)
@@ -171,7 +171,7 @@ async def propose_action(body: ProposeActionRequest, user: ITStaff) -> ApprovalR
 @router.post("/approvals/{approval_id}/approve", response_model=ApprovalRecord)
 async def approve_action(approval_id: str, user: Lead, db: DBDep) -> ApprovalRecord:
     queue = get_approval_queue()
-    if queue.get(approval_id) is None:
+    if await queue.get(approval_id) is None:
         raise HTTPException(status_code=404, detail="Approval not found")
     ctx = await _tool_context(user, db)
     record = await queue.approve(approval_id, ctx)
@@ -181,9 +181,9 @@ async def approve_action(approval_id: str, user: Lead, db: DBDep) -> ApprovalRec
 @router.post("/approvals/{approval_id}/reject", response_model=ApprovalRecord)
 async def reject_action(approval_id: str, user: Lead) -> ApprovalRecord:
     queue = get_approval_queue()
-    if queue.get(approval_id) is None:
+    if await queue.get(approval_id) is None:
         raise HTTPException(status_code=404, detail="Approval not found")
-    return _to_record(queue.reject(approval_id, str(user.id)))
+    return _to_record(await queue.reject(approval_id, str(user.id)))
 
 
 # ── Background tasks ─────────────────────────────────────────────────────────

@@ -209,9 +209,9 @@ async def approve_action(
 @router.post("/approvals/{approval_id}/reject", response_model=DeviceActionOutcomeResponse)
 async def reject_action(approval_id: str, user: Lead, db: DBDep) -> DeviceActionOutcomeResponse:
     service = _service(db)
-    if service._queue.get(approval_id) is None:  # noqa: SLF001
+    if await service._queue.get(approval_id) is None:  # noqa: SLF001
         raise HTTPException(status_code=404, detail="Approval not found")
-    record = service.reject(approval_id, str(user.id))
+    record = await service.reject(approval_id, str(user.id))
     return DeviceActionOutcomeResponse(
         status=record.status.value,
         decision="human_approval",

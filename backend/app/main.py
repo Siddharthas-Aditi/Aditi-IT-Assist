@@ -74,6 +74,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         except Exception as exc:  # noqa: BLE001 — boot should still succeed
             logger.warning("startup_seed_failed", error=str(exc))
 
+    # Reconcile the approval queue: reset any rows that were mid-execution when
+    # the previous process crashed. Runs before the scheduler so the API is
+    # clean when it starts accepting requests.
+    from app.services.agents.approvals import ApprovalQueue
+
+    await ApprovalQueue.reconcile_on_startup()
+
     # Background jobs — the idle sweeper auto-ends abandoned specialist
     # chat sessions every N seconds. Runs in the same event loop as the
     # API; the context manager cancels + awaits each task on shutdown.

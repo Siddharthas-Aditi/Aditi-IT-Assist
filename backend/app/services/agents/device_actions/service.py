@@ -298,14 +298,14 @@ class DeviceExecutionService:
         self, approval_id: str, *, approver: ToolContext, employee_id: str
     ) -> PendingApproval:
         """Re-verify consent + eligibility, then execute the approved action."""
-        record = self._queue.get(approval_id)
+        record = await self._queue.get(approval_id)
         if record is None:
             raise KeyError(approval_id)
         device_id = record.raw_args.get("device_id", "")
         facts = await self._guardrails.facts(device_id=device_id, employee_id=employee_id)
         if not facts.consent_present or not facts.device_eligible:
             # Do not execute; reject with a clear reason (audited by the queue read).
-            rejected = self._queue.reject(approval_id, approver.user_id)
+            rejected = await self._queue.reject(approval_id, approver.user_id)
             logger.info(
                 "device_action_approval_blocked",
                 approval_id=approval_id,
@@ -315,8 +315,8 @@ class DeviceExecutionService:
             return rejected
         return await self._queue.approve(approval_id, approver)
 
-    def reject(self, approval_id: str, approver_id: str) -> PendingApproval:
-        return self._queue.reject(approval_id, approver_id)
+    async def reject(self, approval_id: str, approver_id: str) -> PendingApproval:
+        return await self._queue.reject(approval_id, approver_id)
 
     # ── Audit helper ─────────────────────────────────────────────────────
 

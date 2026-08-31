@@ -59,7 +59,7 @@ class FakeQueue:
         self.records[rec.id] = rec
         return rec
 
-    def get(self, approval_id):
+    async def get(self, approval_id):
         return self.records.get(approval_id)
 
     async def approve(self, approval_id, approver):
@@ -68,7 +68,7 @@ class FakeQueue:
         rec.result = {"status": "executed"}
         return rec
 
-    def reject(self, approval_id, approver_id):
+    async def reject(self, approval_id, approver_id):
         rec = self.records[approval_id]
         rec.status = ApprovalStatus.REJECTED
         return rec
