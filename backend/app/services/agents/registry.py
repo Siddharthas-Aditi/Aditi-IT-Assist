@@ -334,7 +334,9 @@ _ZOOM = SpecialistAgentSpec(
     subtypes=("no-audio", "no-video", "cant-join-meeting", "screen-share-issue", "poor-quality"),
     required_slots=("normalized_system",),
     kb_domain_filter=("video-conferencing/zoom",),
-    web_fallback_allowed=True,  # external vendor; web docs supplement KB
+    # Deferred: web fallback is not yet wired into the dispatch graph. Flag will
+    # be re-enabled once a web_fallback_node is added and gated by FEATURE_WEB_RESEARCH.
+    web_fallback_allowed=False,
 )
 
 _DEVICE_INTUNE = SpecialistAgentSpec(
@@ -393,7 +395,9 @@ _NETWORK_VPN = SpecialistAgentSpec(
     ),
     required_slots=("network_type",),
     kb_domain_filter=("network/connectivity",),
-    web_fallback_allowed=True,
+    # Deferred: web fallback is not yet wired into the dispatch graph. Flag will
+    # be re-enabled once a web_fallback_node is added and gated by FEATURE_WEB_RESEARCH.
+    web_fallback_allowed=False,
 )
 
 # Master mapping. Every spec is intentionally enumerated here — no dynamic

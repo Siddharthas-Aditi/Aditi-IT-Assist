@@ -1,5 +1,7 @@
 """B2: the governance agent filters by trust, creates candidates, and audits."""
 
+from unittest.mock import patch
+
 import pytest
 
 from app.services.agents.web_research import (
@@ -7,6 +9,11 @@ from app.services.agents.web_research import (
     build_default_web_research_agent,
 )
 from app.services.web_search_service import DomainTrust, WebSearchResult
+
+# Patch target: bypass the registry's web_fallback_allowed check for tests that
+# focus on ControlledWebResearchAgent's own filtering/audit logic. Tests of the
+# registry flag itself live in test_web_fallback_routing.py.
+_ALLOW_FALLBACK = "app.services.agents.web_research.is_web_fallback_allowed_for"
 
 
 class _FakeProvider:
@@ -56,13 +63,14 @@ async def test_filters_untrusted_and_creates_candidates():
     ]
     imp = _FakeImprovement()
     agent = ControlledWebResearchAgent(search=_FakeProvider(results), improvement_service=imp)
-    outcome = await agent.research(
-        query="q",
-        specialist_name="zoom_meetings",
-        category="video-conferencing/zoom",
-        subtype="no-audio",
-        system="zoom",
-    )
+    with patch(_ALLOW_FALLBACK, return_value=True):
+        outcome = await agent.research(
+            query="q",
+            specialist_name="zoom_meetings",
+            category="video-conferencing/zoom",
+            subtype="no-audio",
+            system="zoom",
+        )
     # blog filtered out; official kept; one candidate created for the kept result
     assert all(r.trust_level == DomainTrust.OFFICIAL for r in outcome.results)
     assert len(imp.calls) == len(outcome.results) >= 1
@@ -99,13 +107,14 @@ async def test_completed_research_writes_audit_event():
     agent = ControlledWebResearchAgent(
         search=_FakeProvider(results), improvement_service=imp, db=db
     )
-    await agent.research(
-        query="q",
-        specialist_name="zoom_meetings",
-        category="video-conferencing/zoom",
-        subtype="no-audio",
-        system="zoom",
-    )
+    with patch(_ALLOW_FALLBACK, return_value=True):
+        await agent.research(
+            query="q",
+            specialist_name="zoom_meetings",
+            category="video-conferencing/zoom",
+            subtype="no-audio",
+            system="zoom",
+        )
 
     assert len(db.added) == 1
     event = db.added[0]
@@ -150,13 +159,14 @@ async def test_audit_failure_never_breaks_research():
         ),
     ]
     agent = ControlledWebResearchAgent(search=_FakeProvider(results), db=_ExplodingDb())
-    outcome = await agent.research(
-        query="q",
-        specialist_name="zoom_meetings",
-        category="video-conferencing/zoom",
-        subtype="no-audio",
-        system="zoom",
-    )
+    with patch(_ALLOW_FALLBACK, return_value=True):
+        outcome = await agent.research(
+            query="q",
+            specialist_name="zoom_meetings",
+            category="video-conferencing/zoom",
+            subtype="no-audio",
+            system="zoom",
+        )
     assert outcome.policy.allowed is True
     assert len(outcome.results) == 1
 

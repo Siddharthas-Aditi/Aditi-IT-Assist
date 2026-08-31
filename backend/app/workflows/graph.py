@@ -77,8 +77,12 @@ def route_after_supervisor(state: WorkflowState) -> str:
     # CLARIFY → triage already set needs_clarification; surface it via END
     if action is NextAction.CLARIFY:
         return str(END)
-    # DELEGATE, DELEGATE_SUB, RETRIEVE, RESPOND, WEB_FALLBACK → all continue
-    # through policy enforcement before retrieval/dispatch
+    # WEB_FALLBACK: the web-research node is not yet wired into the graph.
+    # A cap-hit that produces WEB_FALLBACK means the specialist is exhausted;
+    # escalating is safer than silently falling through to standard retrieval.
+    if action is NextAction.WEB_FALLBACK:
+        return "escalate"
+    # DELEGATE, DELEGATE_SUB, RETRIEVE, RESPOND → continue through policy
     return "policy"
 
 

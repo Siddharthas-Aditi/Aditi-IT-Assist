@@ -78,8 +78,13 @@ What remains before unconditional promotion:
   to satisfy the safe-defaults policy. Promotion requires a staged flip (canary →
   full) with monitoring.
 - **Web-fallback wiring** through the supervisor for `zoom_meetings` and
-  `network_vpn` — the registry declares `web_fallback_allowed=True` but the
-  dispatch node does not yet route to `ControlledWebResearchAgent`.
+  `network_vpn` — `web_fallback_allowed` is now correctly `False` for both
+  (was `True` while the path was unwired, causing a silent drop). Full wiring
+  requires: a `web_fallback_node` in the graph, per-session delegation counter
+  tracking in workflow state, citation-pipeline distinction for web vs. KB
+  results, and FEATURE_WEB_RESEARCH gating. Until that node exists, the
+  supervisor's WEB_FALLBACK decision routes to escalation (safe degrade, not
+  silent).
 
 > **Open question:** what is the monitoring criteria and rollout percentage plan
 > for flipping this flag in production? This is not yet defined; it should be
@@ -109,7 +114,7 @@ What remains before unconditional promotion:
 | `FEATURE_SUPERVISOR_PRIMARY` | `false` | **Implemented, not yet promoted.** When `true`, activates `specialist_dispatch_node`; supervisor's ESCALATE/END/CLARIFY decisions are authoritative. Requires eval gate before defaulting to `true`. |
 | `FEATURE_SUPERVISOR_ROUTING` | — | Superseded by `FEATURE_SUPERVISOR_PRIMARY`. Not used. |
 | `FEATURE_SPECIALIST_HANDLERS` | — | Superseded by `FEATURE_SUPERVISOR_PRIMARY`. Not used. |
-| `FEATURE_WEB_FALLBACK` | `false` | Phase 2 (pending). Enables the controlled web-research path via the supervisor. Not yet wired into the dispatch node. |
+| `FEATURE_WEB_RESEARCH` | `false` | Phase 2 (pending). Enables the controlled web-research path via the supervisor. Not yet wired into the dispatch node. **`web_fallback_allowed` is `False` for all current specialists** until the `web_fallback_node` is implemented; enabling this flag without the node would have no effect. |
 | `FEATURE_QUEUE_UI` | `false` | Phase 2. Exposes the specialist UI; the API can ship sooner. |
 | `FEATURE_KB_CANDIDATES` | `true` after migration | Phase 2/3. Opt-in candidate creation from resolutions. |
 | `FEATURE_AGENT_TOOLS` | `false` | Phase 5. Bounded LLM tool-use loop for specialists with `allowed_tools` (read-only tools first). See `docs/architecture/agent-tooling.md` and `plans/agentic-ops-platform-evolution.md`. |

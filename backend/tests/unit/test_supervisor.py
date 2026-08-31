@@ -129,7 +129,8 @@ class TestSpecialistRouting:
         )
         assert d2.action is NextAction.ESCALATE
 
-    def test_per_specialist_cap_triggers_web_fallback_when_allowed(self) -> None:
+    def test_per_specialist_cap_escalates_when_web_fallback_not_wired(self) -> None:
+        """zoom_meetings: web_fallback_allowed=False (path not yet wired) → ESCALATE."""
         m = SessionMetrics(handoffs=4)
         m.delegations_per_agent["zoom_meetings"] = 3  # at cap
         d = decide(
@@ -142,8 +143,9 @@ class TestSpecialistRouting:
                 knowledge_confidence=0.4,
             ),
         )
-        # zoom_meetings has web_fallback_allowed=True
-        assert d.action is NextAction.WEB_FALLBACK
+        # web_fallback_allowed is now False (path not wired) → ESCALATE, not WEB_FALLBACK
+        assert d.action is NextAction.ESCALATE
+        assert d.action is not NextAction.WEB_FALLBACK
 
     def test_per_specialist_cap_escalates_when_no_web_fallback(self) -> None:
         m = SessionMetrics(handoffs=4)
