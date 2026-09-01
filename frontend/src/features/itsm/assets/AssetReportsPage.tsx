@@ -8,8 +8,8 @@
  * by hovering, and the filter row scopes every card at once.
  */
 
-import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   Bar,
   BarChart,
@@ -18,20 +18,21 @@ import {
   Tooltip,
   XAxis,
   YAxis,
-} from 'recharts';
+} from "recharts";
 
-import { PageHeader } from '../components/chrome';
-import { Button, Panel, StatusBadge } from '../components/ui';
-import { ASSET_TYPES, personName } from '../data/reference';
-import { formatTotals } from '../data/money';
-import { daysUntil, isExpiringSoon } from '../data/rules';
-import { useItsmState } from '../data/store';
-import { ASSET_STATES, type Asset } from '../data/types';
+import { PageHeader } from "../components/chrome";
+import { Button, Panel, StatusBadge } from "../components/ui";
+import { ASSET_TYPES, personName } from "../data/reference";
+import { formatTotals } from "../data/money";
+import { daysUntil, isExpiringSoon } from "../data/rules";
+import { useItsmState } from "../data/store";
+import { toAssetDisplay } from "../display-adapters";
+import type { AssetDisplay as Asset } from "../display-adapters";
 
 /** One hue for every bar: the category is carried by the axis, not by colour. */
-const MARK = '#0284c7'; // sky-600 — the console's accent, readable on white
-const GRID = '#e2e8f0'; // slate-200 hairline, one shade off the surface
-const AXIS_INK = '#64748b'; // slate-500
+const MARK = "#0284c7"; // sky-600 — the console's accent, readable on white
+const GRID = "#e2e8f0"; // slate-200 hairline, one shade off the surface
+const AXIS_INK = "#64748b"; // slate-500
 
 interface Datum {
   label: string;
@@ -41,7 +42,7 @@ interface Datum {
 function tally(rows: Asset[], pick: (a: Asset) => string): Datum[] {
   const map = new Map<string, number>();
   rows.forEach((a) => {
-    const key = pick(a) || 'Unspecified';
+    const key = pick(a) || "Unspecified";
     map.set(key, (map.get(key) ?? 0) + 1);
   });
   return [...map.entries()]
@@ -57,16 +58,18 @@ function StatTile({
 }: {
   label: string;
   value: number | string;
-  tone?: 'warn' | 'default';
+  tone?: "warn" | "default";
   hint?: string;
 }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4">
-      <p className="text-[11.5px] uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="text-[11.5px] uppercase tracking-wide text-slate-500">
+        {label}
+      </p>
       {/* Proportional figures — tabular-nums would make a display number look loose. */}
       <p
         className={`mt-1 text-[26px] font-semibold leading-none ${
-          tone === 'warn' ? 'text-amber-700' : 'text-slate-900'
+          tone === "warn" ? "text-amber-700" : "text-slate-900"
         }`}
       >
         {value}
@@ -87,29 +90,42 @@ function ChartCard({ title, data }: { title: string; data: Datum[] }) {
       title={title}
       actions={
         <Button variant="ghost" onClick={() => setAsTable((t) => !t)}>
-          {asTable ? 'Show chart' : 'Show table'}
+          {asTable ? "Show chart" : "Show table"}
         </Button>
       }
     >
       {data.length === 0 ? (
-        <p className="py-6 text-center text-[12.5px] text-slate-500">No data for this slice.</p>
+        <p className="py-6 text-center text-[12.5px] text-slate-500">
+          No data for this slice.
+        </p>
       ) : asTable ? (
         <table className="w-full text-left">
           <caption className="sr-only">{title}</caption>
           <thead>
             <tr className="border-b border-slate-200">
-              <th scope="col" className="px-2 py-1.5 text-[11px] uppercase tracking-wide text-slate-500">
+              <th
+                scope="col"
+                className="px-2 py-1.5 text-[11px] uppercase tracking-wide text-slate-500"
+              >
                 Category
               </th>
-              <th scope="col" className="px-2 py-1.5 text-right text-[11px] uppercase tracking-wide text-slate-500">
+              <th
+                scope="col"
+                className="px-2 py-1.5 text-right text-[11px] uppercase tracking-wide text-slate-500"
+              >
                 Assets
               </th>
             </tr>
           </thead>
           <tbody>
             {data.map((d) => (
-              <tr key={d.label} className="border-b border-slate-200 last:border-0">
-                <td className="px-2 py-1.5 text-[12.5px] text-slate-800">{d.label}</td>
+              <tr
+                key={d.label}
+                className="border-b border-slate-200 last:border-0"
+              >
+                <td className="px-2 py-1.5 text-[12.5px] text-slate-800">
+                  {d.label}
+                </td>
                 <td className="px-2 py-1.5 text-right text-[12.5px] tabular-nums text-slate-800">
                   {d.value}
                 </td>
@@ -120,7 +136,11 @@ function ChartCard({ title, data }: { title: string; data: Datum[] }) {
       ) : (
         <div style={{ height }}>
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={data} layout="vertical" margin={{ left: 8, right: 24, top: 4, bottom: 4 }}>
+            <BarChart
+              data={data}
+              layout="vertical"
+              margin={{ left: 8, right: 24, top: 4, bottom: 4 }}
+            >
               <CartesianGrid horizontal={false} stroke={GRID} />
               <XAxis
                 type="number"
@@ -136,17 +156,23 @@ function ChartCard({ title, data }: { title: string; data: Datum[] }) {
                 tick={{ fill: AXIS_INK, fontSize: 11 }}
               />
               <Tooltip
-                cursor={{ fill: 'rgba(2,132,199,0.06)' }}
+                cursor={{ fill: "rgba(2,132,199,0.06)" }}
                 contentStyle={{
-                  background: '#ffffff',
-                  border: '1px solid #cbd5e1',
+                  background: "#ffffff",
+                  border: "1px solid #cbd5e1",
                   borderRadius: 6,
                   fontSize: 12,
-                  color: '#0f172a',
+                  color: "#0f172a",
                 }}
               />
               {/* Thin mark, rounded data-end anchored to the baseline. */}
-              <Bar name="Assets" dataKey="value" fill={MARK} radius={[0, 4, 4, 0]} barSize={14} />
+              <Bar
+                name="Assets"
+                dataKey="value"
+                fill={MARK}
+                radius={[0, 4, 4, 0]}
+                barSize={14}
+              />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -155,17 +181,30 @@ function ChartCard({ title, data }: { title: string; data: Datum[] }) {
   );
 }
 
-function ExpiryList({ title, rows, dateOf }: { title: string; rows: Asset[]; dateOf: (a: Asset) => string | null }) {
+function ExpiryList({
+  title,
+  rows,
+  dateOf,
+}: {
+  title: string;
+  rows: Asset[];
+  dateOf: (a: Asset) => string | null;
+}) {
   return (
     <Panel title={title}>
       {rows.length === 0 ? (
-        <p className="py-4 text-center text-[12.5px] text-slate-500">Nothing in the next 90 days.</p>
+        <p className="py-4 text-center text-[12.5px] text-slate-500">
+          Nothing in the next 90 days.
+        </p>
       ) : (
         <ul className="divide-y divide-slate-200">
           {rows.slice(0, 10).map((a) => {
             const days = daysUntil(dateOf(a));
             return (
-              <li key={a.id} className="flex items-center justify-between gap-3 py-1.5">
+              <li
+                key={a.id}
+                className="flex items-center justify-between gap-3 py-1.5"
+              >
                 <div className="min-w-0">
                   <Link
                     to={`/itsm/assets/${a.id}`}
@@ -173,10 +212,12 @@ function ExpiryList({ title, rows, dateOf }: { title: string; rows: Asset[]; dat
                   >
                     {a.assetTag}
                   </Link>
-                  <p className="truncate text-[11.5px] text-slate-500">{a.name}</p>
+                  <p className="truncate text-[11.5px] text-slate-500">
+                    {a.name}
+                  </p>
                 </div>
                 <span className="shrink-0 text-[11.5px] text-amber-700">
-                  {days !== null && days < 0 ? 'Expired' : `${days} days`}
+                  {days !== null && days < 0 ? "Expired" : `${days} days`}
                 </span>
               </li>
             );
@@ -188,68 +229,90 @@ function ExpiryList({ title, rows, dateOf }: { title: string; rows: Asset[]; dat
 }
 
 export function AssetReportsPage() {
-  const { assets, locations } = useItsmState();
-  const [location, setLocation] = useState('');
-  const [assetType, setAssetType] = useState('');
+  const { assets: rawAssets, locations } = useItsmState();
+  const assets = rawAssets.map(toAssetDisplay);
+  void locations;
+  const [location, setLocation] = useState("");
+  const [assetType, setAssetType] = useState("");
 
   const rows = useMemo(
     () =>
       assets.filter(
         (a) =>
-          (!location || a.location === location) && (!assetType || a.assetType === assetType),
+          (!location || a.location === location) &&
+          (!assetType || a.assetType === assetType),
       ),
     [assets, location, assetType],
   );
 
   const byState = useMemo(
     () =>
-      ASSET_STATES.map((s) => ({
-        label: s,
-        value: rows.filter((a) => a.assetState === s).length,
-      })).filter((d) => d.value > 0),
+      Object.entries({
+        in_stock: "In Stock",
+        assigned: "Assigned",
+        in_use: "In Use",
+        under_repair: "Under Repair",
+        reserved: "Reserved",
+        lost: "Lost",
+        retired: "Retired",
+        disposed: "Disposed",
+      })
+        .map(([key, label]) => ({
+          label,
+          value: rows.filter((a) => a.status === key).length,
+        }))
+        .filter((d) => d.value > 0),
     [rows],
   );
 
-  const byType = useMemo(() => tally(rows, (a) => a.assetType), [rows]);
-  const byLocation = useMemo(() => tally(rows, (a) => a.location), [rows]);
-  const byDepartment = useMemo(() => tally(rows, (a) => a.department), [rows]);
-  const byVendor = useMemo(() => tally(rows, (a) => a.vendor), [rows]);
+  const byType = useMemo(() => tally(rows, (a) => a.assetType ?? ""), [rows]);
+  const byLocation = useMemo(
+    () => tally(rows, (a) => a.location ?? ""),
+    [rows],
+  );
+  const byDepartment = useMemo(
+    () => tally(rows, (a) => a.department ?? ""),
+    [rows],
+  );
+  const byVendor = useMemo(() => tally(rows, (a) => a.vendor ?? ""), [rows]);
 
   const warrantySoon = rows
     .filter((a) => isExpiringSoon(a.warrantyExpiry))
-    .sort((a, b) => (a.warrantyExpiry ?? '').localeCompare(b.warrantyExpiry ?? ''));
+    .sort((a, b) =>
+      (a.warrantyExpiry ?? "").localeCompare(b.warrantyExpiry ?? ""),
+    );
   const eolSoon = rows
     .filter((a) => isExpiringSoon(a.endOfLife))
-    .sort((a, b) => (a.endOfLife ?? '').localeCompare(b.endOfLife ?? ''));
+    .sort((a, b) => (a.endOfLife ?? "").localeCompare(b.endOfLife ?? ""));
   const unassigned = rows.filter((a) => !a.assignedTo);
 
   return (
     <div className="space-y-4 pb-10">
       <PageHeader
         title="Asset Reports"
-        crumbs={[{ label: 'Assets', to: '/itsm/assets' }, { label: 'Reports' }]}
+        crumbs={[{ label: "Assets", to: "/itsm/assets" }, { label: "Reports" }]}
         description="Inventory posture across state, type, location, department, and vendor."
       />
 
       {/* One filter row scoping every card below. */}
       <div className="flex flex-wrap gap-3 rounded-lg border border-slate-200 bg-white p-3">
         <label className="flex flex-col gap-0.5">
-          <span className="text-[10.5px] uppercase tracking-wide text-slate-500">Location</span>
+          <span className="text-[10.5px] uppercase tracking-wide text-slate-500">
+            Location
+          </span>
           <select
             value={location}
             onChange={(e) => setLocation(e.target.value)}
             className="min-w-[180px] rounded-md border border-slate-300 bg-white px-2 py-1 text-[12px] text-slate-900 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
           >
             <option value="">All locations</option>
-            {locations.map((l) => (
-              <option key={l.id} value={l.name}>
-                {l.name}
-              </option>
-            ))}
+            {/* Locations not yet in backend */}
           </select>
         </label>
         <label className="flex flex-col gap-0.5">
-          <span className="text-[10.5px] uppercase tracking-wide text-slate-500">Asset type</span>
+          <span className="text-[10.5px] uppercase tracking-wide text-slate-500">
+            Asset type
+          </span>
           <select
             value={assetType}
             onChange={(e) => setAssetType(e.target.value)}
@@ -266,13 +329,26 @@ export function AssetReportsPage() {
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        <StatTile label="Total assets" value={rows.length} hint="Matching the current filters" />
+        <StatTile
+          label="Total assets"
+          value={rows.length}
+          hint="Matching the current filters"
+        />
         <StatTile
           label="Total value"
-          value={formatTotals(rows)}
+          value={formatTotals(
+            rows.map((r) => ({
+              cost: r.cost ?? 0,
+              currency: (r.currency as "INR" | "USD") ?? "INR",
+            })),
+          )}
           hint="Grouped by currency — never converted"
         />
-        <StatTile label="Unassigned" value={unassigned.length} hint="No owner recorded" />
+        <StatTile
+          label="Unassigned"
+          value={unassigned.length}
+          hint="No owner recorded"
+        />
         <StatTile
           label="Warranty ≤ 90 days"
           value={warrantySoon.length}
@@ -302,7 +378,10 @@ export function AssetReportsPage() {
           ) : (
             <ul className="divide-y divide-slate-200">
               {unassigned.slice(0, 10).map((a) => (
-                <li key={a.id} className="flex items-center justify-between gap-3 py-1.5">
+                <li
+                  key={a.id}
+                  className="flex items-center justify-between gap-3 py-1.5"
+                >
                   <div className="min-w-0">
                     <Link
                       to={`/itsm/assets/${a.id}`}
@@ -328,7 +407,11 @@ export function AssetReportsPage() {
           rows={warrantySoon}
           dateOf={(a) => a.warrantyExpiry}
         />
-        <ExpiryList title="Nearing end of life" rows={eolSoon} dateOf={(a) => a.endOfLife} />
+        <ExpiryList
+          title="Nearing end of life"
+          rows={eolSoon}
+          dateOf={(a) => a.endOfLife}
+        />
       </div>
     </div>
   );

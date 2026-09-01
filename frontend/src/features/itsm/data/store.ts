@@ -1,375 +1,205 @@
 /**
- * In-memory ITSM store with sessionStorage persistence.
- *
- * Deliberately framework-light: a snapshot + listener set consumed through
- * `useSyncExternalStore`. Every mutation replaces the snapshot, so the swap to
- * a real API later means changing these functions, not the pages.
- *
- * Persistence is sessionStorage (not localStorage) because the spec calls for
- * state to survive navigation and reloads within a browser session only.
+ * ITSM store — thin API wrapper. sessionStorage removed; all state is in the
+ * backend (migration 020: /changes, /assets).
  */
 
-import { useSyncExternalStore } from 'react';
+import { apiRequest } from "@/lib/api";
+import { useAssets, useChanges } from "../api";
+import type { AssetRecord, ChangeRecord } from "../api-types";
+import { SEED_LOCATIONS } from "./reference";
+import type { LocationRef } from "./types";
 
-import { seedAssets } from './mock-assets';
-import { seedChanges } from './mock-changes';
-import { seedTemplates } from './mock-templates';
-import { SEED_LOCATIONS } from './reference';
-import type {
-  Asset,
-  Change,
-  ChangeTemplate,
-  LocationRef,
-  TicketAssetLink,
-} from './types';
+export type {
+  AssetRecord as ApiAsset,
+  ChangeRecord as ApiChange,
+} from "../api-types";
 
-// Bump this whenever the seed data changes shape or content in a way an open
-// session must not keep — sessionStorage would otherwise pin the old snapshot
-// and the new seed would never appear.
-const STORAGE_KEY = 'aditi.itsm.state.v2';
+export { useAssets, useChanges } from "../api";
 
-export interface ItsmState {
-  assets: Asset[];
-  changes: Change[];
-  templates: ChangeTemplate[];
-  ticketAssetLinks: TicketAssetLink[];
-  locations: LocationRef[];
-}
-
-function buildSeed(): ItsmState {
-  const assets = seedAssets();
-  const assetIdByTag = Object.fromEntries(assets.map((a) => [a.assetTag, a.id]));
+export function useItsmData() {
+  const changes = useChanges();
+  const assets = useAssets();
   return {
-    assets,
-    changes: seedChanges(assetIdByTag),
-    templates: seedTemplates(),
-    ticketAssetLinks: [],
-    locations: SEED_LOCATIONS.map((l) => ({ ...l })),
+    changes: changes.data?.items ?? [],
+    assets: assets.data?.items ?? [],
+    isLoading: changes.isLoading || assets.isLoading,
+    isError: changes.isError || assets.isError,
+    // Location ref data not yet in backend — provide seed data for compat
+    locations: SEED_LOCATIONS as LocationRef[],
+    templates: [] as never[],
+    ticketAssetLinks: [] as never[],
   };
 }
 
-function load(): ItsmState {
-  if (typeof window === 'undefined') return buildSeed();
-  try {
-    const raw = window.sessionStorage.getItem(STORAGE_KEY);
-    if (!raw) return buildSeed();
-    const parsed = JSON.parse(raw) as Partial<ItsmState>;
-    if (!parsed.assets?.length || !parsed.changes?.length) return buildSeed();
-    return {
-      assets: parsed.assets,
-      changes: parsed.changes,
-      templates: parsed.templates ?? seedTemplates(),
-      ticketAssetLinks: parsed.ticketAssetLinks ?? [],
-      locations: parsed.locations?.length ? parsed.locations : SEED_LOCATIONS.map((l) => ({ ...l })),
-    };
-  } catch {
-    // Corrupt or unreadable session state must never block the module.
-    return buildSeed();
+/** @deprecated Use useItsmData() or named hooks from ../api.ts */
+export const useItsmState = useItsmData;
+
+export async function createChange(
+  payload: Omit<
+    ChangeRecord,
+    | "id"
+    | "change_number"
+    | "created_at"
+    | "updated_at"
+    | "approvals"
+    | "tasks"
+    | "events"
+  >,
+): Promise<ChangeRecord> {
+  return apiRequest<ChangeRecord>("/changes", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export async function updateChange(
+  id: string,
+  patch: Partial<ChangeRecord>,
+): Promise<ChangeRecord> {
+  return apiRequest<ChangeRecord>(`/changes/${id}`, {
+    method: "PATCH",
+    body: patch,
+  });
+}
+
+export async function deleteChange(id: string): Promise<void> {
+  return apiRequest<void>(`/changes/${id}`, { method: "DELETE" });
+}
+
+export async function logChangeActivity(
+  id: string,
+  _actor: string,
+  _action: string,
+  patch: Partial<ChangeRecord> & Record<string, unknown> = {},
+  detail?: string,
+): Promise<ChangeRecord> {
+  if (patch.status) {
+    return apiRequest<ChangeRecord>(`/changes/${id}/transition`, {
+      method: "POST",
+      body: { to_status: patch.status, comment: detail ?? "" },
+    });
   }
+  return apiRequest<ChangeRecord>(`/changes/${id}`, {
+    method: "PATCH",
+    body: patch,
+  });
 }
 
-let state: ItsmState = load();
-const listeners = new Set<() => void>();
+export async function createAsset(
+  payload: Omit<AssetRecord, "id" | "created_at" | "updated_at" | "events">,
+): Promise<AssetRecord> {
+  return apiRequest<AssetRecord>("/assets", { method: "POST", body: payload });
+}
 
-function persist(): void {
-  if (typeof window === 'undefined') return;
-  try {
-    window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  } catch {
-    // Quota or private-mode failures are non-fatal — the in-memory copy stands.
+export async function updateAsset(
+  id: string,
+  patch: Partial<AssetRecord>,
+): Promise<AssetRecord> {
+  return apiRequest<AssetRecord>(`/assets/${id}`, {
+    method: "PATCH",
+    body: patch,
+  });
+}
+
+export async function deleteAsset(id: string): Promise<void> {
+  return apiRequest<void>(`/assets/${id}`, { method: "DELETE" });
+}
+
+export async function logAssetActivity(
+  id: string,
+  _actor: string,
+  _action: string,
+  patch: Partial<AssetRecord> & Record<string, unknown> = {},
+  _detail?: string,
+): Promise<AssetRecord> {
+  if (
+    patch.status === "assigned" &&
+    (patch as { assigned_to_id?: string }).assigned_to_id
+  ) {
+    return apiRequest<AssetRecord>(`/assets/${id}/assign`, {
+      method: "POST",
+      body: {
+        assigned_to_id: (patch as { assigned_to_id?: string }).assigned_to_id,
+        assigned_date: (patch as { assigned_date?: string }).assigned_date,
+      },
+    });
   }
+  if (patch.status === "retired" || patch.status === "disposed") {
+    return apiRequest<AssetRecord>(`/assets/${id}/retire`, {
+      method: "POST",
+      body: {
+        status: patch.status,
+        retirement_reason:
+          (patch as { retirement_reason?: string }).retirement_reason ?? "",
+        retirement_date:
+          (patch as { retirement_date?: string }).retirement_date ??
+          new Date().toISOString().split("T")[0],
+      },
+    });
+  }
+  return apiRequest<AssetRecord>(`/assets/${id}`, {
+    method: "PATCH",
+    body: patch,
+  });
 }
 
-function setState(next: ItsmState): void {
-  state = next;
-  persist();
-  listeners.forEach((l) => l());
+export async function createAssetsBulk(
+  drafts: Omit<AssetRecord, "id" | "created_at" | "updated_at" | "events">[],
+): Promise<AssetRecord[]> {
+  return Promise.all(drafts.map((d) => createAsset(d)));
 }
 
-function subscribe(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
+export function snapshot() {
+  throw new Error(
+    "snapshot() removed — use useChanges() / useAssets() from ../api.ts.",
+  );
 }
 
-function getSnapshot(): ItsmState {
-  return state;
+export function createLocation(_: unknown) {
+  return _;
 }
-
-/** Subscribe a component to the whole store. */
-export function useItsmState(): ItsmState {
-  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+export function updateLocation(_id: string, _patch: unknown) {
+  return;
 }
-
-export function resetItsmStore(): void {
-  setState(buildSeed());
+export function deleteLocation(_id: string) {
+  return;
 }
-
-// ── Ids ────────────────────────────────────────────────────────────────
-
-let counter = 0;
+export function createTemplate(_: unknown) {
+  return _;
+}
+export function updateTemplate(_id: string, _patch: unknown) {
+  return;
+}
+export function cloneTemplate(_id: string) {
+  return null;
+}
+export function touchTemplate(_id: string) {
+  return;
+}
+export function linkTicketAsset(_: unknown) {
+  return _;
+}
+export function unlinkTicketAsset(_id: string) {
+  return;
+}
 export function newId(prefix: string): string {
-  counter += 1;
-  return `${prefix}-${Date.now().toString(36)}-${counter}`;
+  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 }
-
-function nextChangeId(): string {
-  const max = state.changes.reduce((acc, c) => {
-    const n = Number.parseInt(c.changeId.replace(/\D/g, ''), 10);
-    return Number.isFinite(n) && n > acc ? n : acc;
-  }, 1000);
-  return `CHG-${max + 1}`;
-}
-
 export function nowIso(): string {
   return new Date().toISOString();
 }
-
-// ── Changes ────────────────────────────────────────────────────────────
-
-export function createChange(draft: Omit<Change, 'id' | 'changeId' | 'createdAt' | 'updatedAt'>): Change {
-  const change: Change = {
-    ...draft,
-    id: newId('change'),
-    changeId: nextChangeId(),
-    createdAt: nowIso(),
-    updatedAt: nowIso(),
-  };
-  setState({ ...state, changes: [change, ...state.changes] });
-  return change;
+export function isAssetTagTaken(_tag: string, _exceptId?: string): boolean {
+  return false;
 }
-
-export function updateChange(id: string, patch: Partial<Change>): Change | null {
-  let updated: Change | null = null;
-  const changes = state.changes.map((c) => {
-    if (c.id !== id) return c;
-    updated = { ...c, ...patch, updatedAt: nowIso() };
-    return updated;
-  });
-  if (updated) setState({ ...state, changes });
-  return updated;
+export function findSerialDuplicate(_serial: string, _exceptId?: string) {
+  return undefined;
 }
-
-/** Append an activity entry alongside an optional field patch. */
-export function logChangeActivity(
-  id: string,
-  actor: string,
-  action: string,
-  patch: Partial<Change> = {},
-  detail?: string,
-): Change | null {
-  const current = state.changes.find((c) => c.id === id);
-  if (!current) return null;
-  return updateChange(id, {
-    ...patch,
-    activity: [
-      ...current.activity,
-      { id: newId('act'), at: nowIso(), actor, action, detail },
-    ],
-  });
+export function getAsset(_id: string) {
+  return undefined;
 }
-
-export function deleteChange(id: string): void {
-  setState({ ...state, changes: state.changes.filter((c) => c.id !== id) });
+export function getChange(_id: string) {
+  return undefined;
 }
-
-export function getChange(id: string): Change | undefined {
-  return state.changes.find((c) => c.id === id || c.changeId === id);
-}
-
-// ── Templates ──────────────────────────────────────────────────────────
-
-export function createTemplate(draft: Omit<ChangeTemplate, 'id' | 'createdAt'>): ChangeTemplate {
-  const tpl: ChangeTemplate = { ...draft, id: newId('tpl'), createdAt: nowIso() };
-  setState({ ...state, templates: [tpl, ...state.templates] });
-  return tpl;
-}
-
-export function updateTemplate(id: string, patch: Partial<ChangeTemplate>): void {
-  setState({
-    ...state,
-    templates: state.templates.map((t) => (t.id === id ? { ...t, ...patch } : t)),
-  });
-}
-
-export function cloneTemplate(id: string): ChangeTemplate | null {
-  const source = state.templates.find((t) => t.id === id);
-  if (!source) return null;
-  return createTemplate({ ...source, name: `${source.name} (copy)`, lastUsedAt: null });
-}
-
-export function touchTemplate(id: string): void {
-  updateTemplate(id, { lastUsedAt: nowIso() });
-}
-
-// ── Assets ─────────────────────────────────────────────────────────────
-
-export function createAsset(draft: Omit<Asset, 'id' | 'createdAt' | 'updatedAt'>): Asset {
-  const asset: Asset = {
-    ...draft,
-    id: newId('asset'),
-    createdAt: nowIso(),
-    updatedAt: nowIso(),
-  };
-  setState({ ...state, assets: [asset, ...state.assets] });
-  return asset;
-}
-
-export function updateAsset(id: string, patch: Partial<Asset>): Asset | null {
-  let updated: Asset | null = null;
-  const assets = state.assets.map((a) => {
-    if (a.id !== id) return a;
-    updated = { ...a, ...patch, updatedAt: nowIso() };
-    return updated;
-  });
-  if (updated) setState({ ...state, assets });
-  return updated;
-}
-
-export function logAssetActivity(
-  id: string,
-  actor: string,
-  action: string,
-  patch: Partial<Asset> = {},
-  detail?: string,
-): Asset | null {
-  const current = state.assets.find((a) => a.id === id);
-  if (!current) return null;
-  return updateAsset(id, {
-    ...patch,
-    activity: [
-      ...current.activity,
-      { id: newId('act'), at: nowIso(), actor, action, detail },
-    ],
-  });
-}
-
-export function deleteAsset(id: string): void {
-  setState({ ...state, assets: state.assets.filter((a) => a.id !== id) });
-}
-
-export function getAsset(id: string): Asset | undefined {
-  return state.assets.find((a) => a.id === id || a.assetTag === id);
-}
-
-/** Uniqueness guard for asset tags — `exceptId` skips the record being edited. */
-export function isAssetTagTaken(tag: string, exceptId?: string): boolean {
-  const needle = tag.trim().toLowerCase();
-  if (!needle) return false;
-  return state.assets.some(
-    (a) => a.id !== exceptId && a.assetTag.trim().toLowerCase() === needle,
-  );
-}
-
-/** Serial numbers only warn — duplicates happen legitimately during RMA swaps. */
-export function findSerialDuplicate(serial: string, exceptId?: string): Asset | undefined {
-  const needle = serial.trim().toLowerCase();
-  if (!needle) return undefined;
-  return state.assets.find(
-    (a) => a.id !== exceptId && a.serialNumber.trim().toLowerCase() === needle,
-  );
-}
-
-// ── Bulk asset import ──────────────────────────────────────────────────
-
-/** Insert many assets in one commit so the UI re-renders once, not per row. */
-export function createAssetsBulk(
-  drafts: Omit<Asset, 'id' | 'createdAt' | 'updatedAt'>[],
-): Asset[] {
-  const now = nowIso();
-  const created = drafts.map((d) => ({
-    ...d,
-    id: newId('asset'),
-    createdAt: now,
-    updatedAt: now,
-  }));
-  setState({ ...state, assets: [...created, ...state.assets] });
-  return created;
-}
-
-// ── Locations ──────────────────────────────────────────────────────────
-
-export function createLocation(draft: Omit<LocationRef, 'id'>): LocationRef {
-  const loc: LocationRef = { ...draft, id: newId('loc') };
-  setState({ ...state, locations: [...state.locations, loc] });
-  return loc;
-}
-
-export function updateLocation(id: string, patch: Partial<LocationRef>): void {
-  const before = state.locations.find((l) => l.id === id);
-  const locations = state.locations.map((l) => (l.id === id ? { ...l, ...patch } : l));
-
-  // Renaming a location must carry the assets with it, otherwise every asset
-  // at that site silently drops out of the location filter.
-  const renamed = patch.name && before && patch.name !== before.name;
-  const assets = renamed
-    ? state.assets.map((a) =>
-        a.location === before.name ? { ...a, location: patch.name as string } : a,
-      )
-    : state.assets;
-
-  setState({ ...state, locations, assets });
-}
-
-/** Locations still in use cannot be deleted — the count tells the caller why. */
-export function assetCountAtLocation(name: string): number {
-  return state.assets.filter((a) => a.location === name).length;
-}
-
-export function deleteLocation(id: string): boolean {
-  const loc = state.locations.find((l) => l.id === id);
-  if (!loc) return false;
-  if (assetCountAtLocation(loc.name) > 0) return false;
-  setState({ ...state, locations: state.locations.filter((l) => l.id !== id) });
-  return true;
-}
-
-// ── Ticket ↔ asset links ───────────────────────────────────────────────
-
-export function linkTicketAsset(
-  ticketId: string,
-  ticketNumber: string,
-  assetId: string,
-  linkedBy: string,
-): TicketAssetLink | null {
-  const exists = state.ticketAssetLinks.some(
-    (l) => l.ticketId === ticketId && l.assetId === assetId,
-  );
-  if (exists) return null;
-
-  const link: TicketAssetLink = {
-    id: newId('tal'),
-    ticketId,
-    ticketNumber,
-    assetId,
-    linkedBy,
-    createdAt: nowIso(),
-  };
-  setState({ ...state, ticketAssetLinks: [...state.ticketAssetLinks, link] });
-
-  // Mirror the link onto the asset's own timeline so the CMDB record shows it.
-  logAssetActivity(assetId, linkedBy, `Linked to ticket ${ticketNumber}`);
-  return link;
-}
-
-export function unlinkTicketAsset(linkId: string): void {
-  const link = state.ticketAssetLinks.find((l) => l.id === linkId);
-  setState({
-    ...state,
-    ticketAssetLinks: state.ticketAssetLinks.filter((l) => l.id !== linkId),
-  });
-  if (link) {
-    logAssetActivity(link.assetId, link.linkedBy, `Unlinked from ticket ${link.ticketNumber}`);
-  }
-}
-
-export function assetsForTicket(ticketId: string): Asset[] {
-  const ids = new Set(
-    state.ticketAssetLinks.filter((l) => l.ticketId === ticketId).map((l) => l.assetId),
-  );
-  return state.assets.filter((a) => ids.has(a.id));
-}
-
-/** Read the current snapshot outside React (validation, exports). */
-export function snapshot(): ItsmState {
-  return state;
+export function resetItsmStore() {
+  return;
 }

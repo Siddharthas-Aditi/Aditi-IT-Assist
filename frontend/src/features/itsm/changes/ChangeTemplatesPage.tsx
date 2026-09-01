@@ -1,10 +1,10 @@
 /** Change templates — list, create, edit, clone, archive. */
 
-import { useMemo, useState } from 'react';
-import { Archive, Copy, Pencil, Plus, RotateCcw, Search } from 'lucide-react';
+import { useMemo, useState } from "react";
+import { Archive, Copy, Pencil, Plus, RotateCcw, Search } from "lucide-react";
 
-import { PageHeader } from '../components/chrome';
-import { useToast } from '../components/toast-context';
+import { PageHeader } from "../components/chrome";
+import { useToast } from "../components/toast-context";
 import {
   Button,
   ChangeTypeBadge,
@@ -15,28 +15,36 @@ import {
   Select,
   TextArea,
   TextInput,
-} from '../components/ui';
-import { CATEGORIES, DEPARTMENTS, MAINTENANCE_WINDOWS } from '../data/reference';
-import { cloneTemplate, createTemplate, updateTemplate, useItsmState } from '../data/store';
+} from "../components/ui";
+import {
+  CATEGORIES,
+  DEPARTMENTS,
+  MAINTENANCE_WINDOWS,
+} from "../data/reference";
+import { cloneTemplate, createTemplate, updateTemplate } from "../data/store";
 import {
   CHANGE_TYPES,
   IMPACTS,
   PRIORITIES,
   RISKS,
   type ChangeTemplate,
-} from '../data/types';
-import { EMPTY_PLANNING, PLANNING_FIELDS } from './form-model';
+} from "../data/types";
+import { EMPTY_PLANNING, PLANNING_FIELDS } from "./form-model";
 
-function blank(): Omit<ChangeTemplate, 'id' | 'createdAt'> {
+// Templates are not yet backed by the API (deferred feature). Using empty
+// local state until a templates endpoint is available.
+const EMPTY_TEMPLATES: ChangeTemplate[] = [];
+
+function blank(): Omit<ChangeTemplate, "id" | "createdAt"> {
   return {
-    name: '',
-    changeType: 'Normal',
-    defaultPriority: 'Medium',
-    defaultImpact: 'Low',
-    defaultRisk: 'Low',
-    defaultCategory: '',
-    defaultDepartment: '',
-    defaultMaintenanceWindow: '',
+    name: "",
+    changeType: "Normal",
+    defaultPriority: "Medium",
+    defaultImpact: "Low",
+    defaultRisk: "Low",
+    defaultCategory: "",
+    defaultDepartment: "",
+    defaultMaintenanceWindow: "",
     requiredApprovals: [],
     planning: { ...EMPTY_PLANNING },
     archived: false,
@@ -45,13 +53,13 @@ function blank(): Omit<ChangeTemplate, 'id' | 'createdAt'> {
 }
 
 export function ChangeTemplatesPage() {
-  const { templates } = useItsmState();
+  const templates = EMPTY_TEMPLATES;
   const toast = useToast();
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState("");
   const [showArchived, setShowArchived] = useState(false);
-  const [editing, setEditing] = useState<(Omit<ChangeTemplate, 'id' | 'createdAt'> & { id?: string }) | null>(
-    null,
-  );
+  const [editing, setEditing] = useState<
+    (Omit<ChangeTemplate, "id" | "createdAt"> & { id?: string }) | null
+  >(null);
 
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -63,15 +71,15 @@ export function ChangeTemplatesPage() {
   function save() {
     if (!editing) return;
     if (!editing.name.trim()) {
-      toast.error('Template name is required.');
+      toast.error("Template name is required.");
       return;
     }
     if (editing.id) {
       updateTemplate(editing.id, editing);
-      toast.success('Template updated.');
+      toast.success("Template updated.");
     } else {
       createTemplate(editing);
-      toast.success('Template created.');
+      toast.success("Template created.");
     }
     setEditing(null);
   }
@@ -80,7 +88,10 @@ export function ChangeTemplatesPage() {
     <div className="space-y-4 pb-10">
       <PageHeader
         title="Change Templates"
-        crumbs={[{ label: 'Changes', to: '/itsm/changes' }, { label: 'Templates' }]}
+        crumbs={[
+          { label: "Changes", to: "/itsm/changes" },
+          { label: "Templates" },
+        ]}
         description="Reusable defaults for recurring changes."
         actions={
           <Button variant="primary" onClick={() => setEditing(blank())}>
@@ -116,13 +127,20 @@ export function ChangeTemplatesPage() {
       </div>
 
       {editing && (
-        <Panel title={editing.id ? 'Edit template' : 'New template'}>
+        <Panel title={editing.id ? "Edit template" : "New template"}>
           <div className="grid gap-3.5 sm:grid-cols-2">
-            <Field label="Template Name" required htmlFor="tpl-name" className="sm:col-span-2">
+            <Field
+              label="Template Name"
+              required
+              htmlFor="tpl-name"
+              className="sm:col-span-2"
+            >
               <TextInput
                 id="tpl-name"
                 value={editing.name}
-                onChange={(e) => setEditing({ ...editing, name: e.target.value })}
+                onChange={(e) =>
+                  setEditing({ ...editing, name: e.target.value })
+                }
               />
             </Field>
             <Field label="Change Type" htmlFor="tpl-type">
@@ -131,7 +149,10 @@ export function ChangeTemplatesPage() {
                 options={CHANGE_TYPES}
                 value={editing.changeType}
                 onChange={(e) =>
-                  setEditing({ ...editing, changeType: e.target.value as ChangeTemplate['changeType'] })
+                  setEditing({
+                    ...editing,
+                    changeType: e.target.value as ChangeTemplate["changeType"],
+                  })
                 }
               />
             </Field>
@@ -141,7 +162,11 @@ export function ChangeTemplatesPage() {
                 options={PRIORITIES}
                 value={editing.defaultPriority}
                 onChange={(e) =>
-                  setEditing({ ...editing, defaultPriority: e.target.value as ChangeTemplate['defaultPriority'] })
+                  setEditing({
+                    ...editing,
+                    defaultPriority: e.target
+                      .value as ChangeTemplate["defaultPriority"],
+                  })
                 }
               />
             </Field>
@@ -151,7 +176,11 @@ export function ChangeTemplatesPage() {
                 options={IMPACTS}
                 value={editing.defaultImpact}
                 onChange={(e) =>
-                  setEditing({ ...editing, defaultImpact: e.target.value as ChangeTemplate['defaultImpact'] })
+                  setEditing({
+                    ...editing,
+                    defaultImpact: e.target
+                      .value as ChangeTemplate["defaultImpact"],
+                  })
                 }
               />
             </Field>
@@ -161,7 +190,11 @@ export function ChangeTemplatesPage() {
                 options={RISKS}
                 value={editing.defaultRisk}
                 onChange={(e) =>
-                  setEditing({ ...editing, defaultRisk: e.target.value as ChangeTemplate['defaultRisk'] })
+                  setEditing({
+                    ...editing,
+                    defaultRisk: e.target
+                      .value as ChangeTemplate["defaultRisk"],
+                  })
                 }
               />
             </Field>
@@ -171,7 +204,9 @@ export function ChangeTemplatesPage() {
                 options={CATEGORIES}
                 placeholder="None"
                 value={editing.defaultCategory}
-                onChange={(e) => setEditing({ ...editing, defaultCategory: e.target.value })}
+                onChange={(e) =>
+                  setEditing({ ...editing, defaultCategory: e.target.value })
+                }
               />
             </Field>
             <Field label="Default Department" htmlFor="tpl-dep">
@@ -180,7 +215,9 @@ export function ChangeTemplatesPage() {
                 options={DEPARTMENTS}
                 placeholder="None"
                 value={editing.defaultDepartment}
-                onChange={(e) => setEditing({ ...editing, defaultDepartment: e.target.value })}
+                onChange={(e) =>
+                  setEditing({ ...editing, defaultDepartment: e.target.value })
+                }
               />
             </Field>
             <Field label="Default Maintenance Window" htmlFor="tpl-win">
@@ -190,7 +227,10 @@ export function ChangeTemplatesPage() {
                 placeholder="None"
                 value={editing.defaultMaintenanceWindow}
                 onChange={(e) =>
-                  setEditing({ ...editing, defaultMaintenanceWindow: e.target.value })
+                  setEditing({
+                    ...editing,
+                    defaultMaintenanceWindow: e.target.value,
+                  })
                 }
               />
             </Field>
@@ -202,12 +242,12 @@ export function ChangeTemplatesPage() {
             >
               <TextInput
                 id="tpl-apr"
-                value={editing.requiredApprovals.join(', ')}
+                value={editing.requiredApprovals.join(", ")}
                 onChange={(e) =>
                   setEditing({
                     ...editing,
                     requiredApprovals: e.target.value
-                      .split(',')
+                      .split(",")
                       .map((s) => s.trim())
                       .filter(Boolean),
                   })
@@ -223,7 +263,10 @@ export function ChangeTemplatesPage() {
                   onChange={(e) =>
                     setEditing({
                       ...editing,
-                      planning: { ...editing.planning, [f.key]: e.target.value },
+                      planning: {
+                        ...editing.planning,
+                        [f.key]: e.target.value,
+                      },
                     })
                   }
                 />
@@ -261,7 +304,8 @@ export function ChangeTemplatesPage() {
                     {t.name}
                   </h3>
                   <p className="mt-0.5 text-[11.5px] text-slate-500">
-                    {t.defaultCategory || 'No category'} · {t.defaultDepartment || 'No department'}
+                    {t.defaultCategory || "No category"} ·{" "}
+                    {t.defaultDepartment || "No department"}
                   </p>
                 </div>
                 <ChangeTypeBadge type={t.changeType} />
@@ -279,11 +323,13 @@ export function ChangeTemplatesPage() {
 
               {t.requiredApprovals.length > 0 && (
                 <p className="mt-2 text-[11.5px] text-slate-500">
-                  Approvals: {t.requiredApprovals.join(' → ')}
+                  Approvals: {t.requiredApprovals.join(" → ")}
                 </p>
               )}
               {t.archived && (
-                <p className="mt-1 text-[11.5px] font-medium text-amber-600">Archived</p>
+                <p className="mt-1 text-[11.5px] font-medium text-amber-600">
+                  Archived
+                </p>
               )}
 
               <div className="mt-3 flex flex-wrap gap-1.5">
@@ -293,7 +339,7 @@ export function ChangeTemplatesPage() {
                 <Button
                   onClick={() => {
                     cloneTemplate(t.id);
-                    toast.success('Template cloned.');
+                    toast.success("Template cloned.");
                   }}
                 >
                   <Copy size={12} /> Clone
@@ -301,11 +347,13 @@ export function ChangeTemplatesPage() {
                 <Button
                   onClick={() => {
                     updateTemplate(t.id, { archived: !t.archived });
-                    toast.info(t.archived ? 'Template restored.' : 'Template archived.');
+                    toast.info(
+                      t.archived ? "Template restored." : "Template archived.",
+                    );
                   }}
                 >
                   {t.archived ? <RotateCcw size={12} /> : <Archive size={12} />}
-                  {t.archived ? 'Restore' : 'Archive'}
+                  {t.archived ? "Restore" : "Archive"}
                 </Button>
               </div>
             </li>

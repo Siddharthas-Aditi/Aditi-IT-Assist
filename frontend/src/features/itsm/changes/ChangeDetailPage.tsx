@@ -1,10 +1,10 @@
 /** Change detail — overview, planning, approvals, implementation, activity. */
 
-import { useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useMemo, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
 
-import { PageHeader, Tabs } from '../components/chrome';
-import { useToast } from '../components/toast-context';
+import { PageHeader, Tabs } from "../components/chrome";
+import { useToast } from "../components/toast-context";
 import {
   Button,
   ChangeTypeBadge,
@@ -15,33 +15,35 @@ import {
   Panel,
   StatusBadge,
   TextArea,
-} from '../components/ui';
-import { personName } from '../data/reference';
-import { canMoveChange } from '../data/rules';
-import { createChange, logChangeActivity, useItsmState } from '../data/store';
-import type { Change, ChangeStatus } from '../data/types';
-import { PLANNING_FIELDS } from './form-model';
+} from "../components/ui";
+import { personName } from "../data/reference";
+import { canMoveChange } from "../data/rules";
+import { createChange, logChangeActivity, useItsmState } from "../data/store";
+import type { ChangeStatus } from "../api-types";
+import type { ChangeDisplay as Change } from "../display-adapters";
+import { toChangeDisplay } from "../display-adapters";
+import { PLANNING_FIELDS } from "./form-model";
 
 const TABS = [
-  'Overview',
-  'Planning',
-  'Approval',
-  'Implementation',
-  'Associated Assets',
-  'Attachments',
-  'Activity',
+  "Overview",
+  "Planning",
+  "Approval",
+  "Implementation",
+  "Associated Assets",
+  "Attachments",
+  "Activity",
 ] as const;
 
-const ACTOR = 'Sagar J';
+const ACTOR = "Sagar J";
 
 function fmt(iso: string | null): string {
-  if (!iso) return '—';
+  if (!iso) return "—";
   return new Date(iso).toLocaleString(undefined, {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
   });
 }
 
@@ -50,25 +52,32 @@ export function ChangeDetailPage() {
   const navigate = useNavigate();
   const toast = useToast();
   const { changes, assets } = useItsmState();
-  const [tab, setTab] = useState<string>('Overview');
-  const [closureDraft, setClosureDraft] = useState('');
+  const [tab, setTab] = useState<string>("Overview");
+  const [closureDraft, setClosureDraft] = useState("");
 
-  const change = useMemo(
-    () => changes.find((c) => c.id === id || c.changeId === id),
+  const changeRaw = useMemo(
+    () => changes.find((c) => c.id === id || c.change_number === id),
     [changes, id],
   );
+  const change = useMemo(
+    () => (changeRaw ? toChangeDisplay(changeRaw) : undefined),
+    [changeRaw],
+  );
 
-  if (!change) return <ErrorState message={`No change found for “${id}”.`} />;
+  if (!change) return <ErrorState message={`No change found for "${id}".`} />;
 
-  const linkedAssets = assets.filter((a) => change.assetIds.includes(a.id));
+  const linkedAssets = assets.filter((_a) => false); // asset-change links need dedicated endpoint
 
   /** Every status action funnels through the shared rule check. */
   function move(to: ChangeStatus, extra: Partial<Change> = {}, label?: string) {
     if (!change) return;
     const merged = { ...change, ...extra };
-    const verdict = canMoveChange(merged, to);
+    const verdict = canMoveChange(
+      merged as unknown as Parameters<typeof canMoveChange>[0],
+      to as unknown as Parameters<typeof canMoveChange>[1],
+    );
     if (!verdict.ok) {
-      toast.error(verdict.reason ?? 'That transition is not allowed.');
+      toast.error(verdict.reason ?? "That transition is not allowed.");
       return;
     }
     logChangeActivity(change.id, ACTOR, label ?? `Status changed to ${to}`, {
@@ -78,7 +87,7 @@ export function ChangeDetailPage() {
     toast.success(label ?? `Change moved to ${to}.`);
   }
 
-  function decide(stageId: string, decision: 'Approved' | 'Rejected') {
+  function decide(stageId: string, decision: "Approved" | "Rejected") {
     if (!change) return;
     const approvals = change.approvals.map((a) =>
       a.id === stageId
@@ -86,17 +95,24 @@ export function ChangeDetailPage() {
             ...a,
             decision,
             decidedAt: new Date().toISOString(),
-            comments: a.comments || (decision === 'Approved' ? 'Approved.' : 'Rejected.'),
+            comments:
+              a.comments ||
+              (decision === "Approved" ? "Approved." : "Rejected."),
           }
         : a,
-    );
-    if (decision === 'Rejected') {
-      logChangeActivity(change.id, ACTOR, 'Change rejected', { approvals, status: 'Rejected' });
-      toast.info('Change rejected.');
+    ) as typeof change.approvals;
+    if (decision === "Rejected") {
+      logChangeActivity(change.id, ACTOR, "Change rejected", {
+        approvals,
+        status: "rejected" as const,
+      });
+      toast.info("Change rejected.");
       return;
     }
-    logChangeActivity(change.id, ACTOR, 'Approval recorded', { approvals });
-    toast.success('Approval recorded.');
+    logChangeActivity(change.id, ACTOR, "Approval recorded", {
+      approvals: approvals as unknown as typeof change.approvals,
+    });
+    toast.success("Approval recorded.");
   }
 
   function toggleTask(taskId: string) {
@@ -104,74 +120,93 @@ export function ChangeDetailPage() {
     const implementationTasks = change.implementationTasks.map((t) =>
       t.id === taskId ? { ...t, done: !t.done } : t,
     );
-    logChangeActivity(change.id, ACTOR, 'Implementation task updated', { implementationTasks });
+    logChangeActivity(change.id, ACTOR, "Implementation task updated", {
+      implementationTasks,
+    });
   }
 
   function duplicate() {
     if (!change) return;
-    const copy = createChange({
-      ...change,
-      subject: `${change.subject} (copy)`,
-      status: 'Draft',
-      actualStart: null,
-      actualEnd: null,
-      closureNotes: '',
-      approvals: change.approvals.map((a) => ({
-        ...a,
-        decision: 'Pending',
-        decidedAt: null,
-        comments: '',
-      })),
-      implementationTasks: change.implementationTasks.map((t) => ({ ...t, done: false })),
-      activity: [
-        {
-          id: `act-${Date.now()}`,
-          at: new Date().toISOString(),
-          actor: ACTOR,
-          action: `Duplicated from ${change.changeId}`,
-        },
-      ],
-    });
-    toast.success(`Created ${copy.changeId} as a copy.`);
-    navigate(`/itsm/changes/${copy.id}`);
+    void createChange({
+      title: `${change.title} (copy)`,
+      change_type: change.change_type,
+      status: "draft",
+      description: change.description,
+      priority: change.priority,
+      impact: change.impact,
+      risk: change.risk,
+      category: change.category,
+      requested_by_id: change.requesterId,
+      assigned_to_id: change.agentId,
+      department: change.department,
+      planned_start: change.planned_start,
+      planned_end: change.planned_end,
+      maintenance_window: change.maintenance_window,
+      source_ticket_id: change.source_ticket_id,
+      planning_data: change.planning_data,
+    } as Parameters<typeof createChange>[0])
+      .then((copy) => {
+        toast.success(`Created ${copy.change_number} as a copy.`);
+        navigate(`/itsm/changes/${copy.id}`);
+      })
+      .catch(() => toast.error("Failed to duplicate."));
   }
 
-  const pendingApprovals = change.approvals.filter((a) => a.decision === 'Pending');
+  const pendingApprovals = change.approvals.filter(
+    (a) => !a.decision || a.decision === "pending",
+  );
 
   return (
     <div className="space-y-4 pb-10">
       <PageHeader
         title={change.subject}
-        crumbs={[{ label: 'Changes', to: '/itsm/changes' }, { label: change.changeId }]}
-        description={`${change.changeId} · ${change.category || 'Uncategorised'} · ${change.group || 'Unassigned group'}`}
+        crumbs={[
+          { label: "Changes", to: "/itsm/changes" },
+          { label: change.change_number },
+        ]}
+        description={`${change.change_number} · ${change.category || "Uncategorised"} · ${change.group || "Unassigned group"}`}
         actions={
           <>
             <StatusBadge status={change.status} />
             <ChangeTypeBadge type={change.changeType} />
-            <Button onClick={() => navigate(`/itsm/changes/${change.id}/edit`)}>Edit</Button>
+            <Button onClick={() => navigate(`/itsm/changes/${change.id}/edit`)}>
+              Edit
+            </Button>
             <Button onClick={duplicate}>Duplicate</Button>
-            {change.status !== 'Pending Approval' && change.status !== 'Completed' && (
-              <Button onClick={() => move('Pending Approval', {}, 'Submitted for approval')}>
-                Submit for Approval
-              </Button>
-            )}
+            {change.status !== "pending_approval" &&
+              change.status !== "implemented" && (
+                <Button
+                  onClick={() =>
+                    move("pending_approval", {}, "Submitted for approval")
+                  }
+                >
+                  Submit for Approval
+                </Button>
+              )}
             {pendingApprovals.length > 0 && (
               <>
                 <Button
                   variant="primary"
-                  onClick={() => decide(pendingApprovals[0].id, 'Approved')}
+                  onClick={() => decide(pendingApprovals[0].id, "Approved")}
                 >
                   Approve
                 </Button>
-                <Button variant="danger" onClick={() => decide(pendingApprovals[0].id, 'Rejected')}>
+                <Button
+                  variant="danger"
+                  onClick={() => decide(pendingApprovals[0].id, "Rejected")}
+                >
                   Reject
                 </Button>
               </>
             )}
-            <Button onClick={() => move('Scheduled')}>Schedule</Button>
+            <Button onClick={() => move("scheduled")}>Schedule</Button>
             <Button
               onClick={() =>
-                move('In Progress', { actualStart: new Date().toISOString() }, 'Implementation started')
+                move(
+                  "in_progress",
+                  { actual_start: new Date().toISOString() },
+                  "Implementation started",
+                )
               }
             >
               Start Implementation
@@ -180,18 +215,18 @@ export function ChangeDetailPage() {
               variant="primary"
               onClick={() =>
                 move(
-                  'Completed',
+                  "implemented",
                   {
-                    closureNotes: closureDraft || change.closureNotes,
-                    actualEnd: new Date().toISOString(),
+                    closure_notes: closureDraft || change.closureNotes,
+                    actual_end: new Date().toISOString(),
                   },
-                  'Change completed',
+                  "Change completed",
                 )
               }
             >
               Complete
             </Button>
-            <Button variant="danger" onClick={() => move('Cancelled')}>
+            <Button variant="danger" onClick={() => move("cancelled")}>
               Cancel Change
             </Button>
           </>
@@ -199,14 +234,21 @@ export function ChangeDetailPage() {
       />
 
       <div className="flex flex-col gap-4 lg:flex-row">
-        <Tabs tabs={TABS} active={tab} onChange={setTab} orientation="vertical" />
+        <Tabs
+          tabs={TABS}
+          active={tab}
+          onChange={setTab}
+          orientation="vertical"
+        />
 
         <div className="min-w-0 flex-1 space-y-4">
-          {tab === 'Overview' && (
+          {tab === "Overview" && (
             <Panel title="Overview">
               <dl className="grid gap-x-6 sm:grid-cols-2">
-                <DetailRow label="Requester">{personName(change.requesterId)}</DetailRow>
-                <DetailRow label="Workspace">{change.workspace}</DetailRow>
+                <DetailRow label="Requester">
+                  {personName(change.requesterId)}
+                </DetailRow>
+                <DetailRow label="Department">{change.department}</DetailRow>
                 <DetailRow label="Change Type">
                   <ChangeTypeBadge type={change.changeType} />
                 </DetailRow>
@@ -223,14 +265,26 @@ export function ChangeDetailPage() {
                   <LevelIndicator level={change.risk} />
                 </DetailRow>
                 <DetailRow label="Group">{change.group}</DetailRow>
-                <DetailRow label="Agent">{personName(change.agentId)}</DetailRow>
+                <DetailRow label="Agent">
+                  {personName(change.agentId)}
+                </DetailRow>
                 <DetailRow label="Department">{change.department}</DetailRow>
                 <DetailRow label="Category">{change.category}</DetailRow>
-                <DetailRow label="Maintenance Window">{change.maintenanceWindow}</DetailRow>
-                <DetailRow label="Planned Start">{fmt(change.plannedStart)}</DetailRow>
-                <DetailRow label="Planned End">{fmt(change.plannedEnd)}</DetailRow>
-                <DetailRow label="Actual Start">{fmt(change.actualStart)}</DetailRow>
-                <DetailRow label="Actual End">{fmt(change.actualEnd)}</DetailRow>
+                <DetailRow label="Maintenance Window">
+                  {change.maintenanceWindow}
+                </DetailRow>
+                <DetailRow label="Planned Start">
+                  {fmt(change.planned_start)}
+                </DetailRow>
+                <DetailRow label="Planned End">
+                  {fmt(change.planned_end)}
+                </DetailRow>
+                <DetailRow label="Actual Start">
+                  {fmt(change.actual_start)}
+                </DetailRow>
+                <DetailRow label="Actual End">
+                  {fmt(change.actual_end)}
+                </DetailRow>
                 <DetailRow label="Created">{fmt(change.createdAt)}</DetailRow>
                 <DetailRow label="Updated">{fmt(change.updatedAt)}</DetailRow>
                 {change.sourceTicketId && (
@@ -239,7 +293,7 @@ export function ChangeDetailPage() {
                       to={`/operations/tickets/${change.sourceTicketId}`}
                       className="text-sky-700 hover:underline"
                     >
-                      {change.sourceTicketNumber || 'View ticket'}
+                      {change.sourceTicketNumber || "View ticket"}
                     </Link>
                   </DetailRow>
                 )}
@@ -250,7 +304,9 @@ export function ChangeDetailPage() {
                   <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-red-600">
                     Emergency justification
                   </p>
-                  <p className="text-[13px] text-red-800">{change.emergencyJustification}</p>
+                  <p className="text-[13px] text-red-800">
+                    {change.emergencyJustification}
+                  </p>
                 </div>
               )}
 
@@ -268,7 +324,7 @@ export function ChangeDetailPage() {
             </Panel>
           )}
 
-          {tab === 'Planning' && (
+          {tab === "Planning" && (
             <Panel title="Planning">
               <dl className="space-y-3">
                 {PLANNING_FIELDS.map((f) => (
@@ -277,7 +333,9 @@ export function ChangeDetailPage() {
                       {f.label}
                     </dt>
                     <dd className="mt-0.5 whitespace-pre-wrap text-[13px] text-slate-800">
-                      {change.planning[f.key] || '—'}
+                      {(change.planning as unknown as Record<string, string>)[
+                        f.key
+                      ] || "—"}
                     </dd>
                   </div>
                 ))}
@@ -285,8 +343,8 @@ export function ChangeDetailPage() {
             </Panel>
           )}
 
-          {tab === 'Approval' && (
-            <Panel title="Approvals" >
+          {tab === "Approval" && (
+            <Panel title="Approvals">
               {change.approvals.length === 0 ? (
                 <EmptyState
                   title="No approval stages"
@@ -312,15 +370,23 @@ export function ChangeDetailPage() {
                       </div>
                       <dl className="mt-2 grid gap-x-6 sm:grid-cols-2">
                         <DetailRow label="Decision">{a.decision}</DetailRow>
-                        <DetailRow label="Decided at">{fmt(a.decidedAt)}</DetailRow>
+                        <DetailRow label="Decided at">
+                          {fmt(a.decidedAt)}
+                        </DetailRow>
                         <DetailRow label="Comments">{a.comments}</DetailRow>
                       </dl>
-                      {a.decision === 'Pending' && (
+                      {(!a.decision || a.decision === "pending") && (
                         <div className="mt-2 flex gap-2">
-                          <Button variant="primary" onClick={() => decide(a.id, 'Approved')}>
+                          <Button
+                            variant="primary"
+                            onClick={() => decide(a.id, "Approved")}
+                          >
                             Approve
                           </Button>
-                          <Button variant="danger" onClick={() => decide(a.id, 'Rejected')}>
+                          <Button
+                            variant="danger"
+                            onClick={() => decide(a.id, "Rejected")}
+                          >
                             Reject
                           </Button>
                         </div>
@@ -332,7 +398,7 @@ export function ChangeDetailPage() {
             </Panel>
           )}
 
-          {tab === 'Implementation' && (
+          {tab === "Implementation" && (
             <div className="space-y-4">
               <Panel title="Implementation tasks">
                 <ul className="space-y-1.5">
@@ -345,7 +411,11 @@ export function ChangeDetailPage() {
                           onChange={() => toggleTask(t.id)}
                           className="mt-0.5 h-3.5 w-3.5 rounded border-slate-300 bg-slate-100 text-sky-500 focus:ring-1 focus:ring-sky-500"
                         />
-                        <span className={t.done ? 'text-slate-500 line-through' : undefined}>
+                        <span
+                          className={
+                            t.done ? "text-slate-500 line-through" : undefined
+                          }
+                        >
                           {t.label}
                         </span>
                       </label>
@@ -361,28 +431,39 @@ export function ChangeDetailPage() {
 
               <Panel title="Plans">
                 <dl className="space-y-3">
-                  {(['rolloutPlan', 'backupPlan', 'implementationSteps', 'validationPlan'] as const).map(
-                    (key) => {
-                      const meta = PLANNING_FIELDS.find((f) => f.key === key);
-                      return (
-                        <div key={key}>
-                          <dt className="text-[11px] uppercase tracking-wide text-slate-500">
-                            {meta?.label}
-                          </dt>
-                          <dd className="mt-0.5 whitespace-pre-wrap text-[13px] text-slate-800">
-                            {change.planning[key] || '—'}
-                          </dd>
-                        </div>
-                      );
-                    },
-                  )}
+                  {(
+                    [
+                      "rolloutPlan",
+                      "backupPlan",
+                      "implementationSteps",
+                      "validationPlan",
+                    ] as const
+                  ).map((key) => {
+                    const meta = PLANNING_FIELDS.find((f) => f.key === key);
+                    return (
+                      <div key={key}>
+                        <dt className="text-[11px] uppercase tracking-wide text-slate-500">
+                          {meta?.label}
+                        </dt>
+                        <dd className="mt-0.5 whitespace-pre-wrap text-[13px] text-slate-800">
+                          {(
+                            change.planning as unknown as Record<string, string>
+                          )[key] || "—"}
+                        </dd>
+                      </div>
+                    );
+                  })}
                 </dl>
               </Panel>
 
               <Panel title="Completion">
                 <dl className="grid gap-x-6 sm:grid-cols-2">
-                  <DetailRow label="Actual Start">{fmt(change.actualStart)}</DetailRow>
-                  <DetailRow label="Actual End">{fmt(change.actualEnd)}</DetailRow>
+                  <DetailRow label="Actual Start">
+                    {fmt(change.actual_start)}
+                  </DetailRow>
+                  <DetailRow label="Actual End">
+                    {fmt(change.actual_end)}
+                  </DetailRow>
                 </dl>
                 <div className="mt-3 space-y-1">
                   <label
@@ -400,10 +481,15 @@ export function ChangeDetailPage() {
                   />
                   <Button
                     onClick={() => {
-                      logChangeActivity(change.id, ACTOR, 'Closure notes saved', {
-                        closureNotes: closureDraft || change.closureNotes,
-                      });
-                      toast.success('Closure notes saved.');
+                      logChangeActivity(
+                        change.id,
+                        ACTOR,
+                        "Closure notes saved",
+                        {
+                          closure_notes: closureDraft || change.closureNotes,
+                        },
+                      );
+                      toast.success("Closure notes saved.");
                     }}
                   >
                     Save closure notes
@@ -413,7 +499,7 @@ export function ChangeDetailPage() {
             </div>
           )}
 
-          {tab === 'Associated Assets' && (
+          {tab === "Associated Assets" && (
             <Panel title={`Associated assets (${linkedAssets.length})`}>
               {linkedAssets.length === 0 ? (
                 <EmptyState
@@ -423,17 +509,22 @@ export function ChangeDetailPage() {
               ) : (
                 <ul className="divide-y divide-slate-200">
                   {linkedAssets.map((a) => (
-                    <li key={a.id} className="flex items-center justify-between gap-3 py-2">
+                    <li
+                      key={a.id}
+                      className="flex items-center justify-between gap-3 py-2"
+                    >
                       <div className="min-w-0">
                         <Link
                           to={`/itsm/assets/${a.id}`}
                           className="text-[13px] font-medium text-sky-700 hover:underline"
                         >
-                          {a.assetTag}
+                          {a.asset_tag}
                         </Link>
-                        <p className="truncate text-[12px] text-slate-500">{a.name}</p>
+                        <p className="truncate text-[12px] text-slate-500">
+                          {a.name}
+                        </p>
                       </div>
-                      <StatusBadge status={a.assetState} />
+                      <StatusBadge status={a.status} />
                     </li>
                   ))}
                 </ul>
@@ -441,26 +532,16 @@ export function ChangeDetailPage() {
             </Panel>
           )}
 
-          {tab === 'Attachments' && (
-            <Panel title={`Attachments (${change.attachments.length})`}>
-              {change.attachments.length === 0 ? (
-                <EmptyState title="No attachments" description="Nothing has been uploaded." />
-              ) : (
-                <ul className="divide-y divide-slate-200">
-                  {change.attachments.map((a) => (
-                    <li key={a.id} className="flex items-center justify-between py-2 text-[13px]">
-                      <span className="text-slate-800">{a.name}</span>
-                      <span className="text-[12px] text-slate-500">
-                        {(a.sizeBytes / 1024).toFixed(0)} KB · {fmt(a.uploadedAt)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
+          {tab === "Attachments" && (
+            <Panel title="Attachments (0)">
+              <EmptyState
+                title="No attachments"
+                description="Nothing has been uploaded."
+              />
             </Panel>
           )}
 
-          {tab === 'Activity' && (
+          {tab === "Activity" && (
             <Panel title="Activity timeline">
               <ol className="relative space-y-3 border-l border-slate-200 pl-4">
                 {[...change.activity].reverse().map((e) => (
@@ -473,7 +554,9 @@ export function ChangeDetailPage() {
                     <p className="text-[11.5px] text-slate-500">
                       {e.actor} · {fmt(e.at)}
                     </p>
-                    {e.detail && <p className="text-[12px] text-slate-500">{e.detail}</p>}
+                    {e.detail && (
+                      <p className="text-[12px] text-slate-500">{e.detail}</p>
+                    )}
                   </li>
                 ))}
               </ol>

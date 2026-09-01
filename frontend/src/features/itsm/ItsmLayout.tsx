@@ -7,44 +7,51 @@
  * a scoped search, a Create menu, and the toast host.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Plus, Search } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  Link,
+  NavLink,
+  Outlet,
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
+import { Plus, Search } from "lucide-react";
 
-import { ToastProvider } from './components/Toast';
-import { useItsmState } from './data/store';
-import { cn } from './lib/cn';
+import { ToastProvider } from "./components/Toast";
+import { useItsmData } from "./data/store";
+import { cn } from "./lib/cn";
 
 const CHANGE_TABS = [
-  { label: 'List', to: '/itsm/changes', end: true },
-  { label: 'Calendar', to: '/itsm/changes/calendar' },
-  { label: 'Change Board', to: '/itsm/changes/board' },
-  { label: 'Templates', to: '/itsm/changes/templates' },
+  { label: "List", to: "/itsm/changes", end: true },
+  { label: "Calendar", to: "/itsm/changes/calendar" },
+  { label: "Change Board", to: "/itsm/changes/board" },
+  { label: "Templates", to: "/itsm/changes/templates" },
 ];
 
 const ASSET_TABS = [
-  { label: 'List', to: '/itsm/assets', end: true },
-  { label: 'Board', to: '/itsm/assets/board' },
-  { label: 'Asset Types', to: '/itsm/assets/types' },
-  { label: 'Locations', to: '/itsm/assets/locations' },
-  { label: 'Vendors', to: '/itsm/assets/vendors' },
-  { label: 'Import', to: '/itsm/assets/import' },
-  { label: 'Reports', to: '/itsm/assets/reports' },
+  { label: "List", to: "/itsm/assets", end: true },
+  { label: "Board", to: "/itsm/assets/board" },
+  { label: "Asset Types", to: "/itsm/assets/types" },
+  { label: "Locations", to: "/itsm/assets/locations" },
+  { label: "Vendors", to: "/itsm/assets/vendors" },
+  { label: "Import", to: "/itsm/assets/import" },
+  { label: "Reports", to: "/itsm/assets/reports" },
 ];
 
 function GlobalSearch() {
-  const { assets, changes } = useItsmState();
-  const [q, setQ] = useState('');
+  const { assets, changes } = useItsmData();
+  const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const boxRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function onDocClick(e: MouseEvent) {
-      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false);
+      if (boxRef.current && !boxRef.current.contains(e.target as Node))
+        setOpen(false);
     }
-    document.addEventListener('mousedown', onDocClick);
-    return () => document.removeEventListener('mousedown', onDocClick);
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
   }, []);
 
   const results = useMemo(() => {
@@ -53,23 +60,28 @@ function GlobalSearch() {
     const c = changes
       .filter(
         (x) =>
-          x.subject.toLowerCase().includes(needle) || x.changeId.toLowerCase().includes(needle),
+          x.title.toLowerCase().includes(needle) ||
+          x.change_number.toLowerCase().includes(needle),
       )
       .slice(0, 5)
       .map((x) => ({
         id: x.id,
-        label: `${x.changeId} — ${x.subject}`,
+        label: `${x.change_number} — ${x.title}`,
         to: `/itsm/changes/${x.id}`,
       }));
     const a = assets
       .filter(
         (x) =>
           x.name.toLowerCase().includes(needle) ||
-          x.assetTag.toLowerCase().includes(needle) ||
-          x.serialNumber.toLowerCase().includes(needle),
+          x.asset_tag.toLowerCase().includes(needle) ||
+          (x.serial_number ?? "").toLowerCase().includes(needle),
       )
       .slice(0, 5)
-      .map((x) => ({ id: x.id, label: `${x.assetTag} — ${x.name}`, to: `/itsm/assets/${x.id}` }));
+      .map((x) => ({
+        id: x.id,
+        label: `${x.asset_tag} — ${x.name}`,
+        to: `/itsm/assets/${x.id}`,
+      }));
     return [...c, ...a];
   }, [q, assets, changes]);
 
@@ -100,7 +112,7 @@ function GlobalSearch() {
                 type="button"
                 onClick={() => {
                   navigate(r.to);
-                  setQ('');
+                  setQ("");
                   setOpen(false);
                 }}
                 className="block w-full truncate px-3 py-2 text-left text-[12.5px] text-slate-700 hover:bg-slate-50 focus:bg-slate-50 focus:outline-none"
@@ -126,10 +138,11 @@ function CreateMenu() {
 
   useEffect(() => {
     function onDocClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      if (ref.current && !ref.current.contains(e.target as Node))
+        setOpen(false);
     }
-    document.addEventListener('mousedown', onDocClick);
-    return () => document.removeEventListener('mousedown', onDocClick);
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
   }, []);
 
   return (
@@ -180,8 +193,8 @@ function CreateMenu() {
 
 export function ItsmLayout() {
   const location = useLocation();
-  const inChanges = location.pathname.startsWith('/itsm/changes');
-  const inAssets = location.pathname.startsWith('/itsm/assets');
+  const inChanges = location.pathname.startsWith("/itsm/changes");
+  const inAssets = location.pathname.startsWith("/itsm/assets");
   const tabs = inChanges ? CHANGE_TABS : inAssets ? ASSET_TABS : [];
 
   return (
@@ -190,7 +203,7 @@ export function ItsmLayout() {
         <header className="flex flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-5 py-2.5">
           {tabs.length > 0 && (
             <nav
-              aria-label={inChanges ? 'Change views' : 'Asset views'}
+              aria-label={inChanges ? "Change views" : "Asset views"}
               className="flex flex-wrap items-center gap-1"
             >
               {tabs.map((t) => (
@@ -200,10 +213,10 @@ export function ItsmLayout() {
                   end={t.end}
                   className={({ isActive }) =>
                     cn(
-                      'rounded-md px-2.5 py-1 text-[12.5px] transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-sky-500',
+                      "rounded-md px-2.5 py-1 text-[12.5px] transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-sky-500",
                       isActive
-                        ? 'bg-sky-50 font-medium text-sky-800'
-                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
+                        ? "bg-sky-50 font-medium text-sky-800"
+                        : "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
                     )
                   }
                 >

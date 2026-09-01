@@ -1,15 +1,15 @@
 /** Bulk asset import — upload, preview, then commit. */
 
-import { useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { AlertTriangle, Download, FileSpreadsheet, Upload } from 'lucide-react';
+import { useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { AlertTriangle, Download, FileSpreadsheet, Upload } from "lucide-react";
 
-import { PageHeader } from '../components/chrome';
-import { useToast } from '../components/toast-context';
-import { Button, EmptyState, Panel, StatusBadge } from '../components/ui';
-import { formatMoney } from '../data/money';
-import { createAssetsBulk } from '../data/store';
-import { cn } from '../lib/cn';
+import { PageHeader } from "../components/chrome";
+import { useToast } from "../components/toast-context";
+import { Button, EmptyState, Panel, StatusBadge } from "../components/ui";
+import { formatMoney } from "../data/money";
+import { createAssetsBulk } from "../data/store";
+import { cn } from "../lib/cn";
 import {
   buildImport,
   detectDelimiter,
@@ -17,14 +17,18 @@ import {
   parseDelimited,
   templateCsv,
   type ImportResult,
-} from './bulk-import';
+} from "./bulk-import";
 
-const ACCEPTED = '.csv,.tsv,.txt,text/csv,text/tab-separated-values';
+const ACCEPTED = ".csv,.tsv,.txt,text/csv,text/tab-separated-values";
 
-function download(filename: string, contents: string, mime = 'text/csv;charset=utf-8;') {
+function download(
+  filename: string,
+  contents: string,
+  mime = "text/csv;charset=utf-8;",
+) {
   const blob = new Blob([contents], { type: mime });
   const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
+  const a = document.createElement("a");
   a.href = url;
   a.download = filename;
   a.click();
@@ -36,7 +40,7 @@ export function AssetImportPage() {
   const toast = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
-  const [fileName, setFileName] = useState('');
+  const [fileName, setFileName] = useState("");
   const [result, setResult] = useState<ImportResult | null>(null);
   const [committing, setCommitting] = useState(false);
 
@@ -46,7 +50,7 @@ export function AssetImportPage() {
 
     if (/\.xlsx?$/i.test(file.name)) {
       toast.error(
-        'Excel workbooks are not read directly. In Excel choose File → Save As → CSV, then upload that.',
+        "Excel workbooks are not read directly. In Excel choose File → Save As → CSV, then upload that.",
       );
       return;
     }
@@ -59,34 +63,49 @@ export function AssetImportPage() {
       setResult(parsed);
 
       if (parsed.errors.length && parsed.valid.length === 0) {
-        toast.error('Nothing in that file could be imported. See the errors below.');
+        toast.error(
+          "Nothing in that file could be imported. See the errors below.",
+        );
       } else if (parsed.errors.length) {
-        toast.info(`${parsed.valid.length} row(s) ready, ${parsed.errors.length} rejected.`);
+        toast.info(
+          `${parsed.valid.length} row(s) ready, ${parsed.errors.length} rejected.`,
+        );
       } else {
         toast.success(`${parsed.valid.length} row(s) ready to import.`);
       }
     } catch {
-      toast.error('That file could not be read as text.');
+      toast.error("That file could not be read as text.");
     }
   }
 
-  function commit() {
+  async function commit() {
     if (!result?.valid.length) return;
     setCommitting(true);
-    const created = createAssetsBulk(result.valid);
-    setCommitting(false);
-    toast.success(`Imported ${created.length} asset${created.length > 1 ? 's' : ''}.`);
-    navigate('/itsm/assets');
+    try {
+      const created = await createAssetsBulk(
+        result.valid as unknown as Parameters<typeof createAssetsBulk>[0],
+      );
+      toast.success(
+        `Imported ${created.length} asset${created.length > 1 ? "s" : ""}.`,
+      );
+      navigate("/itsm/assets");
+    } catch {
+      toast.error("Import failed. Please try again.");
+    } finally {
+      setCommitting(false);
+    }
   }
 
   return (
     <div className="space-y-4 pb-10">
       <PageHeader
         title="Bulk import assets"
-        crumbs={[{ label: 'Assets', to: '/itsm/assets' }, { label: 'Import' }]}
+        crumbs={[{ label: "Assets", to: "/itsm/assets" }, { label: "Import" }]}
         description="Upload a CSV or tab-separated export to create many assets at once."
         actions={
-          <Button onClick={() => download('asset-import-template.csv', templateCsv())}>
+          <Button
+            onClick={() => download("asset-import-template.csv", templateCsv())}
+          >
             <Download size={14} /> Download template
           </Button>
         }
@@ -105,13 +124,19 @@ export function AssetImportPage() {
             void accept(e.dataTransfer.files);
           }}
           className={cn(
-            'rounded-md border border-dashed px-4 py-8 text-center transition-colors',
-            dragging ? 'border-sky-500 bg-sky-50' : 'border-slate-300 bg-slate-50',
+            "rounded-md border border-dashed px-4 py-8 text-center transition-colors",
+            dragging
+              ? "border-sky-500 bg-sky-50"
+              : "border-slate-300 bg-slate-50",
           )}
         >
-          <FileSpreadsheet size={22} className="mx-auto mb-2 text-slate-400" aria-hidden="true" />
+          <FileSpreadsheet
+            size={22}
+            className="mx-auto mb-2 text-slate-400"
+            aria-hidden="true"
+          />
           <p className="text-[13px] text-slate-600">
-            Drag a file here or{' '}
+            Drag a file here or{" "}
             <button
               type="button"
               onClick={() => inputRef.current?.click()}
@@ -121,10 +146,13 @@ export function AssetImportPage() {
             </button>
           </p>
           <p className="mt-1 text-[11.5px] text-slate-500">
-            CSV, TSV, or tab-separated text. Working in Excel? Save as CSV first.
+            CSV, TSV, or tab-separated text. Working in Excel? Save as CSV
+            first.
           </p>
           {fileName && (
-            <p className="mt-2 text-[12px] font-medium text-slate-700">Loaded: {fileName}</p>
+            <p className="mt-2 text-[12px] font-medium text-slate-700">
+              Loaded: {fileName}
+            </p>
           )}
           <input
             ref={inputRef}
@@ -133,7 +161,7 @@ export function AssetImportPage() {
             className="sr-only"
             onChange={(e) => {
               void accept(e.target.files);
-              e.target.value = '';
+              e.target.value = "";
             }}
           />
         </div>
@@ -144,15 +172,24 @@ export function AssetImportPage() {
           <Panel title="2. Review">
             <div className="mb-3 flex flex-wrap gap-4 text-[13px]">
               <span className="text-slate-700">
-                <strong className="text-slate-900">{result.totalRows}</strong> data rows
+                <strong className="text-slate-900">{result.totalRows}</strong>{" "}
+                data rows
               </span>
               <span className="text-emerald-700">
                 <strong>{result.valid.length}</strong> ready
               </span>
-              <span className={result.errors.length ? 'text-red-700' : 'text-slate-500'}>
+              <span
+                className={
+                  result.errors.length ? "text-red-700" : "text-slate-500"
+                }
+              >
                 <strong>{result.errors.length}</strong> rejected
               </span>
-              <span className={result.warnings.length ? 'text-amber-700' : 'text-slate-500'}>
+              <span
+                className={
+                  result.warnings.length ? "text-amber-700" : "text-slate-500"
+                }
+              >
                 <strong>{result.warnings.length}</strong> warnings
               </span>
             </div>
@@ -208,7 +245,14 @@ export function AssetImportPage() {
                   <caption className="sr-only">Rows ready to import</caption>
                   <thead>
                     <tr className="border-b border-slate-200 bg-slate-50">
-                      {['Asset Tag', 'Name', 'Type', 'State', 'Cost', 'Location'].map((h) => (
+                      {[
+                        "Asset Tag",
+                        "Name",
+                        "Type",
+                        "State",
+                        "Cost",
+                        "Location",
+                      ].map((h) => (
                         <th
                           key={h}
                           scope="col"
@@ -221,12 +265,19 @@ export function AssetImportPage() {
                   </thead>
                   <tbody>
                     {result.valid.slice(0, 20).map((a) => (
-                      <tr key={a.assetTag} className="border-b border-slate-200 last:border-0">
+                      <tr
+                        key={a.assetTag}
+                        className="border-b border-slate-200 last:border-0"
+                      >
                         <td className="px-3 py-1.5 text-[12.5px] font-medium text-sky-700">
                           {a.assetTag}
                         </td>
-                        <td className="px-3 py-1.5 text-[12.5px] text-slate-800">{a.name}</td>
-                        <td className="px-3 py-1.5 text-[12.5px] text-slate-600">{a.assetType}</td>
+                        <td className="px-3 py-1.5 text-[12.5px] text-slate-800">
+                          {a.name}
+                        </td>
+                        <td className="px-3 py-1.5 text-[12.5px] text-slate-600">
+                          {a.assetType}
+                        </td>
                         <td className="px-3 py-1.5">
                           <StatusBadge status={a.assetState} />
                         </td>
@@ -234,7 +285,7 @@ export function AssetImportPage() {
                           {formatMoney(a.cost, a.currency)}
                         </td>
                         <td className="px-3 py-1.5 text-[12.5px] text-slate-600">
-                          {a.location || '—'}
+                          {a.location || "—"}
                         </td>
                       </tr>
                     ))}
@@ -254,7 +305,7 @@ export function AssetImportPage() {
               variant="ghost"
               onClick={() => {
                 setResult(null);
-                setFileName('');
+                setFileName("");
               }}
             >
               Start over
@@ -265,7 +316,7 @@ export function AssetImportPage() {
               disabled={result.valid.length === 0 || committing}
             >
               <Upload size={14} /> Import {result.valid.length} asset
-              {result.valid.length === 1 ? '' : 's'}
+              {result.valid.length === 1 ? "" : "s"}
             </Button>
           </div>
         </>
@@ -273,14 +324,14 @@ export function AssetImportPage() {
 
       <Panel title="Expected columns">
         <p className="mb-2 text-[12.5px] text-slate-600">
-          Column order does not matter and headers are matched case-insensitively. Unrecognised
-          columns are ignored.
+          Column order does not matter and headers are matched
+          case-insensitively. Unrecognised columns are ignored.
         </p>
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
               <tr className="border-b border-slate-200">
-                {['Column', 'Required', 'Notes'].map((h) => (
+                {["Column", "Required", "Notes"].map((h) => (
                   <th
                     key={h}
                     scope="col"
@@ -293,14 +344,19 @@ export function AssetImportPage() {
             </thead>
             <tbody>
               {IMPORT_COLUMNS.map((c) => (
-                <tr key={c.header} className="border-b border-slate-200 last:border-0">
+                <tr
+                  key={c.header}
+                  className="border-b border-slate-200 last:border-0"
+                >
                   <td className="whitespace-nowrap px-3 py-1.5 text-[12.5px] font-medium text-slate-800">
                     {c.header}
                   </td>
                   <td className="px-3 py-1.5 text-[12.5px] text-slate-600">
-                    {c.required ? 'Yes' : '—'}
+                    {c.required ? "Yes" : "—"}
                   </td>
-                  <td className="px-3 py-1.5 text-[12.5px] text-slate-600">{c.note}</td>
+                  <td className="px-3 py-1.5 text-[12.5px] text-slate-600">
+                    {c.note}
+                  </td>
                 </tr>
               ))}
             </tbody>

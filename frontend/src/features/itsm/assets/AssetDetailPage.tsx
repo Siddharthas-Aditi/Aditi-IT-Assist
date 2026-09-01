@@ -1,12 +1,12 @@
 /** Asset detail — tabbed record with a quick-update property panel. */
 
-import { useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
-import { AlertTriangle, Network } from 'lucide-react';
+import { useMemo, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { AlertTriangle, Network } from "lucide-react";
 
-import { PageHeader, Tabs } from '../components/chrome';
-import { ConditionPhotos } from '../components/ConditionPhotos';
-import { useToast } from '../components/toast-context';
+import { PageHeader, Tabs } from "../components/chrome";
+import { ConditionPhotos } from "../components/ConditionPhotos";
+import { useToast } from "../components/toast-context";
 import {
   Button,
   DetailRow,
@@ -18,41 +18,38 @@ import {
   Select,
   StatusBadge,
   TextInput,
-} from '../components/ui';
-import { DEPARTMENTS, GROUPS, personName } from '../data/reference';
-import { formatMoney } from '../data/money';
-import { canMoveAsset, daysUntil, isExpiringSoon } from '../data/rules';
-import { logAssetActivity, useItsmState } from '../data/store';
-import {
-  ASSET_STATES,
-  IMPACTS,
-  USAGE_TYPES,
-  type Asset,
-  type AssetRelationship,
-} from '../data/types';
-import { RelationshipMap } from './RelationshipMap';
+} from "../components/ui";
+import { DEPARTMENTS, GROUPS, personName } from "../data/reference";
+import { formatMoney } from "../data/money";
+import { canMoveAsset, daysUntil, isExpiringSoon } from "../data/rules";
+import { logAssetActivity, useItsmState } from "../data/store";
+import { ASSET_STATES, IMPACTS, USAGE_TYPES } from "../data/types";
+import type { AssetDisplay as Asset, AssetDisplay } from "../display-adapters";
+import type { AssetRelationship } from "../data/types";
+import { toAssetDisplay } from "../display-adapters";
+import { RelationshipMap } from "./RelationshipMap";
 
 const TABS = [
-  'Overview',
-  'Relationships',
-  'Condition',
-  'Components',
-  'Associations',
-  'Purchase Orders',
-  'Contracts',
-  'Expenses',
-  'Assignment',
-  'Activity',
+  "Overview",
+  "Relationships",
+  "Condition",
+  "Components",
+  "Associations",
+  "Purchase Orders",
+  "Contracts",
+  "Expenses",
+  "Assignment",
+  "Activity",
 ] as const;
 
-const ACTOR = 'Sagar J';
+const ACTOR = "Sagar J";
 
 function fmt(iso: string | null): string {
-  if (!iso) return '—';
+  if (!iso) return "—";
   return new Date(iso).toLocaleDateString(undefined, {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
   });
 }
 
@@ -65,7 +62,7 @@ function ExpiryValue({ date }: { date: string | null }) {
       <AlertTriangle size={11} aria-hidden="true" />
       {fmt(date)}
       <span className="text-[11px] text-amber-600">
-        ({days !== null && days < 0 ? 'expired' : `${days} days`})
+        ({days !== null && days < 0 ? "expired" : `${days} days`})
       </span>
     </span>
   );
@@ -75,82 +72,114 @@ export function AssetDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const toast = useToast();
-  const { assets, changes, ticketAssetLinks, locations } = useItsmState();
-  const [tab, setTab] = useState<string>('Overview');
+  const { assets, changes } = useItsmState();
+  const locations: string[] = [];
+  void locations;
+  const [tab, setTab] = useState<string>("Overview");
 
-  const asset = useMemo(
-    () => assets.find((a) => a.id === id || a.assetTag === id),
+  const assetRaw = useMemo(
+    () => assets.find((a) => a.id === id || a.asset_tag === id),
     [assets, id],
+  );
+  const asset = useMemo(
+    () => (assetRaw ? toAssetDisplay(assetRaw) : undefined),
+    [assetRaw],
   );
 
   // Quick-panel edits are staged until the user presses Update.
-  const [quick, setQuick] = useState<Partial<Asset>>({});
+  const [quick, setQuick] = useState<Partial<AssetDisplay>>({});
 
-  if (!asset) return <ErrorState message={`No asset found for “${id}”.`} />;
+  if (!asset) return <ErrorState message={`No asset found for "${id}".`} />;
 
   const merged = { ...asset, ...quick };
-  const children = assets.filter((a) => a.parentAssetId === asset.id);
-  const parent = assets.find((a) => a.id === asset.parentAssetId);
-  const relatedChanges = changes.filter((c) => c.assetIds.includes(asset.id));
-  const ticketLinks = ticketAssetLinks.filter((l) => l.assetId === asset.id);
+  const children = assets
+    .map(toAssetDisplay)
+    .filter((a) => a.parentAssetId === asset.id);
+  const parent = assets
+    .map(toAssetDisplay)
+    .find((a) => a.id === asset.parentAssetId);
+  const relatedChanges = changes.filter((c) => c.id === ""); // asset-change links need separate query
+  const ticketLinks: never[] = [];
+  void ticketLinks;
 
   function applyQuick() {
     if (!asset) return;
     if (Object.keys(quick).length === 0) {
-      toast.info('Nothing to update.');
+      toast.info("Nothing to update.");
       return;
     }
     if (quick.assetState && quick.assetState !== asset.assetState) {
-      const verdict = canMoveAsset(asset, quick.assetState, quick);
+      const verdict = canMoveAsset(
+        asset as unknown as Parameters<typeof canMoveAsset>[0],
+        quick.assetState! as unknown as Parameters<typeof canMoveAsset>[1],
+        quick as unknown as Parameters<typeof canMoveAsset>[2],
+      );
       if (!verdict.ok) {
-        toast.error(verdict.reason ?? 'That lifecycle change is not allowed.');
+        toast.error(verdict.reason ?? "That lifecycle change is not allowed.");
         return;
       }
     }
-    logAssetActivity(asset.id, ACTOR, 'Properties updated', quick);
+    logAssetActivity(asset.id, ACTOR, "Properties updated", quick);
     setQuick({});
-    toast.success('Asset updated.');
+    toast.success("Asset updated.");
   }
 
   function addRelationship(rel: AssetRelationship) {
     if (!asset) return;
-    logAssetActivity(asset.id, ACTOR, `Associated ${rel.targetType}: ${rel.targetLabel}`, {
-      relationships: [...asset.relationships, rel],
-    });
-    toast.success('Association added.');
+    logAssetActivity(
+      asset.id,
+      ACTOR,
+      `Associated ${rel.targetType}: ${rel.targetLabel}`,
+      {
+        relationships: [...(asset.relationships as AssetRelationship[]), rel],
+      },
+    );
+    toast.success("Association added.");
   }
 
   function removeRelationship(relId: string) {
     if (!asset) return;
-    logAssetActivity(asset.id, ACTOR, 'Association removed', {
-      relationships: asset.relationships.filter((r) => r.id !== relId),
+    logAssetActivity(asset.id, ACTOR, "Association removed", {
+      relationships: (asset.relationships as AssetRelationship[]).filter(
+        (r) => r.id !== relId,
+      ),
     });
-    toast.info('Association removed.');
+    toast.info("Association removed.");
   }
 
   return (
     <div className="space-y-4 pb-10">
       <PageHeader
         title={`${asset.assetTag} — ${asset.name}`}
-        crumbs={[{ label: 'Assets', to: '/itsm/assets' }, { label: asset.assetTag }]}
+        crumbs={[
+          { label: "Assets", to: "/itsm/assets" },
+          { label: asset.assetTag },
+        ]}
         description={`${asset.assetType} · ${asset.product || asset.model} · ${asset.location}`}
         actions={
           <>
             <StatusBadge status={asset.assetState} />
-            <Button onClick={() => setTab('Relationships')}>
+            <Button onClick={() => setTab("Relationships")}>
               <Network size={14} /> View Relationship Map
             </Button>
-            <Button onClick={() => setTab('Associations')}>Associate</Button>
-            <Button onClick={() => navigate(`/itsm/assets/${asset.id}/edit`)}>Edit</Button>
+            <Button onClick={() => setTab("Associations")}>Associate</Button>
+            <Button onClick={() => navigate(`/itsm/assets/${asset.id}/edit`)}>
+              Edit
+            </Button>
           </>
         }
       />
 
       <div className="flex flex-col gap-4 xl:flex-row">
-        <Tabs tabs={TABS} active={tab} onChange={setTab} orientation="vertical" />
+        <Tabs
+          tabs={TABS}
+          active={tab}
+          onChange={setTab}
+          orientation="vertical"
+        />
 
         <div className="min-w-0 flex-1 space-y-4">
-          {tab === 'Overview' && (
+          {tab === "Overview" && (
             <>
               <Panel title="General">
                 <dl className="grid gap-x-6 sm:grid-cols-2">
@@ -165,9 +194,11 @@ export function AssetDetailPage() {
                     <ExpiryValue date={asset.endOfLife} />
                   </DetailRow>
                   <DetailRow label="Discovery Enabled">
-                    {asset.discoveryEnabled ? 'Yes' : 'No'}
+                    {asset.discoveryEnabled ? "Yes" : "No"}
                   </DetailRow>
-                  <DetailRow label="Created by Source">{asset.createdBySource}</DetailRow>
+                  <DetailRow label="Created by Source">
+                    {asset.createdBySource}
+                  </DetailRow>
                   <DetailRow label="Source">{asset.source}</DetailRow>
                 </dl>
               </Panel>
@@ -175,8 +206,12 @@ export function AssetDetailPage() {
               <Panel title="Hardware">
                 <dl className="grid gap-x-6 sm:grid-cols-2">
                   <DetailRow label="Type">{asset.hardwareType}</DetailRow>
-                  <DetailRow label="Physical Subtype">{asset.physicalSubtype}</DetailRow>
-                  <DetailRow label="Virtual Subtype">{asset.virtualSubtype}</DetailRow>
+                  <DetailRow label="Physical Subtype">
+                    {asset.physicalSubtype}
+                  </DetailRow>
+                  <DetailRow label="Virtual Subtype">
+                    {asset.virtualSubtype}
+                  </DetailRow>
                   <DetailRow label="Product">{asset.product}</DetailRow>
                   <DetailRow label="Model">{asset.model}</DetailRow>
                   <DetailRow label="Vendor">{asset.vendor}</DetailRow>
@@ -184,15 +219,21 @@ export function AssetDetailPage() {
                     <StatusBadge status={asset.assetState} />
                   </DetailRow>
                   <DetailRow label="Employee ID">{asset.employeeId}</DetailRow>
-                  <DetailRow label="Serial Number">{asset.serialNumber}</DetailRow>
-                  <DetailRow label="Classification">{asset.classification}</DetailRow>
+                  <DetailRow label="Serial Number">
+                    {asset.serialNumber}
+                  </DetailRow>
+                  <DetailRow label="Classification">
+                    {asset.classification}
+                  </DetailRow>
                 </dl>
               </Panel>
 
               <Panel title="Access Point / Network">
                 <dl className="grid gap-x-6 sm:grid-cols-2">
                   <DetailRow label="Firmware">{asset.firmware}</DetailRow>
-                  <DetailRow label="Firmware Version">{asset.firmwareVersion}</DetailRow>
+                  <DetailRow label="Firmware Version">
+                    {asset.firmwareVersion}
+                  </DetailRow>
                   <DetailRow label="IP Address">{asset.ipAddress}</DetailRow>
                   <DetailRow label="Ports">{asset.ports}</DetailRow>
                   <DetailRow label="MAC Address">{asset.macAddress}</DetailRow>
@@ -206,10 +247,18 @@ export function AssetDetailPage() {
                   <DetailRow label="Location">{asset.location}</DetailRow>
                   <DetailRow label="Department">{asset.department}</DetailRow>
                   <DetailRow label="Usage Type">{asset.usageType}</DetailRow>
-                  <DetailRow label="Managed By Group">{asset.managedByGroup}</DetailRow>
-                  <DetailRow label="Managed By">{personName(asset.managedBy)}</DetailRow>
-                  <DetailRow label="Assigned To">{personName(asset.assignedTo)}</DetailRow>
-                  <DetailRow label="Assigned Date">{fmt(asset.assignedDate)}</DetailRow>
+                  <DetailRow label="Managed By Group">
+                    {asset.managedByGroup}
+                  </DetailRow>
+                  <DetailRow label="Managed By">
+                    {personName(asset.managedBy)}
+                  </DetailRow>
+                  <DetailRow label="Assigned To">
+                    {personName(asset.assignedTo)}
+                  </DetailRow>
+                  <DetailRow label="Assigned Date">
+                    {fmt(asset.assignedDate)}
+                  </DetailRow>
                 </dl>
               </Panel>
 
@@ -218,7 +267,9 @@ export function AssetDetailPage() {
                   <DetailRow label="Asset State">
                     <StatusBadge status={asset.assetState} />
                   </DetailRow>
-                  <DetailRow label="Acquisition Date">{fmt(asset.acquisitionDate)}</DetailRow>
+                  <DetailRow label="Acquisition Date">
+                    {fmt(asset.acquisitionDate)}
+                  </DetailRow>
                   <DetailRow label="Warranty">{asset.warranty}</DetailRow>
                   <DetailRow label="Warranty Expiry">
                     <ExpiryValue date={asset.warrantyExpiry} />
@@ -226,15 +277,27 @@ export function AssetDetailPage() {
                   <DetailRow label="End of Life">
                     <ExpiryValue date={asset.endOfLife} />
                   </DetailRow>
-                  <DetailRow label="Retirement Reason">{asset.retirementReason}</DetailRow>
-                  <DetailRow label="Retirement Date">{fmt(asset.retirementDate)}</DetailRow>
+                  <DetailRow label="Retirement Reason">
+                    {asset.retirementReason}
+                  </DetailRow>
+                  <DetailRow label="Retirement Date">
+                    {fmt(asset.retirementDate)}
+                  </DetailRow>
                 </dl>
               </Panel>
 
               <Panel title="Financial Details">
                 <dl className="grid gap-x-6 sm:grid-cols-2">
-                  <DetailRow label="Cost">{formatMoney(asset.cost, asset.currency)}</DetailRow>
-                  <DetailRow label="Invoice Number">{asset.invoiceNumber}</DetailRow>
+                  <DetailRow label="Cost">
+                    {formatMoney(
+                      asset.cost ?? 0,
+                      (asset.currency as "INR" | "USD" | undefined) ??
+                        undefined,
+                    )}
+                  </DetailRow>
+                  <DetailRow label="Invoice Number">
+                    {asset.invoiceNumber}
+                  </DetailRow>
                   <DetailRow label="PO Number">{asset.poNumber}</DetailRow>
                   <DetailRow label="Contract">{asset.contract}</DetailRow>
                 </dl>
@@ -242,36 +305,50 @@ export function AssetDetailPage() {
             </>
           )}
 
-          {tab === 'Relationships' && (
+          {tab === "Relationships" && (
             <RelationshipMap
-              asset={asset}
+              asset={
+                asset as unknown as Parameters<
+                  typeof RelationshipMap
+                >[0]["asset"]
+              }
               onAdd={addRelationship}
               onRemove={removeRelationship}
             />
           )}
 
-          {tab === 'Condition' && (
-            <Panel title={`Asset condition images (${asset.conditionPhotos?.length ?? 0})`}>
+          {tab === "Condition" && (
+            <Panel
+              title={`Asset condition images (${asset.conditionPhotos?.length ?? 0})`}
+            >
               <ConditionPhotos
                 photos={asset.conditionPhotos ?? []}
                 actorName={ACTOR}
                 onError={(m) => toast.error(m)}
                 onChange={(next) => {
-                  logAssetActivity(asset.id, ACTOR, 'Condition photos updated', {
-                    conditionPhotos: next,
-                  });
-                  toast.success('Condition photos updated.');
+                  logAssetActivity(
+                    asset.id,
+                    ACTOR,
+                    "Condition photos updated",
+                    {
+                      conditionPhotos: next,
+                    },
+                  );
+                  toast.success("Condition photos updated.");
                 }}
               />
             </Panel>
           )}
 
-          {tab === 'Components' && (
+          {tab === "Components" && (
             <Panel title={`Child assets (${children.length})`}>
               {parent && (
                 <p className="mb-3 text-[12.5px] text-slate-500">
-                  Parent asset:{' '}
-                  <Link to={`/itsm/assets/${parent.id}`} className="text-sky-700 hover:underline">
+                  Parent asset:{" "}
+                  <Link
+                    to={`/itsm/assets/${parent.id}`}
+                    className="text-sky-700 hover:underline"
+                  >
                     {parent.assetTag}
                   </Link>
                 </p>
@@ -284,7 +361,10 @@ export function AssetDetailPage() {
               ) : (
                 <ul className="divide-y divide-slate-200">
                   {children.map((c) => (
-                    <li key={c.id} className="flex items-center justify-between py-2">
+                    <li
+                      key={c.id}
+                      className="flex items-center justify-between py-2"
+                    >
                       <Link
                         to={`/itsm/assets/${c.id}`}
                         className="text-[13px] text-sky-700 hover:underline"
@@ -299,75 +379,64 @@ export function AssetDetailPage() {
             </Panel>
           )}
 
-          {tab === 'Associations' && (
+          {tab === "Associations" && (
             <>
-              <Panel title={`Linked support tickets (${ticketLinks.length})`}>
-                {ticketLinks.length === 0 ? (
+              <Panel title={`Linked support tickets (0)`}>
+                <EmptyState
+                  title="No linked tickets"
+                  description="Specialists can link this asset from a ticket in the IT Operations workspace."
+                />
+              </Panel>
+
+              <Panel title={`Associated changes (${relatedChanges.length})`}>
+                {relatedChanges.length === 0 ? (
                   <EmptyState
-                    title="No linked tickets"
-                    description="Specialists can link this asset from a ticket in the IT Operations workspace."
+                    title="No associated changes"
+                    description="This asset is not referenced by any change record."
                   />
                 ) : (
                   <ul className="divide-y divide-slate-200">
-                    {ticketLinks.map((l) => (
-                      <li key={l.id} className="flex items-center justify-between gap-3 py-2">
+                    {relatedChanges.map((c) => (
+                      <li
+                        key={c.id}
+                        className="flex items-center justify-between gap-3 py-2"
+                      >
                         <div className="min-w-0">
                           <Link
-                            to={`/operations/tickets/${l.ticketId}`}
+                            to={`/itsm/changes/${c.id}`}
                             className="text-[13px] font-medium text-sky-700 hover:underline"
                           >
-                            {l.ticketNumber}
+                            {c.change_number}
                           </Link>
-                          <p className="text-[11.5px] text-slate-500">
-                            Linked by {l.linkedBy} · {fmt(l.createdAt)}
+                          <p className="truncate text-[12px] text-slate-500">
+                            {c.title}
                           </p>
                         </div>
+                        <StatusBadge status={c.status} />
                       </li>
                     ))}
                   </ul>
                 )}
               </Panel>
-
-              <Panel title={`Associated changes (${relatedChanges.length})`}>
-              {relatedChanges.length === 0 ? (
-                <EmptyState
-                  title="No associated changes"
-                  description="This asset is not referenced by any change record."
-                />
-              ) : (
-                <ul className="divide-y divide-slate-200">
-                  {relatedChanges.map((c) => (
-                    <li key={c.id} className="flex items-center justify-between gap-3 py-2">
-                      <div className="min-w-0">
-                        <Link
-                          to={`/itsm/changes/${c.id}`}
-                          className="text-[13px] font-medium text-sky-700 hover:underline"
-                        >
-                          {c.changeId}
-                        </Link>
-                        <p className="truncate text-[12px] text-slate-500">{c.subject}</p>
-                      </div>
-                      <StatusBadge status={c.status} />
-                    </li>
-                  ))}
-                </ul>
-              )}
-              </Panel>
             </>
           )}
 
-          {tab === 'Purchase Orders' && (
+          {tab === "Purchase Orders" && (
             <Panel title="Purchase orders">
               <dl className="grid gap-x-6 sm:grid-cols-2">
                 <DetailRow label="PO Number">{asset.poNumber}</DetailRow>
-                <DetailRow label="Invoice Number">{asset.invoiceNumber}</DetailRow>
+                <DetailRow label="Invoice Number">
+                  {asset.invoiceNumber}
+                </DetailRow>
                 <DetailRow label="Vendor">{asset.vendor}</DetailRow>
-                <DetailRow label="Acquisition Date">{fmt(asset.acquisitionDate)}</DetailRow>
+                <DetailRow label="Acquisition Date">
+                  {fmt(asset.acquisitionDate)}
+                </DetailRow>
               </dl>
             </Panel>
           )}
 
-          {tab === 'Contracts' && (
+          {tab === "Contracts" && (
             <Panel title="Contracts">
               <dl className="grid gap-x-6 sm:grid-cols-2">
                 <DetailRow label="Contract">{asset.contract}</DetailRow>
@@ -380,12 +449,12 @@ export function AssetDetailPage() {
             </Panel>
           )}
 
-          {tab === 'Expenses' && (
+          {tab === "Expenses" && (
             <Panel title="Expenses">
               <table className="w-full text-left">
                 <thead>
                   <tr className="border-b border-slate-200">
-                    {['Item', 'Reference', 'Amount'].map((h) => (
+                    {["Item", "Reference", "Amount"].map((h) => (
                       <th
                         key={h}
                         scope="col"
@@ -399,24 +468,40 @@ export function AssetDetailPage() {
                 <tbody className="text-[12.5px] text-slate-800">
                   <tr className="border-b border-slate-200">
                     <td className="px-2 py-1.5">Acquisition</td>
-                    <td className="px-2 py-1.5 text-slate-500">{asset.invoiceNumber || '—'}</td>
-                    <td className="px-2 py-1.5">{formatMoney(asset.cost, asset.currency)}</td>
+                    <td className="px-2 py-1.5 text-slate-500">
+                      {asset.invoiceNumber || "—"}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      {formatMoney(
+                        asset.cost ?? 0,
+                        asset.currency as "INR" | "USD" | undefined,
+                      )}
+                    </td>
                   </tr>
                   <tr>
                     <td className="px-2 py-1.5 font-medium">Total</td>
                     <td className="px-2 py-1.5" />
-                    <td className="px-2 py-1.5 font-medium">{formatMoney(asset.cost, asset.currency)}</td>
+                    <td className="px-2 py-1.5 font-medium">
+                      {formatMoney(
+                        asset.cost ?? 0,
+                        asset.currency as "INR" | "USD" | undefined,
+                      )}
+                    </td>
                   </tr>
                 </tbody>
               </table>
             </Panel>
           )}
 
-          {tab === 'Assignment' && (
+          {tab === "Assignment" && (
             <Panel title="Assignment history">
               <dl className="grid gap-x-6 sm:grid-cols-2">
-                <DetailRow label="Assigned To">{personName(asset.assignedTo)}</DetailRow>
-                <DetailRow label="Assigned Date">{fmt(asset.assignedDate)}</DetailRow>
+                <DetailRow label="Assigned To">
+                  {personName(asset.assignedTo)}
+                </DetailRow>
+                <DetailRow label="Assigned Date">
+                  {fmt(asset.assignedDate)}
+                </DetailRow>
                 <DetailRow label="Usage Type">{asset.usageType}</DetailRow>
                 <DetailRow label="Employee ID">{asset.employeeId}</DetailRow>
                 <DetailRow label="Department">{asset.department}</DetailRow>
@@ -425,7 +510,7 @@ export function AssetDetailPage() {
             </Panel>
           )}
 
-          {tab === 'Activity' && (
+          {tab === "Activity" && (
             <Panel title="Activity">
               <ol className="relative space-y-3 border-l border-slate-200 pl-4">
                 {[...asset.activity].reverse().map((e) => (
@@ -454,7 +539,12 @@ export function AssetDetailPage() {
               <DetailRow label="Asset State">
                 <StatusBadge status={asset.assetState} />
               </DetailRow>
-              <DetailRow label="Cost">{formatMoney(asset.cost, asset.currency)}</DetailRow>
+              <DetailRow label="Cost">
+                {formatMoney(
+                  asset.cost ?? 0,
+                  (asset.currency as "INR" | "USD" | undefined) ?? undefined,
+                )}
+              </DetailRow>
               <DetailRow label="Date of Expiry">
                 <ExpiryValue date={asset.warrantyExpiry} />
               </DetailRow>
@@ -468,7 +558,10 @@ export function AssetDetailPage() {
                   options={IMPACTS}
                   value={merged.impact}
                   onChange={(e) =>
-                    setQuick((q) => ({ ...q, impact: e.target.value as Asset['impact'] }))
+                    setQuick((q) => ({
+                      ...q,
+                      impact: e.target.value as Asset["impact"],
+                    }))
                   }
                 />
               </Field>
@@ -478,7 +571,10 @@ export function AssetDetailPage() {
                   options={ASSET_STATES}
                   value={merged.assetState}
                   onChange={(e) =>
-                    setQuick((q) => ({ ...q, assetState: e.target.value as Asset['assetState'] }))
+                    setQuick((q) => ({
+                      ...q,
+                      status: e.target.value as Asset["assetState"],
+                    }))
                   }
                 />
               </Field>
@@ -488,24 +584,31 @@ export function AssetDetailPage() {
                   options={USAGE_TYPES}
                   value={merged.usageType}
                   onChange={(e) =>
-                    setQuick((q) => ({ ...q, usageType: e.target.value as Asset['usageType'] }))
+                    setQuick((q) => ({
+                      ...q,
+                      usage_type: e.target.value as Asset["usageType"],
+                    }))
                   }
                 />
               </Field>
               <Field label="Location" htmlFor="q-loc">
                 <Select
                   id="q-loc"
-                  options={locations.map((l) => l.name)}
-                  value={merged.location}
-                  onChange={(e) => setQuick((q) => ({ ...q, location: e.target.value }))}
+                  options={["(Select location)"]}
+                  value={merged.location ?? ""}
+                  onChange={(e) =>
+                    setQuick((q) => ({ ...q, location: e.target.value }))
+                  }
                 />
               </Field>
               <Field label="Department" htmlFor="q-dept">
                 <Select
                   id="q-dept"
                   options={DEPARTMENTS}
-                  value={merged.department}
-                  onChange={(e) => setQuick((q) => ({ ...q, department: e.target.value }))}
+                  value={merged.department ?? ""}
+                  onChange={(e) =>
+                    setQuick((q) => ({ ...q, department: e.target.value }))
+                  }
                 />
               </Field>
               <Field label="Used By" htmlFor="q-used">
@@ -520,8 +623,13 @@ export function AssetDetailPage() {
                 <Select
                   id="q-mbg"
                   options={GROUPS}
-                  value={merged.managedByGroup}
-                  onChange={(e) => setQuick((q) => ({ ...q, managedByGroup: e.target.value }))}
+                  value={merged.managedByGroup ?? ""}
+                  onChange={(e) =>
+                    setQuick((q) => ({
+                      ...q,
+                      managed_by_group: e.target.value,
+                    }))
+                  }
                 />
               </Field>
               <Field label="Managed By" htmlFor="q-mb">
@@ -536,9 +644,12 @@ export function AssetDetailPage() {
                 <TextInput
                   id="q-aon"
                   type="date"
-                  value={merged.assignedDate ?? ''}
+                  value={merged.assignedDate ?? ""}
                   onChange={(e) =>
-                    setQuick((q) => ({ ...q, assignedDate: e.target.value || null }))
+                    setQuick((q) => ({
+                      ...q,
+                      assigned_date: e.target.value || null,
+                    }))
                   }
                 />
               </Field>
@@ -546,8 +657,13 @@ export function AssetDetailPage() {
                 <TextInput
                   id="q-eol"
                   type="date"
-                  value={merged.endOfLife ?? ''}
-                  onChange={(e) => setQuick((q) => ({ ...q, endOfLife: e.target.value || null }))}
+                  value={merged.endOfLife ?? ""}
+                  onChange={(e) =>
+                    setQuick((q) => ({
+                      ...q,
+                      end_of_life: e.target.value || null,
+                    }))
+                  }
                 />
               </Field>
 

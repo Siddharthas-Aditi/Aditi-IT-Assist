@@ -7,52 +7,72 @@
  */
 
 export type UserRole =
-  | 'employee'
-  | 'it_agent'
-  | 'it_lead'
-  | 'it_admin'
-  | 'security_auditor';
+  | "employee"
+  | "it_agent"
+  | "it_lead"
+  | "it_admin"
+  | "security_auditor";
 
 /** Canonical permission codes (subset relevant to the frontend, KB-focused). */
 export const P = {
   // Knowledge — read & retrieval
-  KNOWLEDGE_READ: 'knowledge:read',
-  KNOWLEDGE_VIEW_INTERNAL: 'knowledge:view_internal',
-  KNOWLEDGE_SUBMIT_FEEDBACK: 'knowledge:submit_feedback',
-  KNOWLEDGE_SUGGEST: 'knowledge:suggest',
+  KNOWLEDGE_READ: "knowledge:read",
+  KNOWLEDGE_VIEW_INTERNAL: "knowledge:view_internal",
+  KNOWLEDGE_SUBMIT_FEEDBACK: "knowledge:submit_feedback",
+  KNOWLEDGE_SUGGEST: "knowledge:suggest",
   // Knowledge — authoring & lifecycle
-  KNOWLEDGE_CREATE: 'knowledge:create',
-  KNOWLEDGE_UPDATE_OWN: 'knowledge:update_own',
-  KNOWLEDGE_UPDATE_ALL: 'knowledge:update_all',
-  KNOWLEDGE_SUBMIT_REVIEW: 'knowledge:submit_review',
-  KNOWLEDGE_REVIEW: 'knowledge:review',
-  KNOWLEDGE_APPROVE: 'knowledge:approve',
-  KNOWLEDGE_PUBLISH: 'knowledge:publish',
-  KNOWLEDGE_ARCHIVE: 'knowledge:archive',
-  KNOWLEDGE_DELETE: 'knowledge:delete',
+  KNOWLEDGE_CREATE: "knowledge:create",
+  KNOWLEDGE_UPDATE_OWN: "knowledge:update_own",
+  KNOWLEDGE_UPDATE_ALL: "knowledge:update_all",
+  KNOWLEDGE_SUBMIT_REVIEW: "knowledge:submit_review",
+  KNOWLEDGE_REVIEW: "knowledge:review",
+  KNOWLEDGE_APPROVE: "knowledge:approve",
+  KNOWLEDGE_PUBLISH: "knowledge:publish",
+  KNOWLEDGE_ARCHIVE: "knowledge:archive",
+  KNOWLEDGE_DELETE: "knowledge:delete",
   // Knowledge — governance & ops
-  KNOWLEDGE_MANAGE_CATEGORIES: 'knowledge:manage_categories',
-  KNOWLEDGE_MANAGE_OWNERSHIP: 'knowledge:manage_ownership',
-  KNOWLEDGE_REINDEX: 'knowledge:reindex',
-  KNOWLEDGE_VIEW_ANALYTICS: 'knowledge:view_analytics',
+  KNOWLEDGE_MANAGE_CATEGORIES: "knowledge:manage_categories",
+  KNOWLEDGE_MANAGE_OWNERSHIP: "knowledge:manage_ownership",
+  KNOWLEDGE_REINDEX: "knowledge:reindex",
+  KNOWLEDGE_VIEW_ANALYTICS: "knowledge:view_analytics",
   // Cross-cutting
-  ADMIN_VIEW_AUDIT_LOG: 'admin:view_audit_log',
-  ADMIN_MANAGE_USERS: 'admin:manage_users',
-  ADMIN_ASSIGN_ROLES: 'admin:assign_roles',
+  ADMIN_VIEW_AUDIT_LOG: "admin:view_audit_log",
+  ADMIN_MANAGE_USERS: "admin:manage_users",
+  ADMIN_ASSIGN_ROLES: "admin:assign_roles",
+  // Change management
+  CHANGE_CREATE: "change:create",
+  CHANGE_READ: "change:read",
+  CHANGE_UPDATE: "change:update",
+  CHANGE_DELETE: "change:delete",
+  CHANGE_SUBMIT: "change:submit",
+  CHANGE_APPROVE: "change:approve",
+  CHANGE_IMPLEMENT: "change:implement",
+  CHANGE_ROLLBACK: "change:rollback",
+  CHANGE_CLOSE: "change:close",
+  // Asset management
+  ASSET_CREATE: "asset:create",
+  ASSET_READ: "asset:read",
+  ASSET_UPDATE: "asset:update",
+  ASSET_DELETE: "asset:delete",
+  ASSET_ASSIGN: "asset:assign",
+  ASSET_RETIRE: "asset:retire",
+  ASSET_TRANSFER: "asset:transfer",
 } as const;
 
 // `string & Record<never, never>` preserves literal autocomplete on the known
 // permission codes while still accepting any string (the lint-safe form of the
 // classic `string & {}` idiom).
-export type PermissionCode = (typeof P)[keyof typeof P] | (string & Record<never, never>);
+export type PermissionCode =
+  | (typeof P)[keyof typeof P]
+  | (string & Record<never, never>);
 
 /** Default landing route per role. */
 export const DEFAULT_ROUTES: Record<UserRole, string> = {
-  employee: '/support',
-  it_agent: '/operations',
-  it_lead: '/dashboard',
-  it_admin: '/dashboard',
-  security_auditor: '/audit',
+  employee: "/support",
+  it_agent: "/operations",
+  it_lead: "/dashboard",
+  it_admin: "/dashboard",
+  security_auditor: "/audit",
 };
 
 /**
@@ -63,6 +83,8 @@ export const DEFAULT_ROUTES: Record<UserRole, string> = {
 const EMPLOYEE_PERMS: PermissionCode[] = [
   P.KNOWLEDGE_READ,
   P.KNOWLEDGE_SUBMIT_FEEDBACK,
+  P.CHANGE_READ,
+  P.ASSET_READ,
 ];
 
 const AGENT_PERMS: PermissionCode[] = [
@@ -72,6 +94,14 @@ const AGENT_PERMS: PermissionCode[] = [
   P.KNOWLEDGE_UPDATE_OWN,
   P.KNOWLEDGE_SUBMIT_REVIEW,
   P.KNOWLEDGE_SUGGEST,
+  P.CHANGE_CREATE,
+  P.CHANGE_UPDATE,
+  P.CHANGE_SUBMIT,
+  P.CHANGE_IMPLEMENT,
+  P.ASSET_CREATE,
+  P.ASSET_UPDATE,
+  P.ASSET_ASSIGN,
+  P.ASSET_TRANSFER,
 ];
 
 const LEAD_PERMS: PermissionCode[] = [
@@ -82,6 +112,11 @@ const LEAD_PERMS: PermissionCode[] = [
   P.KNOWLEDGE_PUBLISH,
   P.KNOWLEDGE_ARCHIVE,
   P.KNOWLEDGE_VIEW_ANALYTICS,
+  P.CHANGE_APPROVE,
+  P.CHANGE_CLOSE,
+  P.CHANGE_ROLLBACK,
+  P.ASSET_RETIRE,
+  P.ASSET_DELETE,
 ];
 
 const ADMIN_PERMS: PermissionCode[] = [
@@ -93,6 +128,7 @@ const ADMIN_PERMS: PermissionCode[] = [
   P.ADMIN_VIEW_AUDIT_LOG,
   P.ADMIN_MANAGE_USERS,
   P.ADMIN_ASSIGN_ROLES,
+  P.CHANGE_DELETE,
 ];
 
 const AUDITOR_PERMS: PermissionCode[] = [
@@ -122,19 +158,23 @@ function rolesOf(user: RoleBearing | null | undefined): UserRole[] {
 }
 
 export function isITStaff(user: RoleBearing | null | undefined): boolean {
-  return rolesOf(user).some((r) => r === 'it_agent' || r === 'it_lead' || r === 'it_admin');
+  return rolesOf(user).some(
+    (r) => r === "it_agent" || r === "it_lead" || r === "it_admin",
+  );
 }
 
 export function isLeadOrAbove(user: RoleBearing | null | undefined): boolean {
-  return rolesOf(user).some((r) => r === 'it_lead' || r === 'it_admin');
+  return rolesOf(user).some((r) => r === "it_lead" || r === "it_admin");
 }
 
 export function isAdmin(user: RoleBearing | null | undefined): boolean {
-  return rolesOf(user).includes('it_admin');
+  return rolesOf(user).includes("it_admin");
 }
 
 /** Resolve the effective permission set for a user (explicit list or role-derived). */
-export function effectivePermissions(user: RoleBearing | null | undefined): Set<PermissionCode> {
+export function effectivePermissions(
+  user: RoleBearing | null | undefined,
+): Set<PermissionCode> {
   if (user?.permissions?.length) return new Set(user.permissions);
   const perms = new Set<PermissionCode>();
   for (const role of rolesOf(user)) {
@@ -153,10 +193,11 @@ export function hasPermission(
 export function getDefaultRoute(user: RoleBearing | null | undefined): string {
   const roles = rolesOf(user);
   // Highest-privilege landing route wins.
-  if (roles.includes('it_admin')) return DEFAULT_ROUTES.it_admin;
-  if (roles.includes('it_lead')) return DEFAULT_ROUTES.it_lead;
-  if (roles.includes('it_agent')) return DEFAULT_ROUTES.it_agent;
-  if (roles.includes('security_auditor')) return DEFAULT_ROUTES.security_auditor;
+  if (roles.includes("it_admin")) return DEFAULT_ROUTES.it_admin;
+  if (roles.includes("it_lead")) return DEFAULT_ROUTES.it_lead;
+  if (roles.includes("it_agent")) return DEFAULT_ROUTES.it_agent;
+  if (roles.includes("security_auditor"))
+    return DEFAULT_ROUTES.security_auditor;
   return DEFAULT_ROUTES.employee;
 }
 
