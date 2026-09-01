@@ -158,8 +158,7 @@ class AssetService:
         asset = await self.get(asset_id)
         if req.status not in ASSET_TERMINAL_STATUSES:
             raise AssetError(
-                f"Status {req.status!r} is not terminal; "
-                "use assign() for assignment changes"
+                f"Status {req.status!r} is not terminal; use assign() for assignment changes"
             )
         if not req.retirement_reason.strip():
             raise AssetError("Retirement reason is required")
