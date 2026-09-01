@@ -12,6 +12,7 @@ import { AlertTriangle, Bot, CheckCircle2, ChevronRight, Headset, Send, Ticket, 
 import { useAuthStore } from '@/stores/auth-store';
 import { WelcomeCategories } from '@/features/chat/WelcomeCategories';
 import { PostChatFeedbackCard } from '@/features/chat/PostChatFeedbackCard';
+import { TroubleshootingHistory } from '@/features/chat/TroubleshootingHistory';
 import { liveChatApi } from '@/features/specialist-chat/api';
 import { chatApi } from '@/lib/api';
 import { restoreChatSession, saveChatSession } from '@/lib/chat-session-sync';
@@ -812,6 +813,8 @@ export function SupportChatPage() {
           <div ref={bottomRef} />
         </div>
       </div>
+
+      <TroubleshootingHistory messages={messages} />
 
       {/* Post-resolution feedback survey */}
       {sessionResolved && sessionId && !feedbackDismissed && !waitingForSpecialist && (

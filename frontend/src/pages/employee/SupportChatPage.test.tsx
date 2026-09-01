@@ -75,7 +75,7 @@ describe('SupportChatPage resolution-steps rendering', () => {
     );
 
     expect(screen.queryByText(/Troubleshooting Steps/i)).toBeNull();
-    expect(screen.getByText(/On-Screen Keyboard/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/On-Screen Keyboard/i).length).toBeGreaterThan(0);
   });
 
   it('still renders the Troubleshooting Steps card for a multi-step reply', () => {
@@ -99,8 +99,8 @@ describe('SupportChatPage resolution-steps rendering', () => {
     );
 
     expect(screen.getByText(/Troubleshooting Steps/i)).toBeInTheDocument();
-    expect(screen.getByText(/Restart the app/i)).toBeInTheDocument();
-    expect(screen.getByText(/Restart your computer/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Restart the app/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Restart your computer/i).length).toBeGreaterThan(0);
   });
 
   it('renders KB citations visibly beneath a grounded response', () => {
@@ -130,6 +130,34 @@ describe('SupportChatPage resolution-steps rendering', () => {
     expect(screen.getByText('Sources')).toBeInTheDocument();
     expect(screen.getByText(/Mailbox quota management · v4/)).toBeInTheDocument();
     expect(screen.getByText('kb-outlook-42')).toBeInTheDocument();
+  });
+
+  it('shows suggested and failed troubleshooting steps for the current conversation', () => {
+    seedChatSession([
+      {
+        id: 'ai-history',
+        role: 'assistant',
+        content: 'Try restarting the app.',
+        timestamp: new Date().toISOString(),
+        resolutionSteps: [{ step_number: 1, instruction: 'Restart the app' }],
+      },
+      {
+        id: 'user-history',
+        role: 'user',
+        content: 'Still not working',
+        timestamp: new Date().toISOString(),
+      },
+    ]);
+
+    render(
+      <MemoryRouter>
+        <SupportChatPage />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('region', { name: 'Troubleshooting history' })).toBeInTheDocument();
+    expect(screen.getByText('Restart the app')).toBeInTheDocument();
+    expect(screen.getByText('Failed')).toBeInTheDocument();
   });
 });
 

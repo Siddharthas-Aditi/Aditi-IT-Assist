@@ -7,7 +7,6 @@
  * spreadsheet with two typos should still import 198 assets.
  */
 
-import { isAssetTagTaken } from '../data/store';
 import { ASSET_STATES, CURRENCIES, IMPACTS, USAGE_TYPES } from '../data/types';
 import type { Asset, AssetState, CurrencyCode, Impact, UsageType } from '../data/types';
 import { emptyAssetDraft } from './form-model';
@@ -141,7 +140,10 @@ function isoDate(raw: string): string | null {
  * `existingTags` seeds duplicate detection so tags that clash *within the file*
  * are caught too, not just clashes against what is already stored.
  */
-export function buildImport(rows: string[][]): ImportResult {
+export function buildImport(
+  rows: string[][],
+  existingAssetTags: Iterable<string> = [],
+): ImportResult {
   const errors: ImportIssue[] = [];
   const warnings: ImportIssue[] = [];
   const valid: Omit<Asset, 'id' | 'createdAt' | 'updatedAt'>[] = [];
@@ -194,6 +196,7 @@ export function buildImport(rows: string[][]): ImportResult {
   }
 
   const seenInFile = new Set<string>();
+  const existingTags = new Set([...existingAssetTags].map((tag) => tag.toLowerCase()));
 
   body.forEach((cells, i) => {
     // +2: one for the header row, one because humans count from 1.
@@ -222,7 +225,7 @@ export function buildImport(rows: string[][]): ImportResult {
       errors.push({ row: rowNo, message: `“${assetTag}” appears more than once in this file.` });
       return;
     }
-    if (isAssetTagTaken(assetTag)) {
+    if (existingTags.has(key)) {
       errors.push({ row: rowNo, message: `“${assetTag}” already exists in the inventory.` });
       return;
     }

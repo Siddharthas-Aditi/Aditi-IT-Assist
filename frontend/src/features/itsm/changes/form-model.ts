@@ -1,4 +1,4 @@
-/** Draft shape, validation, and session persistence for the change form. */
+/** Draft shape and validation for the change form. */
 
 import type {
   Change,
@@ -163,32 +163,3 @@ export function validateChange(draft: ChangeDraft): ChangeErrors {
 }
 
 export const MAX_ATTACHMENT_BYTES = 40 * 1024 * 1024;
-
-// ── Unsaved-draft persistence (session only) ───────────────────────────
-
-const DRAFT_KEY = 'aditi.itsm.change-form.draft';
-
-export function saveSessionDraft(draft: ChangeDraft): void {
-  try {
-    window.sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
-  } catch {
-    // Non-fatal: the user simply loses in-progress state on reload.
-  }
-}
-
-export function loadSessionDraft(): ChangeDraft | null {
-  try {
-    const raw = window.sessionStorage.getItem(DRAFT_KEY);
-    return raw ? (JSON.parse(raw) as ChangeDraft) : null;
-  } catch {
-    return null;
-  }
-}
-
-export function clearSessionDraft(): void {
-  try {
-    window.sessionStorage.removeItem(DRAFT_KEY);
-  } catch {
-    // Ignore — nothing depends on the removal succeeding.
-  }
-}

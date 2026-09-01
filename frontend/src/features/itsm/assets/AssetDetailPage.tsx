@@ -4,6 +4,8 @@ import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { AlertTriangle, Network } from "lucide-react";
 
+import { useAuthStore } from "@/stores/auth-store";
+
 import { PageHeader, Tabs } from "../components/chrome";
 import { ConditionPhotos } from "../components/ConditionPhotos";
 import { useToast } from "../components/toast-context";
@@ -22,11 +24,12 @@ import {
 import { DEPARTMENTS, GROUPS, personName } from "../data/reference";
 import { formatMoney } from "../data/money";
 import { canMoveAsset, daysUntil, isExpiringSoon } from "../data/rules";
-import { logAssetActivity, useItsmState } from "../data/store";
+import { deleteAssetRecord, logAssetActivity, useItsmState } from "../api";
 import { ASSET_STATES, IMPACTS, USAGE_TYPES } from "../data/types";
 import type { AssetDisplay as Asset, AssetDisplay } from "../display-adapters";
 import type { AssetRelationship } from "../data/types";
 import { toAssetDisplay } from "../display-adapters";
+import { canPerformItsmAction } from "../permissions";
 import { RelationshipMap } from "./RelationshipMap";
 
 const TABS = [
@@ -72,10 +75,15 @@ export function AssetDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const toast = useToast();
-  const { assets, changes } = useItsmState();
+  const { user } = useAuthStore();
+  const { assets } = useItsmState();
   const locations: string[] = [];
   void locations;
   const [tab, setTab] = useState<string>("Overview");
+  const canUpdate = canPerformItsmAction(user, "asset:update");
+  const canAssign = canPerformItsmAction(user, "asset:assign");
+  const canRetire = canPerformItsmAction(user, "asset:retire");
+  const canDelete = canPerformItsmAction(user, "asset:delete");
 
   const assetRaw = useMemo(
     () => assets.find((a) => a.id === id || a.asset_tag === id),
@@ -98,10 +106,6 @@ export function AssetDetailPage() {
   const parent = assets
     .map(toAssetDisplay)
     .find((a) => a.id === asset.parentAssetId);
-  const relatedChanges = changes.filter((c) => c.id === ""); // asset-change links need separate query
-  const ticketLinks: never[] = [];
-  void ticketLinks;
-
   function applyQuick() {
     if (!asset) return;
     if (Object.keys(quick).length === 0) {
@@ -147,6 +151,30 @@ export function AssetDetailPage() {
     toast.info("Association removed.");
   }
 
+  function retireAsset() {
+    if (!asset) return;
+    const reason = window.prompt("Retirement reason");
+    if (!reason?.trim()) return;
+    void logAssetActivity(asset.id, ACTOR, "Asset retired", {
+      status: "retired",
+      retirement_reason: reason.trim(),
+      retirement_date: new Date().toISOString().slice(0, 10),
+    })
+      .then(() => toast.success("Asset retired."))
+      .catch(() => toast.error("Failed to retire asset."));
+  }
+
+  function removeAsset() {
+    if (!asset) return;
+    if (!window.confirm(`Delete ${asset.assetTag}? This cannot be undone.`)) return;
+    void deleteAssetRecord(asset.id)
+      .then(() => {
+        toast.success(`${asset.assetTag} deleted.`);
+        navigate("/itsm/assets");
+      })
+      .catch(() => toast.error("Failed to delete asset."));
+  }
+
   return (
     <div className="space-y-4 pb-10">
       <PageHeader
@@ -162,10 +190,12 @@ export function AssetDetailPage() {
             <Button onClick={() => setTab("Relationships")}>
               <Network size={14} /> View Relationship Map
             </Button>
-            <Button onClick={() => setTab("Associations")}>Associate</Button>
-            <Button onClick={() => navigate(`/itsm/assets/${asset.id}/edit`)}>
+            {canAssign && <Button onClick={() => setTab("Assignment")}>Assign</Button>}
+            {canUpdate && <Button onClick={() => navigate(`/itsm/assets/${asset.id}/edit`)}>
               Edit
-            </Button>
+            </Button>}
+            {canRetire && <Button variant="danger" onClick={retireAsset}>Retire</Button>}
+            {canDelete && <Button variant="danger" onClick={removeAsset}>Delete Asset</Button>}
           </>
         }
       />
@@ -381,42 +411,18 @@ export function AssetDetailPage() {
 
           {tab === "Associations" && (
             <>
-              <Panel title={`Linked support tickets (0)`}>
+              <Panel title="Linked support tickets unavailable">
                 <EmptyState
-                  title="No linked tickets"
-                  description="Specialists can link this asset from a ticket in the IT Operations workspace."
+                  title="Ticket-asset link read API is not available"
+                  description="The database has ticket_asset_links, but the current backend does not expose an asset ticket-links endpoint or include these links in the Asset response. This page intentionally does not claim that no tickets are linked."
                 />
               </Panel>
 
-              <Panel title={`Associated changes (${relatedChanges.length})`}>
-                {relatedChanges.length === 0 ? (
-                  <EmptyState
-                    title="No associated changes"
-                    description="This asset is not referenced by any change record."
-                  />
-                ) : (
-                  <ul className="divide-y divide-slate-200">
-                    {relatedChanges.map((c) => (
-                      <li
-                        key={c.id}
-                        className="flex items-center justify-between gap-3 py-2"
-                      >
-                        <div className="min-w-0">
-                          <Link
-                            to={`/itsm/changes/${c.id}`}
-                            className="text-[13px] font-medium text-sky-700 hover:underline"
-                          >
-                            {c.change_number}
-                          </Link>
-                          <p className="truncate text-[12px] text-slate-500">
-                            {c.title}
-                          </p>
-                        </div>
-                        <StatusBadge status={c.status} />
-                      </li>
-                    ))}
-                  </ul>
-                )}
+              <Panel title="Associated changes unavailable">
+                <EmptyState
+                  title="Change-asset link read API is not available"
+                  description="The backend persists change_asset_links but currently exposes neither /changes/{id}/asset-links nor an equivalent Asset relationship response. This page intentionally does not claim that no changes are associated."
+                />
               </Panel>
             </>
           )}
@@ -667,9 +673,11 @@ export function AssetDetailPage() {
                 />
               </Field>
 
-              <Button variant="primary" onClick={applyQuick} className="w-full">
-                Update
-              </Button>
+              {canUpdate && (
+                <Button variant="primary" onClick={applyQuick} className="w-full">
+                  Update
+                </Button>
+              )}
             </div>
           </Panel>
         </aside>

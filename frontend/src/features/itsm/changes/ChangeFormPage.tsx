@@ -1,8 +1,10 @@
 /** Create / edit a change — main form plus the nine planning fields. */
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Search } from "lucide-react";
+
+import { useAuthStore } from "@/stores/auth-store";
 
 import {
   AssetPicker,
@@ -30,18 +32,16 @@ import {
   WORKSPACES,
 } from "../data/reference";
 import { initialStatusFor } from "../data/rules";
-import { createChange, logChangeActivity, useItsmState } from "../data/store";
+import { createChange, logChangeActivity, useItsmState } from "../api";
+import { canPerformItsmAction } from "../permissions";
 import { CHANGE_TYPES, IMPACTS, PRIORITIES, RISKS } from "../data/types";
 import type { ChangeStatus, ChangeType } from "../api-types";
 
 import {
   applyTemplate,
-  clearSessionDraft,
   draftFromChange,
   emptyDraft,
-  loadSessionDraft,
   PLANNING_FIELDS,
-  saveSessionDraft,
   validateChange,
   type ChangeDraft,
   type ChangeErrors,
@@ -51,6 +51,7 @@ export function ChangeFormPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const toast = useToast();
+  const { user } = useAuthStore();
   const { assets, changes } = useItsmState();
   const _templates: never[] = [];
   void _templates;
@@ -60,6 +61,7 @@ export function ChangeFormPage() {
     ? changes.find((c) => c.id === id || c.change_number === id)
     : undefined;
   const isEdit = Boolean(id);
+  const canSave = canPerformItsmAction(user, isEdit ? "change:update" : "change:create");
 
   // A change raised from a ticket arrives with the ticket's context in the
   // query string, so the specialist doesn't retype what support already knows.
@@ -93,17 +95,12 @@ export function ChangeFormPage() {
         },
       };
     }
-    return loadSessionDraft() ?? emptyDraft();
+    return emptyDraft();
   });
   const [attachments, setAttachments] = useState<never[]>([]);
   void setAttachments;
   const [errors, setErrors] = useState<ChangeErrors>({});
   const [templateQuery, setTemplateQuery] = useState("");
-
-  // Keep unsaved new-change state alive across navigation within the session.
-  useEffect(() => {
-    if (!isEdit && !fromTicket) saveSessionDraft(draft);
-  }, [draft, isEdit, fromTicket]);
 
   const recentTemplates = useMemo(() => [] as never[], []);
 
@@ -129,6 +126,10 @@ export function ChangeFormPage() {
   }
 
   async function persist(status: ChangeStatus, announce: string) {
+    if (!canSave) {
+      toast.error("You do not have permission to save this change.");
+      return;
+    }
     const base = {
       requested_by_id: draft.requesterId ?? "",
       title: draft.subject.trim(),
@@ -162,12 +163,9 @@ export function ChangeFormPage() {
 
     const created = await createChange({
       ...base,
-      source_ticket_id: fromTicket?.id ?? null,
-      actual_start: null,
-      actual_end: null,
+      source_ticket_id: fromTicket?.id,
     });
 
-    clearSessionDraft();
     toast.success(`${created.change_number} ${announce.toLowerCase()}.`);
     navigate(`/itsm/changes/${created.id}`);
   }
@@ -550,7 +548,6 @@ export function ChangeFormPage() {
         <Button
           variant="ghost"
           onClick={() => {
-            clearSessionDraft();
             navigate(
               isEdit && editing
                 ? `/itsm/changes/${editing.id}`
@@ -560,12 +557,12 @@ export function ChangeFormPage() {
         >
           Cancel
         </Button>
-        <Button onClick={() => void persist("draft", "Saved as draft")}>
+        {canSave && <Button onClick={() => void persist("draft", "Saved as draft")}>
           Save as Draft
-        </Button>
-        <Button variant="primary" onClick={onSubmit}>
+        </Button>}
+        {canSave && <Button variant="primary" onClick={onSubmit}>
           {isEdit ? "Save changes" : "Submit"}
-        </Button>
+        </Button>}
       </div>
 
       <p className="text-right text-[11px] text-slate-500">

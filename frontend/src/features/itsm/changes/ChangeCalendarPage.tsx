@@ -6,7 +6,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { PageHeader } from "../components/chrome";
 import { Button, EmptyState, Panel, StatusBadge } from "../components/ui";
-import { useItsmState } from "../data/store";
+import { useItsmState } from "../api";
 import { toChangeDisplay } from "../display-adapters";
 import type { ChangeDisplay as Change } from "../display-adapters";
 import { cn } from "../lib/cn";

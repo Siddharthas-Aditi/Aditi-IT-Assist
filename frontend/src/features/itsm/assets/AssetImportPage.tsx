@@ -8,7 +8,7 @@ import { PageHeader } from "../components/chrome";
 import { useToast } from "../components/toast-context";
 import { Button, EmptyState, Panel, StatusBadge } from "../components/ui";
 import { formatMoney } from "../data/money";
-import { createAssetsBulk } from "../data/store";
+import { createAssetsBulk, useAssets } from "../api";
 import { cn } from "../lib/cn";
 import {
   buildImport,
@@ -38,6 +38,7 @@ function download(
 export function AssetImportPage() {
   const navigate = useNavigate();
   const toast = useToast();
+  const assets = useAssets();
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [fileName, setFileName] = useState("");
@@ -58,7 +59,10 @@ export function AssetImportPage() {
     try {
       const text = await file.text();
       const rows = parseDelimited(text, detectDelimiter(text));
-      const parsed = buildImport(rows);
+      const parsed = buildImport(
+        rows,
+        assets.data?.items.map((asset) => asset.asset_tag) ?? [],
+      );
       setFileName(file.name);
       setResult(parsed);
 

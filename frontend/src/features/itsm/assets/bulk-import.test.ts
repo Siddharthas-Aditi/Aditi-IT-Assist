@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import {
   buildImport,
@@ -6,12 +6,6 @@ import {
   parseDelimited,
   templateCsv,
 } from "./bulk-import";
-import * as store from "../data/store";
-
-// Mock isAssetTagTaken to simulate a pre-existing tag in the inventory
-vi.spyOn(store, "isAssetTagTaken").mockImplementation(
-  (tag: string) => tag === "BLR_FAP10",
-);
 
 describe("parseDelimited", () => {
   it("keeps a delimiter that sits inside a quoted field", () => {
@@ -88,9 +82,9 @@ describe("buildImport", () => {
   });
 
   it("rejects a tag that already exists in the inventory", () => {
-    // BLR_FAP10 is part of the seeded estate.
     const res = buildImport(
       parseDelimited(`${header}\nBLR_FAP10,Clash,Access Point,1,INR,In Stock`),
+      ["BLR_FAP10"],
     );
     expect(res.valid).toHaveLength(0);
     expect(res.errors[0].message).toMatch(/already exists/);

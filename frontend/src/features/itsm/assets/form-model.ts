@@ -1,6 +1,5 @@
 /** Draft shape and validation for the asset form. */
 
-import { isAssetTagTaken } from '../data/store';
 import { requiresAssignee, requiresRetirementReason } from '../data/rules';
 import type { Asset } from '../data/types';
 
@@ -70,7 +69,11 @@ export function draftFromAsset(asset: Asset): AssetDraft {
 export type AssetErrors = Partial<Record<keyof AssetDraft, string>>;
 
 /** Blocking validation. Serial duplicates warn separately and never block. */
-export function validateAsset(draft: AssetDraft, exceptId?: string): AssetErrors {
+export function validateAsset(
+  draft: AssetDraft,
+  existingAssetTags: Iterable<string> = [],
+  exceptTag?: string,
+): AssetErrors {
   const errors: AssetErrors = {};
 
   if (!draft.name.trim()) errors.name = 'Asset name is required.';
@@ -78,7 +81,13 @@ export function validateAsset(draft: AssetDraft, exceptId?: string): AssetErrors
 
   if (!draft.assetTag.trim()) {
     errors.assetTag = 'Asset tag is required.';
-  } else if (isAssetTagTaken(draft.assetTag, exceptId)) {
+  } else if (
+    [...existingAssetTags].some(
+      (tag) =>
+        tag.toLowerCase() === draft.assetTag.trim().toLowerCase() &&
+        tag.toLowerCase() !== exceptTag?.toLowerCase(),
+    )
+  ) {
     errors.assetTag = 'This asset tag is already in use.';
   }
 

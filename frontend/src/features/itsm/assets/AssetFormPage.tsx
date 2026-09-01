@@ -4,6 +4,8 @@ import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { AlertTriangle } from "lucide-react";
 
+import { useAuthStore } from "@/stores/auth-store";
+
 import { ConditionPhotos } from "../components/ConditionPhotos";
 import {
   AssetPicker,
@@ -33,7 +35,8 @@ import {
   VIRTUAL_SUBTYPES,
   WORKSPACES,
 } from "../data/reference";
-import { createAsset, logAssetActivity, useItsmState } from "../data/store";
+import { createAsset, logAssetActivity, useItsmState } from "../api";
+import { canPerformItsmAction } from "../permissions";
 import {
   ASSET_STATES,
   CURRENCIES,
@@ -57,6 +60,7 @@ export function AssetFormPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const toast = useToast();
+  const { user } = useAuthStore();
   const { assets } = useItsmState();
   const locations: never[] = [];
   void locations;
@@ -65,6 +69,7 @@ export function AssetFormPage() {
     ? assets.map(toAssetDisplay).find((a) => a.id === id || a.assetTag === id)
     : undefined;
   const isEdit = Boolean(id);
+  const canSave = canPerformItsmAction(user, isEdit ? "asset:update" : "asset:create");
 
   const [draft, setDraft] = useState<AssetDraft>(() =>
     editing
@@ -86,7 +91,15 @@ export function AssetFormPage() {
   }
 
   async function submit() {
-    const found = validateAsset(draft, editing?.id);
+    if (!canSave) {
+      toast.error("You do not have permission to save this asset.");
+      return;
+    }
+    const found = validateAsset(
+      draft,
+      assets.map((asset) => asset.asset_tag),
+      editing?.asset_tag,
+    );
     setErrors(found);
     if (Object.keys(found).length) {
       toast.error("Fix the highlighted fields before saving.");
@@ -652,9 +665,9 @@ export function AssetFormPage() {
         >
           Cancel
         </Button>
-        <Button variant="primary" onClick={submit}>
+        {canSave && <Button variant="primary" onClick={submit}>
           {isEdit ? "Save asset" : "Create asset"}
-        </Button>
+        </Button>}
       </div>
     </div>
   );

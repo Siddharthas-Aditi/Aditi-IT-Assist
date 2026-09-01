@@ -1,7 +1,7 @@
 /**
  * React Query hooks for the Changes and Assets backend APIs.
  *
- * All reads and writes go through the backend — no sessionStorage.
+ * All reads and writes go through the backend — no browser persistence path.
  * Every mutation invalidates the relevant query keys so list/detail
  * views stay in sync automatically.
  */
@@ -282,4 +282,112 @@ export function useTransferAsset(id: string) {
       qc.invalidateQueries({ queryKey: assetKeys.detail(id) });
     },
   });
+}
+
+/** A read-only composition of the two API-backed ITSM collections. */
+export function useItsmData() {
+  const changes = useChanges();
+  const assets = useAssets();
+  return {
+    changes: changes.data?.items ?? [],
+    assets: assets.data?.items ?? [],
+    isLoading: changes.isLoading || assets.isLoading,
+    isError: changes.isError || assets.isError,
+  };
+}
+
+/** @deprecated Prefer the resource-specific query hooks above. */
+export const useItsmState = useItsmData;
+
+// Direct API helpers are retained only for existing event handlers that cannot
+// call React hooks. They have no client-side state or browser persistence.
+export async function createChange(payload: ChangeCreatePayload): Promise<ChangeRecord> {
+  return apiRequest<ChangeRecord>("/changes", { method: "POST", body: payload });
+}
+
+export async function updateChange(
+  id: string,
+  payload: ChangeUpdatePayload,
+): Promise<ChangeRecord> {
+  return apiRequest<ChangeRecord>(`/changes/${id}`, { method: "PATCH", body: payload });
+}
+
+export async function deleteChangeRecord(id: string): Promise<void> {
+  await apiRequest<void>(`/changes/${id}`, { method: "DELETE" });
+}
+
+export async function transitionChange(
+  id: string,
+  payload: ChangeTransitionPayload,
+): Promise<ChangeRecord> {
+  return apiRequest<ChangeRecord>(`/changes/${id}/transition`, {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export async function createAsset(payload: AssetCreatePayload): Promise<AssetRecord> {
+  return apiRequest<AssetRecord>("/assets", { method: "POST", body: payload });
+}
+
+export async function updateAsset(
+  id: string,
+  payload: AssetUpdatePayload,
+): Promise<AssetRecord> {
+  return apiRequest<AssetRecord>(`/assets/${id}`, { method: "PATCH", body: payload });
+}
+
+export async function deleteAssetRecord(id: string): Promise<void> {
+  await apiRequest<void>(`/assets/${id}`, { method: "DELETE" });
+}
+
+export async function createAssetsBulk(payloads: AssetCreatePayload[]): Promise<AssetRecord[]> {
+  return Promise.all(payloads.map(createAsset));
+}
+
+export async function logChangeActivity(
+  id: string,
+  _actor: string,
+  _action: string,
+  patch: object = {},
+  detail?: string,
+): Promise<ChangeRecord> {
+  const status = (patch as { status?: unknown }).status;
+  if (typeof status === "string") {
+    return transitionChange(id, { to_status: status as ChangeStatus, comment: detail });
+  }
+  return apiRequest<ChangeRecord>(`/changes/${id}`, { method: "PATCH", body: patch });
+}
+
+export async function logAssetActivity(
+  id: string,
+  _actor: string,
+  _action: string,
+  patch: object = {},
+): Promise<AssetRecord> {
+  const data = patch as Record<string, unknown>;
+  if (data.status === "assigned" && typeof data.assigned_to_id === "string") {
+    return apiRequest<AssetRecord>(`/assets/${id}/assign`, {
+      method: "POST",
+      body: {
+        assigned_to_id: data.assigned_to_id,
+        assigned_date: typeof data.assigned_date === "string" ? data.assigned_date : undefined,
+      },
+    });
+  }
+  if (data.status === "retired" || data.status === "disposed") {
+    return apiRequest<AssetRecord>(`/assets/${id}/retire`, {
+      method: "POST",
+      body: {
+        status: data.status,
+        retirement_reason:
+          typeof data.retirement_reason === "string" ? data.retirement_reason : "",
+        retirement_date:
+          typeof data.retirement_date === "string"
+            ? data.retirement_date
+            : new Date().toISOString().slice(0, 10),
+      },
+    });
+  }
+  return apiRequest<AssetRecord>(`/assets/${id}`, { method: "PATCH", body: patch });
 }

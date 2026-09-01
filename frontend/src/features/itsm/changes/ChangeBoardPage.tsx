@@ -7,7 +7,7 @@ import { PageHeader } from "../components/chrome";
 import { useToast } from "../components/toast-context";
 import { ChangeTypeBadge, LevelIndicator } from "../components/ui";
 import { personName } from "../data/reference";
-import { logChangeActivity } from "../data/store";
+import { logChangeActivity } from "../api";
 import { useChanges } from "../api";
 import {
   CHANGE_STATUS_LABELS,

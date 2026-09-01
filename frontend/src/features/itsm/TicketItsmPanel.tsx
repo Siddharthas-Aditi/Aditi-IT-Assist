@@ -12,7 +12,7 @@ import { AlertTriangle, GitPullRequestArrow, Laptop } from "lucide-react";
 
 import { StatusBadge } from "./components/ui";
 import { isExpiringSoon } from "./data/rules";
-import { useItsmData } from "./data/store";
+import { useItsmData } from "./api";
 import {
   assetsForPerson,
   changesForTicket,

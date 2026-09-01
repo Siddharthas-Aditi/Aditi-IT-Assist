@@ -2,14 +2,14 @@
  * Dated photographic record of an asset's physical condition.
  *
  * Uploads are downscaled to a bounded JPEG before they are stored: the module
- * persists to sessionStorage, and a handful of full-resolution phone photos
+ * stays in the draft UI, and a handful of full-resolution phone photos
  * would exceed the quota and silently drop the whole store.
  */
 
 import { useRef, useState } from 'react';
 import { Camera, Trash2, X } from 'lucide-react';
 
-import { newId } from '../data/store';
+import { newClientId } from '../client-id';
 import {
   ASSET_CONDITIONS,
   type AssetCondition,
@@ -97,7 +97,7 @@ export function ConditionPhotos({
       }
       try {
         added.push({
-          id: newId('photo'),
+          id: newClientId('photo'),
           name: file.name,
           condition,
           note: note.trim(),

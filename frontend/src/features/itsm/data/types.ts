@@ -200,7 +200,7 @@ export type AssetCondition = (typeof ASSET_CONDITIONS)[number];
  * A dated condition photo.
  *
  * `dataUrl` holds a downscaled JPEG rather than the original upload — the
- * store persists to sessionStorage, and full-resolution photos would blow the
+ * draft UI previously retained it in browser storage, and full-resolution photos would blow the
  * quota after a handful of assets.
  */
 export interface AssetConditionPhoto {
@@ -304,20 +304,6 @@ export interface Asset {
 }
 
 // ── Reference data ─────────────────────────────────────────────────────
-
-/**
- * Link between a support ticket (owned by the backend) and an asset (owned by
- * this module's store). Kept here rather than on the Ticket because tickets
- * come from the API and this prototype must not require a schema change.
- */
-export interface TicketAssetLink {
-  id: string;
-  ticketId: string;
-  ticketNumber: string;
-  assetId: string;
-  linkedBy: string;
-  createdAt: string;
-}
 
 export interface AssetTypeRef {
   id: string;

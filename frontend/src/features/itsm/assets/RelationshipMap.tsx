@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 
 import { Button, EmptyState, Field, Panel, Select, TextInput } from '../components/ui';
-import { newId } from '../data/store';
+import { newClientId } from '../client-id';
 import {
   RELATIONSHIP_TARGETS,
   type Asset,
@@ -54,7 +54,7 @@ export function RelationshipMap({ asset, onAdd, onRemove }: RelationshipMapProps
       return;
     }
     onAdd({
-      id: newId('rel'),
+      id: newClientId('rel'),
       targetType: type,
       targetId: label.trim().toLowerCase().replace(/\s+/g, '-'),
       targetLabel: label.trim(),

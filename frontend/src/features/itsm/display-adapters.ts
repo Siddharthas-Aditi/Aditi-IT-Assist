@@ -62,7 +62,6 @@ export interface ChangeDisplay extends Omit<
   attachments: never[];
   assetIds: string[];
   implementationTasks: ChangeTask[];
-  asset_links: never[];
 }
 
 export function toChangeDisplay(c: ChangeRecord): ChangeDisplay {
@@ -102,7 +101,6 @@ export function toChangeDisplay(c: ChangeRecord): ChangeDisplay {
     attachments: [],
     assetIds: [],
     implementationTasks: c.tasks,
-    asset_links: [],
   };
 }
 

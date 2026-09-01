@@ -4,7 +4,7 @@ import { useMemo, useRef, useState } from 'react';
 import { Paperclip, Search, X } from 'lucide-react';
 
 import { PEOPLE } from '../data/reference';
-import { newId } from '../data/store';
+import { newClientId } from '../client-id';
 import type { Asset, Attachment } from '../data/types';
 import { cn } from '../lib/cn';
 import { Button } from './ui';
@@ -45,7 +45,7 @@ export function PersonPicker({
     const name = query.trim();
     if (!name) return;
     const person = {
-      id: newId('user'),
+      id: newClientId('user'),
       name,
       email: `${name.toLowerCase().replace(/\s+/g, '.')}@aditiconsulting.com`,
     };
@@ -242,7 +242,7 @@ export function AttachmentZone({
         continue;
       }
       next.push({
-        id: newId('att'),
+        id: newClientId('att'),
         name: file.name,
         sizeBytes: file.size,
         kind: file.type || 'application/octet-stream',

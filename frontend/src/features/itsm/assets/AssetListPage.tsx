@@ -4,6 +4,8 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AlertTriangle, Download, Plus, Upload } from "lucide-react";
 
+import { useAuthStore } from "@/stores/auth-store";
+
 import { DataTable, type Column } from "../components/DataTable";
 import { exportCsv } from "../components/csv";
 import {
@@ -24,8 +26,9 @@ import {
 } from "../data/reference";
 import { formatMoney } from "../data/money";
 import { daysUntil, isExpiringSoon } from "../data/rules";
-import { logAssetActivity } from "../data/store";
+import { logAssetActivity } from "../api";
 import { useAssets } from "../api";
+import { canPerformItsmAction } from "../permissions";
 import {
   ASSET_STATUS_LABELS,
   ASSET_TERMINAL,
@@ -104,6 +107,9 @@ function ExpiryCell({ date }: { date: string | null }) {
 }
 
 export function AssetListPage() {
+  const { user } = useAuthStore();
+  const canCreate = canPerformItsmAction(user, "asset:create");
+  const canUpdate = canPerformItsmAction(user, "asset:update");
   const assetsQuery = useAssets();
   const assetsData = assetsQuery.data?.items;
   const assets = useMemo(() => assetsData ?? [], [assetsData]);
@@ -297,21 +303,21 @@ export function AssetListPage() {
         description={`${assetsQuery.data?.total ?? assets.length} assets tracked · ${expiringCount} nearing warranty or end of life.`}
         actions={
           <>
-            <Button onClick={() => navigate("/itsm/assets/import")}>
+            {canCreate && <Button onClick={() => navigate("/itsm/assets/import")}>
               <Upload size={14} /> Bulk import
-            </Button>
+            </Button>}
             <Button
               onClick={() => exportCsv("assets.csv", rows, columns)}
               disabled={!rows.length}
             >
               <Download size={14} /> Export CSV
             </Button>
-            <Button
+            {canCreate && <Button
               variant="primary"
               onClick={() => navigate("/itsm/assets/new")}
             >
               <Plus size={14} /> Create Asset
-            </Button>
+            </Button>}
           </>
         }
       />
@@ -338,7 +344,7 @@ export function AssetListPage() {
       {selected.size > 0 && (
         <div className="flex flex-wrap items-center gap-2 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-[12.5px] text-sky-800">
           <span>{selected.size} selected</span>
-          <label className="flex items-center gap-1.5">
+          {canUpdate && <label className="flex items-center gap-1.5">
             <span className="sr-only">Bulk asset status</span>
             <Select
               options={ASSET_STATUS_OPTIONS}
@@ -347,14 +353,14 @@ export function AssetListPage() {
               onChange={(e) => setBulkStatus(e.target.value)}
               className="w-40"
             />
-          </label>
-          <Button
+          </label>}
+          {canUpdate && <Button
             variant="primary"
             onClick={() => void applyBulkStatus()}
             disabled={!bulkStatus}
           >
             Apply
-          </Button>
+          </Button>}
           <Button variant="ghost" onClick={() => setSelected(new Set())}>
             Clear selection
           </Button>
@@ -373,12 +379,12 @@ export function AssetListPage() {
         emptyTitle="No assets match these filters"
         emptyDescription="Adjust the search or filters, or add a new asset to the inventory."
         emptyAction={
-          <Button
+          canCreate ? <Button
             variant="primary"
             onClick={() => navigate("/itsm/assets/new")}
           >
             <Plus size={14} /> Create Asset
-          </Button>
+          </Button> : undefined
         }
       />
     </div>

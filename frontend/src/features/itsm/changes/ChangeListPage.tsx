@@ -4,6 +4,8 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Download, Plus } from "lucide-react";
 
+import { useAuthStore } from "@/stores/auth-store";
+
 import { DataTable, type Column } from "../components/DataTable";
 import { exportCsv } from "../components/csv";
 import {
@@ -21,8 +23,9 @@ import {
   StatusBadge,
 } from "../components/ui";
 import { CATEGORIES, DEPARTMENTS, PEOPLE, personName } from "../data/reference";
-import { logChangeActivity } from "../data/store";
+import { logChangeActivity } from "../api";
 import { useChanges } from "../api";
+import { canPerformItsmAction } from "../permissions";
 import {
   CHANGE_STATUS_LABELS,
   type ChangeRecord,
@@ -86,6 +89,9 @@ function fmtDate(iso: string | null): string {
 }
 
 export function ChangeListPage() {
+  const { user } = useAuthStore();
+  const canCreate = canPerformItsmAction(user, "change:create");
+  const canUpdate = canPerformItsmAction(user, "change:update");
   const changesQuery = useChanges();
   const changesData = changesQuery.data?.items;
   const changes = useMemo(() => changesData ?? [], [changesData]);
@@ -260,12 +266,12 @@ export function ChangeListPage() {
             >
               <Download size={14} /> Export CSV
             </Button>
-            <Button
+            {canCreate && <Button
               variant="primary"
               onClick={() => navigate("/itsm/changes/new")}
             >
               <Plus size={14} /> Create Change
-            </Button>
+            </Button>}
           </>
         }
       />
@@ -292,9 +298,9 @@ export function ChangeListPage() {
       {selected.size > 0 && (
         <div className="flex flex-wrap items-center gap-3 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-[12.5px] text-sky-800">
           <span>{selected.size} selected</span>
-          <Button variant="danger" onClick={() => void bulkCancel()}>
+          {canUpdate && <Button variant="danger" onClick={() => void bulkCancel()}>
             Cancel selected
-          </Button>
+          </Button>}
           <Button variant="ghost" onClick={() => setSelected(new Set())}>
             Clear selection
           </Button>
@@ -313,12 +319,12 @@ export function ChangeListPage() {
         emptyTitle="No changes match these filters"
         emptyDescription="Adjust the search or filters, or raise a new change."
         emptyAction={
-          <Button
+          canCreate ? <Button
             variant="primary"
             onClick={() => navigate("/itsm/changes/new")}
           >
             <Plus size={14} /> Create Change
-          </Button>
+          </Button> : undefined
         }
       />
     </div>

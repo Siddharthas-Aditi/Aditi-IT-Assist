@@ -3,6 +3,8 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
+import { useAuthStore } from "@/stores/auth-store";
+
 import { PageHeader, Tabs } from "../components/chrome";
 import { useToast } from "../components/toast-context";
 import {
@@ -18,10 +20,11 @@ import {
 } from "../components/ui";
 import { personName } from "../data/reference";
 import { canMoveChange } from "../data/rules";
-import { createChange, logChangeActivity, useItsmState } from "../data/store";
+import { createChange, deleteChangeRecord, logChangeActivity, useItsmState } from "../api";
 import type { ChangeStatus } from "../api-types";
 import type { ChangeDisplay as Change } from "../display-adapters";
 import { toChangeDisplay } from "../display-adapters";
+import { canPerformItsmAction } from "../permissions";
 import { PLANNING_FIELDS } from "./form-model";
 
 const TABS = [
@@ -51,9 +54,16 @@ export function ChangeDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const toast = useToast();
-  const { changes, assets } = useItsmState();
+  const { user } = useAuthStore();
+  const { changes } = useItsmState();
   const [tab, setTab] = useState<string>("Overview");
   const [closureDraft, setClosureDraft] = useState("");
+  const canUpdate = canPerformItsmAction(user, "change:update");
+  const canCreate = canPerformItsmAction(user, "change:create");
+  const canApprove = canPerformItsmAction(user, "change:approve");
+  const canImplement = canPerformItsmAction(user, "change:implement");
+  const canClose = canPerformItsmAction(user, "change:close");
+  const canDelete = canPerformItsmAction(user, "change:delete");
 
   const changeRaw = useMemo(
     () => changes.find((c) => c.id === id || c.change_number === id),
@@ -65,8 +75,6 @@ export function ChangeDetailPage() {
   );
 
   if (!change) return <ErrorState message={`No change found for "${id}".`} />;
-
-  const linkedAssets = assets.filter((_a) => false); // asset-change links need dedicated endpoint
 
   /** Every status action funnels through the shared rule check. */
   function move(to: ChangeStatus, extra: Partial<Change> = {}, label?: string) {
@@ -152,6 +160,17 @@ export function ChangeDetailPage() {
       .catch(() => toast.error("Failed to duplicate."));
   }
 
+  function removeChange() {
+    if (!change) return;
+    if (!window.confirm(`Delete ${change.change_number}? This cannot be undone.`)) return;
+    void deleteChangeRecord(change.id)
+      .then(() => {
+        toast.success(`${change.change_number} deleted.`);
+        navigate("/itsm/changes");
+      })
+      .catch(() => toast.error("Failed to delete change."));
+  }
+
   const pendingApprovals = change.approvals.filter(
     (a) => !a.decision || a.decision === "pending",
   );
@@ -169,11 +188,11 @@ export function ChangeDetailPage() {
           <>
             <StatusBadge status={change.status} />
             <ChangeTypeBadge type={change.changeType} />
-            <Button onClick={() => navigate(`/itsm/changes/${change.id}/edit`)}>
+            {canUpdate && <Button onClick={() => navigate(`/itsm/changes/${change.id}/edit`)}>
               Edit
-            </Button>
-            <Button onClick={duplicate}>Duplicate</Button>
-            {change.status !== "pending_approval" &&
+            </Button>}
+            {canCreate && <Button onClick={duplicate}>Duplicate</Button>}
+            {canUpdate && change.status !== "pending_approval" &&
               change.status !== "implemented" && (
                 <Button
                   onClick={() =>
@@ -183,7 +202,7 @@ export function ChangeDetailPage() {
                   Submit for Approval
                 </Button>
               )}
-            {pendingApprovals.length > 0 && (
+            {canApprove && pendingApprovals.length > 0 && (
               <>
                 <Button
                   variant="primary"
@@ -199,8 +218,8 @@ export function ChangeDetailPage() {
                 </Button>
               </>
             )}
-            <Button onClick={() => move("scheduled")}>Schedule</Button>
-            <Button
+            {canUpdate && <Button onClick={() => move("scheduled")}>Schedule</Button>}
+            {canImplement && <Button
               onClick={() =>
                 move(
                   "in_progress",
@@ -210,8 +229,8 @@ export function ChangeDetailPage() {
               }
             >
               Start Implementation
-            </Button>
-            <Button
+            </Button>}
+            {canImplement && <Button
               variant="primary"
               onClick={() =>
                 move(
@@ -225,10 +244,18 @@ export function ChangeDetailPage() {
               }
             >
               Complete
-            </Button>
-            <Button variant="danger" onClick={() => move("cancelled")}>
+            </Button>}
+            {canClose && change.status === "implemented" && (
+              <Button variant="primary" onClick={() => move("closed", {}, "Change closed")}>
+                Close Change
+              </Button>
+            )}
+            {canUpdate && <Button variant="danger" onClick={() => move("cancelled")}>
               Cancel Change
-            </Button>
+            </Button>}
+            {canDelete && <Button variant="danger" onClick={removeChange}>
+              Delete Change
+            </Button>}
           </>
         }
       />
@@ -375,7 +402,7 @@ export function ChangeDetailPage() {
                         </DetailRow>
                         <DetailRow label="Comments">{a.comments}</DetailRow>
                       </dl>
-                      {(!a.decision || a.decision === "pending") && (
+                      {canApprove && (!a.decision || a.decision === "pending") && (
                         <div className="mt-2 flex gap-2">
                           <Button
                             variant="primary"
@@ -500,35 +527,11 @@ export function ChangeDetailPage() {
           )}
 
           {tab === "Associated Assets" && (
-            <Panel title={`Associated assets (${linkedAssets.length})`}>
-              {linkedAssets.length === 0 ? (
-                <EmptyState
-                  title="No assets associated"
-                  description="Link assets from the change form to track what this work touches."
-                />
-              ) : (
-                <ul className="divide-y divide-slate-200">
-                  {linkedAssets.map((a) => (
-                    <li
-                      key={a.id}
-                      className="flex items-center justify-between gap-3 py-2"
-                    >
-                      <div className="min-w-0">
-                        <Link
-                          to={`/itsm/assets/${a.id}`}
-                          className="text-[13px] font-medium text-sky-700 hover:underline"
-                        >
-                          {a.asset_tag}
-                        </Link>
-                        <p className="truncate text-[12px] text-slate-500">
-                          {a.name}
-                        </p>
-                      </div>
-                      <StatusBadge status={a.status} />
-                    </li>
-                  ))}
-                </ul>
-              )}
+            <Panel title="Associated assets unavailable">
+              <EmptyState
+                title="Asset-link read API is not available"
+                description="Changes accept asset IDs when created, but the current backend does not expose a change asset-links read endpoint or return link data in the Change response. This page intentionally does not claim that no assets are linked."
+              />
             </Panel>
           )}
 

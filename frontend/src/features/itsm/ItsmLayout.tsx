@@ -18,7 +18,7 @@ import {
 import { Plus, Search } from "lucide-react";
 
 import { ToastProvider } from "./components/Toast";
-import { useItsmData } from "./data/store";
+import { useItsmData } from "./api";
 import { cn } from "./lib/cn";
 
 const CHANGE_TABS = [

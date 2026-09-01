@@ -7,7 +7,7 @@ import { PageHeader } from "../components/chrome";
 import { useToast } from "../components/toast-context";
 import { LevelIndicator } from "../components/ui";
 import { personName } from "../data/reference";
-import { logAssetActivity } from "../data/store";
+import { logAssetActivity } from "../api";
 import { useAssets } from "../api";
 import {
   ASSET_STATUS_LABELS,

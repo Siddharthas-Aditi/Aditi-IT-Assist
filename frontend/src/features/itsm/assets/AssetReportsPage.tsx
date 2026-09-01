@@ -25,7 +25,7 @@ import { Button, Panel, StatusBadge } from "../components/ui";
 import { ASSET_TYPES, personName } from "../data/reference";
 import { formatTotals } from "../data/money";
 import { daysUntil, isExpiringSoon } from "../data/rules";
-import { useItsmState } from "../data/store";
+import { useItsmState } from "../api";
 import { toAssetDisplay } from "../display-adapters";
 import type { AssetDisplay as Asset } from "../display-adapters";
 
@@ -229,9 +229,8 @@ function ExpiryList({
 }
 
 export function AssetReportsPage() {
-  const { assets: rawAssets, locations } = useItsmState();
+  const { assets: rawAssets } = useItsmState();
   const assets = rawAssets.map(toAssetDisplay);
-  void locations;
   const [location, setLocation] = useState("");
   const [assetType, setAssetType] = useState("");
 

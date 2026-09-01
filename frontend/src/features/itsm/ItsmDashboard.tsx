@@ -5,7 +5,7 @@ import { AlertTriangle, ArrowRight, Loader2 } from 'lucide-react';
 
 import { PageHeader } from './components/chrome';
 import { ChangeTypeBadge, Panel, StatusBadge } from './components/ui';
-import { useItsmData } from './data/store';
+import { useItsmData } from './api';
 import { CHANGE_STATUS_LABELS, ASSET_STATUS_LABELS } from './api-types';
 
 const EXPIRY_DAYS = 90;
