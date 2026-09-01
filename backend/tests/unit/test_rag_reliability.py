@@ -8,9 +8,14 @@ import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 
 from app.models.support import Message, SupportSession
+from app.schemas.escalation import HandoffTrigger
 from app.services.agents.chat_service import ChatService
 from app.services.agents.diagnostic_state import DiagnosticContext
-from app.services.agents.escalation_triggers import EscalationTrigger, evaluate_escalation
+from app.services.agents.escalation_triggers import (
+    EscalationTrigger,
+    evaluate_escalation,
+    handoff_trigger_from_state,
+)
 from app.services.agents.session_store import (
     InMemorySessionStore,
     get_session_store,
@@ -87,6 +92,64 @@ def test_escalation_policy_does_not_fire_for_reliable_grounded_resolution():
         max_turns=10,
     )
     assert not decision.should_escalate
+
+
+@pytest.mark.parametrize(
+    ("state", "expected"),
+    [
+        ({"diagnostic_context": {"live_agent_requested": True}}, HandoffTrigger.USER_REQUEST),
+        ({"audit_trail": [{"escalation_trigger": "max_turns"}]}, HandoffTrigger.MAX_TURNS),
+        (
+            {"audit_trail": [{"escalation_trigger": "unclassifiable_issue"}]},
+            HandoffTrigger.UNCLASSIFIABLE_ISSUE,
+        ),
+        (
+            {"audit_trail": [{"escalation_trigger": "no_grounded_articles"}]},
+            HandoffTrigger.NO_GROUNDED_ARTICLES,
+        ),
+        (
+            {"audit_trail": [{"escalation_trigger": "low_retrieval_confidence"}]},
+            HandoffTrigger.LOW_RETRIEVAL_CONFIDENCE,
+        ),
+        (
+            {"audit_trail": [{"escalation_trigger": "failed_step_threshold"}]},
+            HandoffTrigger.FAILED_STEP_THRESHOLD,
+        ),
+        (
+            {"audit_trail": [{"escalation_trigger": "grounded_steps_exhausted"}]},
+            HandoffTrigger.GROUNDED_STEPS_EXHAUSTED,
+        ),
+        (
+            {"audit_trail": [{"escalation_trigger": "low_resolution_confidence"}]},
+            HandoffTrigger.LOW_RESOLUTION_CONFIDENCE,
+        ),
+        (
+            {
+                "supervisor_decision": {
+                    "action": "escalate",
+                    "reason": "global handoff cap reached (8)",
+                }
+            },
+            HandoffTrigger.DELEGATION_CAP,
+        ),
+        (
+            {
+                "supervisor_decision": {
+                    "action": "escalate",
+                    "reason": "loop detected — no progress over consecutive turns",
+                }
+            },
+            HandoffTrigger.LOOP_DETECTED,
+        ),
+        ({"policy_violations": ["unapproved action"]}, HandoffTrigger.POLICY_BLOCK),
+    ],
+)
+def test_handoff_trigger_preserves_each_deterministic_source(state, expected):
+    assert handoff_trigger_from_state(state) is expected
+
+
+def test_handoff_trigger_uses_other_only_when_no_source_was_persisted():
+    assert handoff_trigger_from_state({}) is HandoffTrigger.OTHER
 
 
 async def test_low_confidence_retrieval_refuses_generation_and_escalates():

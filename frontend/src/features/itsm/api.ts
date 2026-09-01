@@ -14,13 +14,16 @@ import type {
   ApprovalCreatePayload,
   ApprovalDecidePayload,
   AssetAssignPayload,
+  AssetChangeLinksResponse,
   AssetCreatePayload,
   AssetListResponse,
   AssetRecord,
   AssetRetirePayload,
   AssetStatus,
+  AssetTicketLinksResponse,
   AssetUpdatePayload,
   ChangeApproval,
+  ChangeAssetLinksResponse,
   ChangeCreatePayload,
   ChangeListResponse,
   ChangeRecord,
@@ -38,12 +41,15 @@ export const changeKeys = {
   all: ["changes"] as const,
   list: (status?: string) => ["changes", "list", status ?? "all"] as const,
   detail: (id: string) => ["changes", "detail", id] as const,
+  assetLinks: (id: string) => ["changes", "asset-links", id] as const,
 };
 
 export const assetKeys = {
   all: ["assets"] as const,
   list: (status?: string) => ["assets", "list", status ?? "all"] as const,
   detail: (id: string) => ["assets", "detail", id] as const,
+  changeLinks: (id: string) => ["assets", "change-links", id] as const,
+  ticketLinks: (id: string) => ["assets", "ticket-links", id] as const,
 };
 
 // ── Change queries ────────────────────────────────────────────────────
@@ -70,6 +76,14 @@ export function useChange(id: string | null | undefined) {
   return useQuery({
     queryKey: changeKeys.detail(id ?? ""),
     queryFn: () => apiRequest<ChangeRecord>(`/changes/${id}`),
+    enabled: !!id,
+  });
+}
+
+export function useChangeAssetLinks(id: string | null | undefined) {
+  return useQuery({
+    queryKey: changeKeys.assetLinks(id ?? ""),
+    queryFn: () => apiRequest<ChangeAssetLinksResponse>(`/changes/${id}/asset-links`),
     enabled: !!id,
   });
 }
@@ -200,6 +214,22 @@ export function useAsset(id: string | null | undefined) {
   return useQuery({
     queryKey: assetKeys.detail(id ?? ""),
     queryFn: () => apiRequest<AssetRecord>(`/assets/${id}`),
+    enabled: !!id,
+  });
+}
+
+export function useAssetChangeLinks(id: string | null | undefined) {
+  return useQuery({
+    queryKey: assetKeys.changeLinks(id ?? ""),
+    queryFn: () => apiRequest<AssetChangeLinksResponse>(`/assets/${id}/change-links`),
+    enabled: !!id,
+  });
+}
+
+export function useAssetTicketLinks(id: string | null | undefined) {
+  return useQuery({
+    queryKey: assetKeys.ticketLinks(id ?? ""),
+    queryFn: () => apiRequest<AssetTicketLinksResponse>(`/assets/${id}/ticket-links`),
     enabled: !!id,
   });
 }

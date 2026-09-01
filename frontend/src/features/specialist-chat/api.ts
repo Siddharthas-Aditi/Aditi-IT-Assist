@@ -56,6 +56,21 @@ export interface HandoffSummary {
  */
 export type WaitingState = 'waiting' | 'likely_left' | 'claimed';
 
+/** Mirrors backend `HandoffTrigger`: the deterministic source of a handoff. */
+export type HandoffTrigger =
+  | 'user_request'
+  | 'max_turns'
+  | 'unclassifiable_issue'
+  | 'no_grounded_articles'
+  | 'low_retrieval_confidence'
+  | 'failed_step_threshold'
+  | 'grounded_steps_exhausted'
+  | 'low_resolution_confidence'
+  | 'delegation_cap'
+  | 'loop_detected'
+  | 'policy_block'
+  | 'other';
+
 export interface QueueEntry {
   ticket_id: string;
   ticket_number: string;
@@ -71,6 +86,8 @@ export interface QueueEntry {
   waiting_state: WaitingState;
   waited_seconds: number;
   summary: HandoffSummary;
+  specialist_queue_target?: string | null;
+  handoff_triggered_by?: HandoffTrigger | null;
 }
 
 export interface QueueListResponse {
@@ -162,7 +179,8 @@ export interface HandoffPackage {
   web_research_findings: WebResearchFinding[];
   conversation: ConversationTurn[];
   handoff_reason: string;
-  handoff_triggered_by: string;
+  handoff_triggered_by: HandoffTrigger;
+  specialist_queue_target?: string | null;
   supervisor_decision_trace: unknown[];
 }
 
@@ -218,6 +236,8 @@ export interface SpecialistHandoffView {
   ai_resolution_status: string;
   escalation_reason?: string | null;
   escalation_created_at?: string | null;
+  specialist_queue_target?: string | null;
+  handoff_triggered_by?: HandoffTrigger | null;
   // AI handoff detail
   user_problem_statement?: string | null;
   detected_intent?: string | null;

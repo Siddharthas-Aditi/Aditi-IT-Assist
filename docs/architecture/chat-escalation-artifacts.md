@@ -50,6 +50,15 @@ blocks the ticket/handoff (the ticket already exists at that point).
 Creation is **idempotent per ticket** — a second call returns the existing
 `EscalationContext` and never writes a duplicate snapshot.
 
+`handoff_triggered_by` is not a free-text summary. It preserves the exact
+deterministic source that caused the handoff: `user_request`, `max_turns`,
+`unclassifiable_issue`, `no_grounded_articles`, `low_retrieval_confidence`,
+`failed_step_threshold`, `grounded_steps_exhausted`,
+`low_resolution_confidence`, `delegation_cap`, `loop_detected`, `policy_block`,
+or `other` for legacy contexts with no source trace. `specialist_queue_target`
+is the supervisor-selected specialist/queue, when one exists. Both fields are
+available in the queue list, full handoff package, and specialist handoff view.
+
 ## Escalation Context fields
 
 The structured payload (`escalation_contexts`) is optimized for specialist

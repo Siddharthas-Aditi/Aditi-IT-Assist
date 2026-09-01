@@ -15,6 +15,8 @@ const VIEW: SpecialistHandoffView = {
   ai_confidence: 0.2,
   ai_resolution_status: 'unresolved',
   escalation_reason: 'AI exhausted grounded steps',
+  specialist_queue_target: 'outlook',
+  handoff_triggered_by: 'grounded_steps_exhausted',
   user_problem_statement: 'Cannot send email, mailbox full',
   detected_intent: 'troubleshoot',
   steps_attempted: [
@@ -51,6 +53,8 @@ describe('HandoffContextPanel', () => {
     expect(screen.getByText('Archive old mail')).toBeInTheDocument();
     expect(screen.getByText('Article suggested but unresolved')).toBeInTheDocument();
     expect(screen.getByText('AI Handoff Summary')).toBeInTheDocument();
+    expect(screen.getByText('Routed to outlook')).toBeInTheDocument();
+    expect(screen.getByText('Grounded troubleshooting steps were exhausted')).toBeInTheDocument();
   });
 
   it('renders the transcript inside a collapsible details element (secondary)', async () => {

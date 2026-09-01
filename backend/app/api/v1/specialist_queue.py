@@ -14,7 +14,7 @@ All routes require ``ticket:claim_chat`` (typically held by ``it_agent``,
 
 import uuid
 from datetime import UTC, datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,6 +23,8 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.core.permissions import P
 from app.models.auth import User
+from app.models.live_handoff import SpecialistAvailability
+from app.models.ticket import Ticket
 from app.schemas.escalation import (
     EscalationContextOut,
     ResolutionComparisonIn,
@@ -62,16 +64,17 @@ ResolverDep = Annotated[User, Depends(require_permissions(P.SPECIALIST_QUEUE_RES
 QueueViewerDep = Annotated[User, Depends(require_permissions(P.SPECIALIST_QUEUE_VIEW))]
 
 
-def _presence_out(row) -> PresenceOut:
+def _presence_out(row: SpecialistAvailability) -> PresenceOut:
     """Build the response DTO, computing freshness at request time.
 
     ``is_available`` is derived rather than stored so a stale heartbeat
     always reads as unavailable, even if the row itself hasn't changed.
     """
     now = datetime.now(UTC)
+    status: Literal["available", "away"] = "available" if row.status == "available" else "away"
     return PresenceOut(
         user_id=row.user_id,
-        status=row.status,
+        status=status,
         last_heartbeat_at=row.last_heartbeat_at,
         is_available=is_available(
             row.status, row.last_heartbeat_at, now, settings.SPECIALIST_PRESENCE_TTL_SECONDS
@@ -81,7 +84,7 @@ def _presence_out(row) -> PresenceOut:
 
 async def _claim_response(
     service: SpecialistQueueService,
-    ticket,
+    ticket: Ticket,
     current_user: User,
     db: DBDep,
 ) -> ClaimResponse:
@@ -167,7 +170,7 @@ async def my_offers(user: QueueViewerDep, service: QueueDep, db: DBDep) -> list[
     rows = (await db.execute(stmt)).all()
     out: list[OfferOut] = []
     for offer, ticket in rows:
-        entry = service._to_queue_entry(ticket)  # reuse existing summary builder
+        entry = await service._to_queue_entry(ticket)  # reuse existing summary builder
         out.append(
             OfferOut(
                 ticket_id=ticket.id,
@@ -350,7 +353,7 @@ async def release_ticket(
     service: QueueDep,
     current_user: ClaimerDep,
     db: DBDep,
-) -> dict:
+) -> dict[str, str]:
     """Release a claim — the ticket returns to the queue at ``triaged``."""
     try:
         ticket = await service.release(body.ticket_id, by_user=current_user)

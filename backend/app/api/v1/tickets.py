@@ -2,14 +2,17 @@
 
 import uuid
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.models.ticket import Ticket, TicketComment, TicketEvent
+from app.schemas.relationships import TicketAssetLinksResponse
 from app.services.auth.dependencies import CurrentUser, ITAgentUser
+from app.services.relationship_service import RelationshipNotFoundError, RelationshipService
 from app.services.ticket_category_validation import CategoryCascadeError
 from app.services.ticket_service import TicketService
 
@@ -178,17 +181,20 @@ async def get_my_ticket(
     ticket_id: str,
     current_user: CurrentUser,
     db: Annotated[AsyncSession, Depends(get_db)],
-) -> dict:
+) -> dict[str, object]:
     """Get ticket details (employee view — own ticket only)."""
     service = TicketService(db)
     result = await service.get_ticket_for_employee(uuid.UUID(ticket_id), current_user)
     if not result:
         raise HTTPException(status_code=404, detail="Ticket not found")
+    ticket = cast("Ticket", result["ticket"])
+    comments = cast("list[TicketComment]", result["comments"])
+    events = cast("list[TicketEvent]", result["events"])
     return {
-        "ticket": _ticket_to_response(result["ticket"]),
+        "ticket": _ticket_to_response(ticket),
         "comments": [
             {"id": str(c.id), "content": c.content, "created_at": c.created_at.isoformat()}
-            for c in result["comments"]
+            for c in comments
         ],
         "events": [
             {
@@ -196,7 +202,7 @@ async def get_my_ticket(
                 "description": e.description,
                 "created_at": e.created_at.isoformat(),
             }
-            for e in result["events"]
+            for e in events
         ],
     }
 
@@ -282,10 +288,23 @@ async def export_tickets_csv(
 async def get_queue_summary(
     agent_user: ITAgentUser,
     db: Annotated[AsyncSession, Depends(get_db)],
-) -> dict:
+) -> dict[str, int]:
     """Get ticket queue summary counts."""
     service = TicketService(db)
     return await service.get_queue_summary()
+
+
+@router.get("/{ticket_id}/asset-links", response_model=TicketAssetLinksResponse)
+async def get_ticket_asset_links(
+    ticket_id: uuid.UUID,
+    _: ITAgentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> TicketAssetLinksResponse:
+    """List assets linked to an IT-staff-readable ticket."""
+    try:
+        return await RelationshipService(db).ticket_assets(ticket_id)
+    except RelationshipNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.get("/{ticket_id}")
@@ -293,14 +312,17 @@ async def get_ticket_detail(
     ticket_id: str,
     agent_user: ITAgentUser,
     db: Annotated[AsyncSession, Depends(get_db)],
-) -> dict:
+) -> dict[str, object]:
     """Get full ticket detail for IT staff (includes internal notes + events)."""
     service = TicketService(db)
     result = await service.get_ticket_for_agent(uuid.UUID(ticket_id))
     if not result:
         raise HTTPException(status_code=404, detail="Ticket not found")
+    ticket = cast("Ticket", result["ticket"])
+    comments = cast("list[TicketComment]", result["comments"])
+    events = cast("list[TicketEvent]", result["events"])
     return {
-        "ticket": _ticket_to_response(result["ticket"]),
+        "ticket": _ticket_to_response(ticket),
         "comments": [
             {
                 "id": str(c.id),
@@ -309,7 +331,7 @@ async def get_ticket_detail(
                 "author_id": str(c.author_id),
                 "created_at": c.created_at.isoformat(),
             }
-            for c in result["comments"]
+            for c in comments
         ],
         "events": [
             {
@@ -317,10 +339,10 @@ async def get_ticket_detail(
                 "description": e.description,
                 "created_at": e.created_at.isoformat(),
             }
-            for e in result["events"]
+            for e in events
         ],
-        "requester_name": result["requester_name"],
-        "requester_email": result["requester_email"],
+        "requester_name": cast("str | None", result["requester_name"]),
+        "requester_email": cast("str | None", result["requester_email"]),
     }
 
 
@@ -466,7 +488,7 @@ async def add_comment(
     data: TicketCommentRequest,
     current_user: CurrentUser,
     db: Annotated[AsyncSession, Depends(get_db)],
-) -> dict:
+) -> dict[str, object]:
     """Add a comment to a ticket.
 
     Employees may only comment on their own tickets (public notes only).
@@ -496,7 +518,7 @@ async def add_comment(
 # ─────────────────────────────────────────────────────────────────────
 
 
-def _ticket_to_response(ticket) -> TicketResponse:
+def _ticket_to_response(ticket: Ticket) -> TicketResponse:
     """Convert ticket model to response."""
     return TicketResponse(
         id=str(ticket.id),

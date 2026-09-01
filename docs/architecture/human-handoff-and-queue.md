@@ -50,8 +50,11 @@ HandoffPackage
 ├── conversation: [{role, content, timestamp?}]
 ├── handoff_reason
 ├── handoff_triggered_by: enum
-│   {user_request | ai_low_confidence | exhausted_grounded_steps
-|    loop_detected | repeated_failure | policy_block | missing_data}
+│   {user_request | max_turns | unclassifiable_issue | no_grounded_articles
+│    | low_retrieval_confidence | failed_step_threshold
+│    | grounded_steps_exhausted | low_resolution_confidence | delegation_cap
+│    | loop_detected | policy_block | other}
+├── specialist_queue_target?
 └── supervisor_decision_trace: [SupervisorDecision...]
 ```
 
@@ -95,13 +98,14 @@ priority tier (FIFO).
 
 ## 4. API
 
-Base path: `/api/v1/specialist-queue`. All routes require the
-`ticket:assign` permission (`it_agent`, `it_lead`, `it_admin`).
+Base path: `/api/v1/specialist-queue`. Read routes require
+`specialist_queue:view`; claim and resolve operations require their respective
+`specialist_queue:claim` and `specialist_queue:resolve` permissions.
 
 | Method | Path | Body | Returns | Notes |
 |---|---|---|---|---|
 | `GET` | `/` | — | `QueueListResponse` | `?only_unclaimed=&include_mine=&limit=` |
-| `GET` | `/{ticket_id}` | — | `HandoffPackage` | Full context; pulls session state if still in memory. |
+| `GET` | `/{ticket_id}` | — | `HandoffPackage` | Full persisted context; degrades to ticket fields for legacy tickets with no artifact. |
 | `POST` | `/claim` | `ClaimRequest` | `ClaimResponse` | Atomic; 409 if already claimed. |
 | `POST` | `/release` | `ClaimRequest` | `{ticket_id, status}` | Only the claimer (or admin) may release. |
 | `POST` | `/resolve` | `ResolveRequest` | `ResolveResponse` | Optional `propose_knowledge_candidate` flag. |
@@ -129,7 +133,7 @@ doesn't exist (`LookupError` → HTTP 404).
 Phase 1 ships only the API. The Phase 2 UI:
 
 1. **Queue page** — table of entries, columns: ticket #, requester, subtype,
-   priority, age. Click → opens detail.
+   priority, routing target, deterministic handoff trigger, age. Click → opens detail.
 2. **Detail page** — header (issue one-liner), tabs:
    - "Conversation" (chronological turns)
    - "Context" (diagnostic slots + steps_attempted)

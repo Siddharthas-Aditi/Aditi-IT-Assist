@@ -24,9 +24,11 @@ from app.schemas.change import (
     ChangeTransitionRequest,
     ChangeUpdate,
 )
+from app.schemas.relationships import ChangeAssetLinksResponse
 from app.services.auth.dependencies import get_current_active_user, require_permissions
 from app.services.auth.service import AuthService
 from app.services.change_service import ChangeError, ChangeService
+from app.services.relationship_service import RelationshipNotFoundError, RelationshipService
 
 router = APIRouter()
 
@@ -44,6 +46,10 @@ _CurrentUser = Annotated[object, Depends(get_current_active_user)]
 
 def _svc(db: AsyncSession) -> ChangeService:
     return ChangeService(db)
+
+
+def _relationship_svc(db: AsyncSession) -> RelationshipService:
+    return RelationshipService(db)
 
 
 async def _actor_id(user: object, db: AsyncSession) -> uuid.UUID:
@@ -88,6 +94,17 @@ async def get_change(_: _ReadChange, change_id: uuid.UUID, db: _DB) -> ChangeRes
         change = await _svc(db).get(change_id)
         return ChangeResponse.model_validate(change)
     except ChangeError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/{change_id}/asset-links", response_model=ChangeAssetLinksResponse)
+async def get_change_asset_links(
+    _: _ReadChange, change_id: uuid.UUID, db: _DB
+) -> ChangeAssetLinksResponse:
+    """List assets persisted in ``change_asset_links`` for one readable change."""
+    try:
+        return await _relationship_svc(db).change_assets(change_id)
+    except RelationshipNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 

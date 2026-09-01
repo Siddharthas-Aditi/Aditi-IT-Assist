@@ -24,12 +24,19 @@ import {
 import { DEPARTMENTS, GROUPS, personName } from "../data/reference";
 import { formatMoney } from "../data/money";
 import { canMoveAsset, daysUntil, isExpiringSoon } from "../data/rules";
-import { deleteAssetRecord, logAssetActivity, useItsmState } from "../api";
+import {
+  deleteAssetRecord,
+  logAssetActivity,
+  useAssetChangeLinks,
+  useAssetTicketLinks,
+  useItsmState,
+} from "../api";
 import { ASSET_STATES, IMPACTS, USAGE_TYPES } from "../data/types";
 import type { AssetDisplay as Asset, AssetDisplay } from "../display-adapters";
 import type { AssetRelationship } from "../data/types";
 import { toAssetDisplay } from "../display-adapters";
 import { canPerformItsmAction } from "../permissions";
+import { AssetAssociationPanels } from "../components/RelationshipLinkPanels";
 import { RelationshipMap } from "./RelationshipMap";
 
 const TABS = [
@@ -93,6 +100,8 @@ export function AssetDetailPage() {
     () => (assetRaw ? toAssetDisplay(assetRaw) : undefined),
     [assetRaw],
   );
+  const changeLinks = useAssetChangeLinks(assetRaw?.id);
+  const ticketLinks = useAssetTicketLinks(assetRaw?.id);
 
   // Quick-panel edits are staged until the user presses Update.
   const [quick, setQuick] = useState<Partial<AssetDisplay>>({});
@@ -410,21 +419,7 @@ export function AssetDetailPage() {
           )}
 
           {tab === "Associations" && (
-            <>
-              <Panel title="Linked support tickets unavailable">
-                <EmptyState
-                  title="Ticket-asset link read API is not available"
-                  description="The database has ticket_asset_links, but the current backend does not expose an asset ticket-links endpoint or include these links in the Asset response. This page intentionally does not claim that no tickets are linked."
-                />
-              </Panel>
-
-              <Panel title="Associated changes unavailable">
-                <EmptyState
-                  title="Change-asset link read API is not available"
-                  description="The backend persists change_asset_links but currently exposes neither /changes/{id}/asset-links nor an equivalent Asset relationship response. This page intentionally does not claim that no changes are associated."
-                />
-              </Panel>
-            </>
+            <AssetAssociationPanels changeQuery={changeLinks} ticketQuery={ticketLinks} />
           )}
 
           {tab === "Purchase Orders" && (

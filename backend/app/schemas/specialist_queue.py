@@ -12,10 +12,12 @@ internal handoff shape.
 """
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
+
+from app.schemas.escalation import HandoffTrigger
 
 
 class HandoffSummary(BaseModel):
@@ -85,19 +87,12 @@ class HandoffPackage(BaseModel):
     # EscalationContextOut.web_research_findings (list of {title, url, snippet,
     # trust_tier, provider}). None/missing (older, pre-B2 contexts) normalizes
     # to an empty list — see _package_from_context.
-    web_research_findings: list[dict] = Field(default_factory=list)
+    web_research_findings: list[dict[str, Any]] = Field(default_factory=list)
     conversation: list[ConversationTurn] = Field(default_factory=list)
     handoff_reason: str
-    handoff_triggered_by: Literal[
-        "user_request",
-        "ai_low_confidence",
-        "exhausted_grounded_steps",
-        "loop_detected",
-        "repeated_failure",
-        "policy_block",
-        "missing_data",
-    ]
-    supervisor_decision_trace: list[dict] = Field(
+    handoff_triggered_by: HandoffTrigger
+    specialist_queue_target: str | None = None
+    supervisor_decision_trace: list[dict[str, Any]] = Field(
         default_factory=list,
         description="Replayable list of supervisor decisions for audit.",
     )
@@ -136,6 +131,8 @@ class QueueEntry(BaseModel):
     waiting_state: Literal["waiting", "likely_left", "claimed"] = "waiting"
     waited_seconds: int = 0
     summary: HandoffSummary
+    specialist_queue_target: str | None = None
+    handoff_triggered_by: HandoffTrigger | None = None
 
 
 class QueueListResponse(BaseModel):

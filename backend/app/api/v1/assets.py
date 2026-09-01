@@ -19,8 +19,10 @@ from app.schemas.asset import (
     AssetRetireRequest,
     AssetUpdate,
 )
+from app.schemas.relationships import AssetChangeLinksResponse, AssetTicketLinksResponse
 from app.services.asset_service import AssetError, AssetService
-from app.services.auth.dependencies import get_current_active_user, require_permissions
+from app.services.auth.dependencies import ITAgentUser, get_current_active_user, require_permissions
+from app.services.relationship_service import RelationshipNotFoundError, RelationshipService
 
 router = APIRouter()
 
@@ -37,6 +39,10 @@ _CurrentUser = Annotated[object, Depends(get_current_active_user)]
 
 def _svc(db: AsyncSession) -> AssetService:
     return AssetService(db)
+
+
+def _relationship_svc(db: AsyncSession) -> RelationshipService:
+    return RelationshipService(db)
 
 
 async def _actor_id(user: object) -> uuid.UUID:
@@ -81,6 +87,33 @@ async def get_asset(_: _ReadAsset, asset_id: uuid.UUID, db: _DB) -> AssetRespons
         asset = await _svc(db).get(asset_id)
         return AssetResponse.model_validate(asset)
     except AssetError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/{asset_id}/change-links", response_model=AssetChangeLinksResponse)
+async def get_asset_change_links(
+    _: _ReadAsset, asset_id: uuid.UUID, db: _DB
+) -> AssetChangeLinksResponse:
+    """List changes persisted in ``change_asset_links`` for a readable asset."""
+    try:
+        return await _relationship_svc(db).asset_changes(asset_id)
+    except RelationshipNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/{asset_id}/ticket-links", response_model=AssetTicketLinksResponse)
+async def get_asset_ticket_links(
+    asset_id: uuid.UUID, _: ITAgentUser, db: _DB
+) -> AssetTicketLinksResponse:
+    """List linked ticket summaries for IT staff.
+
+    Unlike changes, ticket titles may reveal another employee's support issue.
+    The endpoint therefore follows the existing ticket-detail IT-staff boundary
+    instead of the broadly readable asset view.
+    """
+    try:
+        return await _relationship_svc(db).asset_tickets(asset_id)
+    except RelationshipNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 

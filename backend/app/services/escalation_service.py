@@ -39,6 +39,7 @@ from app.schemas.escalation import (
     TranscriptMessageOut,
     TranscriptSnapshotOut,
 )
+from app.services.agents.escalation_triggers import handoff_trigger_from_state
 from app.services.agents.kb_gap_tags import derive_kb_gap_tags
 
 if TYPE_CHECKING:
@@ -49,6 +50,7 @@ if TYPE_CHECKING:
     from app.models.auth import User
 
 logger = get_logger(__name__)
+JsonObject = dict[str, Any]
 
 # Map LangChain message ``.type`` (or dict ``role``) → transcript role label.
 _ROLE_MAP = {
@@ -62,14 +64,14 @@ _ROLE_MAP = {
 }
 
 
-def extract_transcript(messages: list[Any] | None) -> list[dict]:
+def extract_transcript(messages: list[Any] | None) -> list[JsonObject]:
     """Convert a workflow message list into an ordered transcript array. Pure.
 
     Accepts LangChain message objects (``.content`` / ``.type``) or plain dicts
     (``content`` / ``role``). Preserves order, assigns an authoritative 0-based
     ``seq``, and normalizes role labels. Empty-content messages are skipped.
     """
-    out: list[dict] = []
+    out: list[JsonObject] = []
     for msg in messages or []:
         if isinstance(msg, dict):
             content = msg.get("content")
@@ -95,9 +97,9 @@ def extract_transcript(messages: list[Any] | None) -> list[dict]:
     return out
 
 
-def _normalize_steps(raw_steps: list | None, *, default_outcome: str) -> list[dict]:
+def _normalize_steps(raw_steps: list[Any] | None, *, default_outcome: str) -> list[JsonObject]:
     """Normalize attempted-step entries into typed dicts."""
-    steps: list[dict] = []
+    steps: list[JsonObject] = []
     for step in raw_steps or []:
         if isinstance(step, dict):
             steps.append(
@@ -119,11 +121,11 @@ def _normalize_steps(raw_steps: list | None, *, default_outcome: str) -> list[di
 
 
 def _normalize_kb_refs(
-    citations: list | None,
-    knowledge_results: list | None,
-    retrieval_trace: dict | None,
+    citations: list[Any] | None,
+    knowledge_results: list[Any] | None,
+    retrieval_trace: dict[str, Any] | None,
     retrieval_confidence: float | None,
-) -> list[dict]:
+) -> list[JsonObject]:
     """Best-effort normalization of KB citations/results into typed refs."""
     results_by_id = {
         str(item.get("id") or item.get("article_id")): item
@@ -136,7 +138,7 @@ def _normalize_kb_refs(
         if isinstance(item, dict)
     }
     source = citations or knowledge_results or []
-    refs: list[dict] = []
+    refs: list[JsonObject] = []
     for item in source:
         if isinstance(item, dict):
             article_id = str(
@@ -186,7 +188,7 @@ class EscalationService:
         *,
         ticket: Ticket,
         chat_session_id: str,
-        state: dict | None,
+        state: JsonObject | None,
         requester: User | None = None,
         repeated_escalation: bool = False,
     ) -> EscalationContext:
@@ -293,7 +295,7 @@ class EscalationService:
             escalation_reason=escalation_reason,
             live_support_required=True,
             specialist_queue_target=queue_target,
-            handoff_triggered_by=("user_request" if live_requested else "exhausted_grounded_steps"),
+            handoff_triggered_by=handoff_trigger_from_state(state),
             supervisor_decision_trace=state.get("supervisor_decision_trace") or [],
             diagnostic_slots={
                 k: v
@@ -341,6 +343,8 @@ class EscalationService:
                 urgency=ticket.urgency,
                 ai_confidence=ticket.ai_confidence,
                 escalation_reason=None,
+                specialist_queue_target=None,
+                handoff_triggered_by=None,
                 has_structured_context=False,
             )
 
@@ -368,6 +372,12 @@ class EscalationService:
             ai_resolution_status=context.ai_resolution_status,
             escalation_reason=context.escalation_reason,
             escalation_created_at=context.escalation_created_at,
+            specialist_queue_target=context.specialist_queue_target,
+            handoff_triggered_by=(
+                handoff_trigger_from_state({"handoff_triggered_by": context.handoff_triggered_by})
+                if context.handoff_triggered_by
+                else None
+            ),
             user_problem_statement=context.user_problem_statement,
             detected_intent=context.detected_intent,
             steps_attempted=[AttemptedStepOut(**s) for s in (context.ai_attempted_steps or [])],
@@ -459,7 +469,11 @@ class EscalationService:
             escalation_reason=c.escalation_reason,
             live_support_required=c.live_support_required,
             specialist_queue_target=c.specialist_queue_target,
-            handoff_triggered_by=c.handoff_triggered_by,
+            handoff_triggered_by=(
+                handoff_trigger_from_state({"handoff_triggered_by": c.handoff_triggered_by})
+                if c.handoff_triggered_by
+                else None
+            ),
             diagnostic_slots=c.diagnostic_slots or {},
             context_version=c.context_version,
             specialist_resolution_summary=c.specialist_resolution_summary,

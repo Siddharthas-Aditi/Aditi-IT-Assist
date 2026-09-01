@@ -15,6 +15,7 @@ import { Link, useNavigate } from 'react-router-dom';
 
 import { AvailabilityToggle } from '@/features/specialist-chat/AvailabilityToggle';
 import { type Offer, type QueueEntry, liveChatApi, queueApi } from '@/features/specialist-chat/api';
+import { handoffTriggerLabel } from '@/features/specialist-chat/handoff-labels';
 import { ApiError } from '@/lib/api';
 import {
   notifyDesktop,
@@ -284,6 +285,7 @@ export function LiveQueuePage() {
                 <th className="px-4 py-2 text-left">Issue</th>
                 <th className="px-4 py-2 text-left">User</th>
                 <th className="px-4 py-2 text-left">Priority</th>
+                <th className="px-4 py-2 text-left">Routing</th>
                 <th className="px-4 py-2 text-left">Age</th>
                 <th className="px-4 py-2 text-right">Action</th>
               </tr>
@@ -314,6 +316,14 @@ export function LiveQueuePage() {
                   </td>
                   <td className="px-4 py-3">
                     <PriorityBadge priority={e.priority} />
+                  </td>
+                  <td className="px-4 py-3 text-xs text-gray-600">
+                    <div>{e.specialist_queue_target ? `To ${e.specialist_queue_target}` : 'General queue'}</div>
+                    {handoffTriggerLabel(e.handoff_triggered_by) && (
+                      <div className="mt-0.5 text-gray-400">
+                        {handoffTriggerLabel(e.handoff_triggered_by)}
+                      </div>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-xs text-gray-500">
                     <div>{relativeAge(e.queued_at)}</div>

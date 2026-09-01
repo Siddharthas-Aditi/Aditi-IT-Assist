@@ -102,6 +102,17 @@ export interface ChangeListResponse {
   total: number;
 }
 
+export interface LinkedAsset {
+  id: string;
+  asset_tag: string;
+  name: string;
+  status: AssetStatus;
+}
+
+export interface ChangeAssetLinksResponse {
+  items: LinkedAsset[];
+}
+
 export interface ChangeCreatePayload {
   title: string;
   description?: string;
@@ -241,6 +252,29 @@ export interface AssetRecord {
 export interface AssetListResponse {
   items: AssetRecord[];
   total: number;
+}
+
+export interface LinkedChange {
+  id: string;
+  change_number: string;
+  title: string;
+  status: ChangeStatus;
+}
+
+export interface LinkedTicket {
+  id: string;
+  ticket_number: string;
+  title: string;
+  status: string;
+  priority: string;
+}
+
+export interface AssetChangeLinksResponse {
+  items: LinkedChange[];
+}
+
+export interface AssetTicketLinksResponse {
+  items: LinkedTicket[];
 }
 
 export interface AssetCreatePayload {

@@ -13,6 +13,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
+from app.schemas.escalation import HandoffTrigger
+
 
 class EscalationTrigger(StrEnum):
     """Stable, auditable reasons the AI flow may offer escalation."""
@@ -109,3 +111,96 @@ def escalation_reason(trigger: EscalationTrigger | None) -> str | None:
         ),
     }
     return reasons.get(trigger) if trigger else None
+
+
+_TRIGGER_TO_HANDOFF: dict[EscalationTrigger, HandoffTrigger] = {
+    EscalationTrigger.USER_REQUEST: HandoffTrigger.USER_REQUEST,
+    EscalationTrigger.MAX_TURNS: HandoffTrigger.MAX_TURNS,
+    EscalationTrigger.UNCLASSIFIABLE_ISSUE: HandoffTrigger.UNCLASSIFIABLE_ISSUE,
+    EscalationTrigger.NO_GROUNDED_ARTICLES: HandoffTrigger.NO_GROUNDED_ARTICLES,
+    EscalationTrigger.LOW_RETRIEVAL_CONFIDENCE: HandoffTrigger.LOW_RETRIEVAL_CONFIDENCE,
+    EscalationTrigger.FAILED_STEP_THRESHOLD: HandoffTrigger.FAILED_STEP_THRESHOLD,
+    EscalationTrigger.GROUNDED_STEPS_EXHAUSTED: HandoffTrigger.GROUNDED_STEPS_EXHAUSTED,
+    EscalationTrigger.LOW_RESOLUTION_CONFIDENCE: HandoffTrigger.LOW_RESOLUTION_CONFIDENCE,
+}
+
+_LEGACY_HANDOFF_TRIGGER_MAP: dict[str, HandoffTrigger] = {
+    "ai_low_confidence": HandoffTrigger.LOW_RESOLUTION_CONFIDENCE,
+    "exhausted_grounded_steps": HandoffTrigger.GROUNDED_STEPS_EXHAUSTED,
+    "repeated_failure": HandoffTrigger.FAILED_STEP_THRESHOLD,
+    "missing_data": HandoffTrigger.UNCLASSIFIABLE_ISSUE,
+}
+
+_REASON_TO_HANDOFF: dict[str, HandoffTrigger] = {
+    reason: _TRIGGER_TO_HANDOFF[trigger]
+    for trigger, reason in (
+        (trigger, escalation_reason(trigger)) for trigger in EscalationTrigger
+    )
+    if reason is not None
+}
+
+
+def handoff_trigger_from_state(state: Mapping[str, Any]) -> HandoffTrigger:
+    """Derive the persisted trigger without re-running or changing routing.
+
+    The workflow records deterministic trigger values in its audit trail while
+    the primary supervisor records an explicit action and reason. This adapter
+    preserves either source in the immutable escalation context. It also
+    normalizes historical queue values so old rows continue to render.
+    """
+    diagnostic = state.get("diagnostic_context")
+    if isinstance(diagnostic, Mapping) and diagnostic.get("live_agent_requested"):
+        return HandoffTrigger.USER_REQUEST
+
+    direct = state.get("handoff_triggered_by") or state.get("escalation_trigger")
+    if isinstance(direct, str):
+        try:
+            return HandoffTrigger(direct)
+        except ValueError:
+            try:
+                return _TRIGGER_TO_HANDOFF[EscalationTrigger(direct)]
+            except ValueError:
+                legacy = _LEGACY_HANDOFF_TRIGGER_MAP.get(direct)
+                if legacy is not None:
+                    return legacy
+
+    decision = state.get("supervisor_decision")
+    if isinstance(decision, Mapping) and decision.get("action") == "escalate":
+        reason = str(decision.get("reason") or "").lower()
+        if "explicitly requested" in reason:
+            return HandoffTrigger.USER_REQUEST
+        if "loop detected" in reason:
+            return HandoffTrigger.LOOP_DETECTED
+        if "handoff cap" in reason or "exhausted after" in reason:
+            return HandoffTrigger.DELEGATION_CAP
+        if "confidence" in reason:
+            return HandoffTrigger.LOW_RETRIEVAL_CONFIDENCE
+        if "no specialist" in reason or "kb returned nothing" in reason:
+            return HandoffTrigger.NO_GROUNDED_ARTICLES
+
+    audit_trail = state.get("audit_trail")
+    if isinstance(audit_trail, list):
+        for event in reversed(audit_trail):
+            if not isinstance(event, Mapping):
+                continue
+            raw_trigger = event.get("escalation_trigger")
+            if isinstance(raw_trigger, str):
+                try:
+                    return _TRIGGER_TO_HANDOFF[EscalationTrigger(raw_trigger)]
+                except ValueError:
+                    continue
+
+    if state.get("policy_violations"):
+        return HandoffTrigger.POLICY_BLOCK
+
+    state_reason = state.get("escalation_reason")
+    if isinstance(state_reason, EscalationTrigger):
+        return _TRIGGER_TO_HANDOFF[state_reason]
+    if isinstance(state_reason, str):
+        try:
+            return _TRIGGER_TO_HANDOFF[EscalationTrigger(state_reason)]
+        except ValueError:
+            return _LEGACY_HANDOFF_TRIGGER_MAP.get(
+                state_reason, _REASON_TO_HANDOFF.get(state_reason, HandoffTrigger.OTHER)
+            )
+    return HandoffTrigger.OTHER

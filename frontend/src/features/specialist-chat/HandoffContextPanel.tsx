@@ -37,6 +37,7 @@ import {
   type WebResearchFinding,
   queueApi,
 } from '@/features/specialist-chat/api';
+import { handoffTriggerLabel } from '@/features/specialist-chat/handoff-labels';
 
 interface Props {
   ticketId: string;
@@ -94,6 +95,7 @@ export function HandoffContextPanel({ ticketId }: Props) {
   const kbGapTags: SpecialistHandoffView['kb_gap_tags'] = view.kb_gap_tags ?? [];
   const kbArticlesReferenced: SpecialistHandoffView['kb_articles_referenced'] =
     view.kb_articles_referenced ?? [];
+  const triggerLabel = handoffTriggerLabel(view.handoff_triggered_by);
 
   return (
     <Card className="mb-4 p-0 overflow-hidden">
@@ -122,6 +124,9 @@ export function HandoffContextPanel({ ticketId }: Props) {
               AI confidence {Math.round(view.ai_confidence * 100)}%
             </Badge>
           )}
+          {view.specialist_queue_target && (
+            <Badge variant="primary">Routed to {view.specialist_queue_target}</Badge>
+          )}
         </div>
         {!view.has_structured_context && (
           <p className="mt-3 text-xs text-muted-foreground">
@@ -133,7 +138,7 @@ export function HandoffContextPanel({ ticketId }: Props) {
 
       <div className="space-y-5 px-5 py-4">
         {/* ── What the AI understood ─────────────────────────────── */}
-        {(view.user_problem_statement || view.escalation_reason) && (
+        {(view.user_problem_statement || view.escalation_reason || triggerLabel) && (
           <section>
             {view.user_problem_statement && (
               <div className="mb-2">
@@ -150,6 +155,15 @@ export function HandoffContextPanel({ ticketId }: Props) {
                   text="Why it was escalated"
                 />
                 <p className="mt-1 text-sm text-foreground">{view.escalation_reason}</p>
+              </div>
+            )}
+            {triggerLabel && (
+              <div className="mt-2">
+                <SectionLabel
+                  icon={<AlertTriangle size={14} />}
+                  text="Escalation trigger"
+                />
+                <p className="mt-1 text-sm text-foreground">{triggerLabel}</p>
               </div>
             )}
           </section>

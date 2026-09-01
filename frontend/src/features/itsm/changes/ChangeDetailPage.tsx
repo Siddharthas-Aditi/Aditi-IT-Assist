@@ -20,11 +20,18 @@ import {
 } from "../components/ui";
 import { personName } from "../data/reference";
 import { canMoveChange } from "../data/rules";
-import { createChange, deleteChangeRecord, logChangeActivity, useItsmState } from "../api";
+import {
+  createChange,
+  deleteChangeRecord,
+  logChangeActivity,
+  useChangeAssetLinks,
+  useItsmState,
+} from "../api";
 import type { ChangeStatus } from "../api-types";
 import type { ChangeDisplay as Change } from "../display-adapters";
 import { toChangeDisplay } from "../display-adapters";
 import { canPerformItsmAction } from "../permissions";
+import { ChangeAssetLinksPanel } from "../components/RelationshipLinkPanels";
 import { PLANNING_FIELDS } from "./form-model";
 
 const TABS = [
@@ -73,6 +80,7 @@ export function ChangeDetailPage() {
     () => (changeRaw ? toChangeDisplay(changeRaw) : undefined),
     [changeRaw],
   );
+  const assetLinks = useChangeAssetLinks(changeRaw?.id);
 
   if (!change) return <ErrorState message={`No change found for "${id}".`} />;
 
@@ -527,12 +535,7 @@ export function ChangeDetailPage() {
           )}
 
           {tab === "Associated Assets" && (
-            <Panel title="Associated assets unavailable">
-              <EmptyState
-                title="Asset-link read API is not available"
-                description="Changes accept asset IDs when created, but the current backend does not expose a change asset-links read endpoint or return link data in the Change response. This page intentionally does not claim that no assets are linked."
-              />
-            </Panel>
+            <ChangeAssetLinksPanel query={assetLinks} />
           )}
 
           {tab === "Attachments" && (

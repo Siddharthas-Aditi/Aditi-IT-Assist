@@ -15,12 +15,31 @@ These DTOs are the typed contract between the persisted escalation artifacts
 from __future__ import annotations
 
 from datetime import datetime  # noqa: TC003 - pydantic evaluates these annotations at runtime
-from typing import Literal
+from enum import StrEnum
+from typing import Any, Literal
 from uuid import UUID  # noqa: TC003 - pydantic evaluates these annotations at runtime
 
 from pydantic import BaseModel, Field
 
 TranscriptRole = Literal["employee", "assistant", "system", "specialist"]
+JsonObject = dict[str, Any]
+
+
+class HandoffTrigger(StrEnum):
+    """Stable, user-visible source of an escalation or human handoff."""
+
+    USER_REQUEST = "user_request"
+    MAX_TURNS = "max_turns"
+    UNCLASSIFIABLE_ISSUE = "unclassifiable_issue"
+    NO_GROUNDED_ARTICLES = "no_grounded_articles"
+    LOW_RETRIEVAL_CONFIDENCE = "low_retrieval_confidence"
+    FAILED_STEP_THRESHOLD = "failed_step_threshold"
+    GROUNDED_STEPS_EXHAUSTED = "grounded_steps_exhausted"
+    LOW_RESOLUTION_CONFIDENCE = "low_resolution_confidence"
+    DELEGATION_CAP = "delegation_cap"
+    LOOP_DETECTED = "loop_detected"
+    POLICY_BLOCK = "policy_block"
+    OTHER = "other"
 
 
 class TranscriptMessageOut(BaseModel):
@@ -81,19 +100,19 @@ class EscalationContextOut(BaseModel):
     sentiment: str | None = None
 
     ai_attempted_steps: list[AttemptedStepOut] = Field(default_factory=list)
-    user_feedback_on_steps: list[dict] = Field(default_factory=list)
+    user_feedback_on_steps: list[JsonObject] = Field(default_factory=list)
     kb_articles_referenced: list[KBArticleRefOut] = Field(default_factory=list)
-    retrieval_trace: dict = Field(default_factory=dict)
+    retrieval_trace: JsonObject = Field(default_factory=dict)
     kb_gap_tags: list[str] = Field(default_factory=list)
-    web_research_findings: list[dict] | None = None
+    web_research_findings: list[JsonObject] | None = None
     ai_confidence: float | None = None
     ai_resolution_status: str = "unresolved"
 
     escalation_reason: str | None = None
     live_support_required: bool = False
     specialist_queue_target: str | None = None
-    handoff_triggered_by: str | None = None
-    diagnostic_slots: dict = Field(default_factory=dict)
+    handoff_triggered_by: HandoffTrigger | None = None
+    diagnostic_slots: JsonObject = Field(default_factory=dict)
     context_version: str = "1.0"
 
     # Resolution comparison (populated post-resolution).
@@ -125,6 +144,8 @@ class SpecialistHandoffView(BaseModel):
     ai_resolution_status: str = "unresolved"
     escalation_reason: str | None = None
     escalation_created_at: datetime | None = None
+    specialist_queue_target: str | None = None
+    handoff_triggered_by: HandoffTrigger | None = None
     # AI handoff detail
     user_problem_statement: str | None = None
     detected_intent: str | None = None
@@ -132,7 +153,7 @@ class SpecialistHandoffView(BaseModel):
     # KB signals
     kb_articles_referenced: list[KBArticleRefOut] = Field(default_factory=list)
     kb_gap_tags: list[str] = Field(default_factory=list)
-    web_research_findings: list[dict] | None = None
+    web_research_findings: list[JsonObject] | None = None
     # Full transcript (rendered collapsible / secondary)
     transcript: TranscriptSnapshotOut | None = None
     # True when no persisted escalation context exists yet (degraded view).
@@ -152,6 +173,7 @@ class ResolutionComparisonIn(BaseModel):
 __all__ = [
     "AttemptedStepOut",
     "EscalationContextOut",
+    "HandoffTrigger",
     "KBArticleRefOut",
     "ResolutionComparisonIn",
     "SpecialistHandoffView",

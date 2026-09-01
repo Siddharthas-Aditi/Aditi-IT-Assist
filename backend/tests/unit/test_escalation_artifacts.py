@@ -7,12 +7,14 @@ full end-to-end flow are covered by the QA checklist
 """
 
 import uuid
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from langchain_core.messages import AIMessage, HumanMessage
 
 from app.models.escalation import EscalationContext, TranscriptSnapshot
 from app.models.ticket import Ticket
+from app.schemas.escalation import HandoffTrigger
 from app.services.agents.chat_service import ChatService
 from app.services.agents.session_store import (
     ChatSession,
@@ -20,6 +22,7 @@ from app.services.agents.session_store import (
     set_session_store,
 )
 from app.services.escalation_service import EscalationService, extract_transcript
+from app.services.specialist_queue_service import SpecialistQueueService
 
 # ── Fake async session ────────────────────────────────────────────────────
 
@@ -128,7 +131,7 @@ class TestCreateArtifacts:
             "issue_category": "email/outlook",
             "issue_subtype": "mailbox-full",
             "resolution_confidence": 0.2,
-            "escalation_reason": "AI exhausted grounded steps",
+            "escalation_reason": "Multiple troubleshooting steps did not resolve the issue",
             "knowledge_results": [
                 {"id": "kb1", "title": "Mailbox quota", "score": 0.7, "version": "4"}
             ],
@@ -160,7 +163,9 @@ class TestCreateArtifacts:
         assert snap.message_count == 3
         assert snap.messages[0]["role"] == "employee"
         # Context carries attempted steps + escalation reason + gap tags.
-        assert context.escalation_reason == "AI exhausted grounded steps"
+        assert context.escalation_reason == (
+            "Multiple troubleshooting steps did not resolve the issue"
+        )
         assert len(context.ai_attempted_steps) == 2
         assert context.ai_attempted_steps[0]["outcome"] == "failed"
         assert "article_suggested_but_unresolved" in context.kb_gap_tags
@@ -176,6 +181,26 @@ class TestCreateArtifacts:
             }
         ]
         assert context.retrieval_trace["rejected"][0]["id"] == "kb-x"
+        assert context.handoff_triggered_by is HandoffTrigger.FAILED_STEP_THRESHOLD
+
+    async def test_persists_supervisor_route_and_guardrail_trigger(self):
+        ticket = _ticket()
+        session = FakeSession(context_result=None)
+        state = {
+            "messages": [],
+            "supervisor_decision": {
+                "action": "escalate",
+                "agent": "outlook",
+                "reason": "loop detected — no progress over consecutive turns",
+            },
+        }
+
+        context = await EscalationService(session).create_escalation_artifacts(
+            ticket=ticket, chat_session_id="sess-guardrail", state=state, requester=_requester()
+        )
+
+        assert context.specialist_queue_target == "outlook"
+        assert context.handoff_triggered_by is HandoffTrigger.LOOP_DETECTED
 
     async def test_idempotent_when_context_exists(self):
         existing = EscalationContext(ticket_id=uuid.uuid4(), chat_session_id="s")
@@ -255,6 +280,8 @@ class TestHandoffView:
         ctx.escalation_reason = "exhausted"
         ctx.user_problem_statement = "cannot send mail"
         ctx.detected_intent = "troubleshoot"
+        ctx.specialist_queue_target = "outlook"
+        ctx.handoff_triggered_by = HandoffTrigger.FAILED_STEP_THRESHOLD
         ctx.ai_attempted_steps = [
             {"instruction": "Archive mail", "outcome": "failed", "source_kb_title": None}
         ]
@@ -279,6 +306,8 @@ class TestHandoffView:
         assert view.transcript.message_count == 2
         assert [m.seq for m in view.transcript.messages] == [0, 1]
         assert view.transcript.messages[0].role == "employee"
+        assert view.specialist_queue_target == "outlook"
+        assert view.handoff_triggered_by is HandoffTrigger.FAILED_STEP_THRESHOLD
 
     async def test_degrades_without_context(self):
         ticket = _ticket()
@@ -288,6 +317,17 @@ class TestHandoffView:
         assert view.has_structured_context is False
         assert view.issue_summary  # falls back to ticket fields
         assert view.transcript is None
+
+    async def test_queue_entry_exposes_persisted_route_and_trigger(self):
+        ticket = _ticket()
+        ticket.created_at = datetime.now(UTC)
+        context = self._context_with_transcript(ticket)
+        session = FakeSession(ticket=ticket, context_result=context)
+
+        entry = await SpecialistQueueService(session)._to_queue_entry(ticket)
+
+        assert entry.specialist_queue_target == "outlook"
+        assert entry.handoff_triggered_by is HandoffTrigger.FAILED_STEP_THRESHOLD
 
 
 # ── Resolution comparison ────────────────────────────────────────────────────

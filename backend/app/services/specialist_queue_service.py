@@ -24,7 +24,7 @@ creates a candidate, NOT a published article. SMEs review separately.
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Literal
 
 from sqlalchemy import and_, func, or_, select, update
 
@@ -39,6 +39,7 @@ from app.schemas.specialist_queue import (
     QueueEntry,
     StepAttempted,
 )
+from app.services.agents.escalation_triggers import handoff_trigger_from_state
 from app.services.knowledge.improvement import KnowledgeImprovementService
 
 if TYPE_CHECKING:
@@ -58,6 +59,44 @@ _QUEUE_STATUSES: tuple[str, ...] = (
     "waiting_for_user",
     "escalated",
 )
+HandoffUrgency = Literal["low", "medium", "high", "critical"]
+QueuePriority = Literal["low", "medium", "high", "critical"]
+QueueStatus = Literal[
+    "new", "triaged", "in_progress", "waiting_for_user", "escalated", "resolved", "closed"
+]
+WaitingState = Literal["waiting", "likely_left", "claimed"]
+
+
+def _handoff_urgency(value: str | None) -> HandoffUrgency | None:
+    match value:
+        case "low" | "medium" | "high" | "critical":
+            return value
+        case _:
+            return None
+
+
+def _queue_priority(value: str) -> QueuePriority:
+    match value:
+        case "low" | "medium" | "high" | "critical":
+            return value
+        case _:
+            return "medium"
+
+
+def _queue_status(value: str) -> QueueStatus:
+    match value:
+        case (
+            "new"
+            | "triaged"
+            | "in_progress"
+            | "waiting_for_user"
+            | "escalated"
+            | "resolved"
+            | "closed"
+        ):
+            return value
+        case _:
+            return "triaged"
 
 
 def waiting_info(
@@ -65,7 +104,7 @@ def waiting_info(
     claimed_at: datetime | None,
     *,
     now: datetime | None = None,
-) -> tuple[str, int]:
+) -> tuple[WaitingState, int]:
     """Typed freshness of a live-chat request: is the employee still waiting?
 
     Pure function — the single definition of "stale" for the specialist
@@ -148,7 +187,7 @@ class SpecialistQueueService:
         )
         result = await self.db.execute(stmt)
         tickets = list(result.scalars().all())
-        return [self._to_queue_entry(t) for t in tickets]
+        return [await self._to_queue_entry(t) for t in tickets]
 
     # ── Atomic claim ───────────────────────────────────────────────────
 
@@ -339,7 +378,7 @@ class SpecialistQueueService:
         self,
         ticket: Ticket,
         *,
-        session_state: dict | None = None,
+        session_state: dict[str, Any] | None = None,
     ) -> HandoffPackage:
         """Assemble the typed context bundle attached to a queue entry.
 
@@ -364,7 +403,7 @@ class SpecialistQueueService:
             affected_system=diag.get("affected_system"),
             issue_category=ticket.category,
             issue_subtype=diag.get("issue_subtype") or ticket.subcategory,
-            urgency=ticket.urgency,
+            urgency=_handoff_urgency(ticket.urgency),
             ai_confidence_at_handoff=ticket.ai_confidence or 0.0,
         )
 
@@ -377,7 +416,13 @@ class SpecialistQueueService:
             },
             handoff_reason=diag.get("escalation_reason") or "AI exhausted grounded steps",
             handoff_triggered_by=(
-                "user_request" if diag.get("live_agent_requested") else "exhausted_grounded_steps"
+                handoff_trigger_from_state(state)
+            ),
+            specialist_queue_target=(
+                str((state.get("supervisor_decision") or {}).get("agent"))
+                if isinstance(state.get("supervisor_decision"), dict)
+                and (state.get("supervisor_decision") or {}).get("agent")
+                else None
             ),
         )
 
@@ -393,7 +438,7 @@ class SpecialistQueueService:
             affected_system=context.affected_system,
             issue_category=context.category or ticket.category,
             issue_subtype=context.subcategory or ticket.subcategory,
-            urgency=context.urgency,  # type: ignore[arg-type]
+            urgency=_handoff_urgency(context.urgency),
             ai_confidence_at_handoff=context.ai_confidence or ticket.ai_confidence or 0.0,
         )
 
@@ -425,19 +470,6 @@ class SpecialistQueueService:
                 if role in ("user", "assistant"):
                     conversation.append(ConversationTurn(role=role, content=m.get("content", "")))
 
-        handoff_triggered_by = context.handoff_triggered_by or "exhausted_grounded_steps"
-        valid_triggers = {
-            "user_request",
-            "ai_low_confidence",
-            "exhausted_grounded_steps",
-            "loop_detected",
-            "repeated_failure",
-            "policy_block",
-            "missing_data",
-        }
-        if handoff_triggered_by not in valid_triggers:
-            handoff_triggered_by = "exhausted_grounded_steps"
-
         return HandoffPackage(
             session_id=context.chat_session_id,
             ticket_id=ticket.id,
@@ -450,34 +482,44 @@ class SpecialistQueueService:
             web_research_findings=context.web_research_findings or [],
             conversation=conversation,
             handoff_reason=context.escalation_reason or "AI exhausted grounded steps",
-            handoff_triggered_by=handoff_triggered_by,  # type: ignore[arg-type]
+            handoff_triggered_by=handoff_trigger_from_state(
+                {"handoff_triggered_by": context.handoff_triggered_by}
+            ),
+            specialist_queue_target=context.specialist_queue_target,
             supervisor_decision_trace=context.supervisor_decision_trace or [],
         )
 
     # ── Helpers ────────────────────────────────────────────────────────
 
-    def _to_queue_entry(self, ticket: Ticket) -> QueueEntry:
+    async def _to_queue_entry(self, ticket: Ticket) -> QueueEntry:
+        context = await self._get_escalation_context(ticket.id)
         claimed_at = ticket.first_response_at if ticket.assigned_to else None
         state, waited = waiting_info(ticket.created_at, claimed_at)
         return QueueEntry(
             ticket_id=ticket.id,
             ticket_number=ticket.ticket_number,
             title=ticket.title,
-            priority=ticket.priority,  # type: ignore[arg-type]
-            status=ticket.status,  # type: ignore[arg-type]
+            priority=_queue_priority(ticket.priority),
+            status=_queue_status(ticket.status),
             category=ticket.category,
             issue_subtype=ticket.subcategory,
             queued_at=ticket.created_at,
             claimed_at=ticket.first_response_at,
-            waiting_state=state,  # type: ignore[arg-type]
+            waiting_state=state,
             waited_seconds=waited,
             summary=HandoffSummary(
                 issue_one_liner=ticket.ai_summary or ticket.title,
                 affected_system=None,
                 issue_category=ticket.category,
                 issue_subtype=ticket.subcategory,
-                urgency=ticket.urgency,  # type: ignore[arg-type]
+                urgency=_handoff_urgency(ticket.urgency),
                 ai_confidence_at_handoff=ticket.ai_confidence or 0.0,
+            ),
+            specialist_queue_target=context.specialist_queue_target if context else None,
+            handoff_triggered_by=(
+                handoff_trigger_from_state({"handoff_triggered_by": context.handoff_triggered_by})
+                if context and context.handoff_triggered_by
+                else None
             ),
         )
 
